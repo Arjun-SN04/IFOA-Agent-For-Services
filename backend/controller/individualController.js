@@ -155,7 +155,7 @@ exports.exportToExcel = async (req, res) => {
         price:                        d.price || '',
       });
       r.font = { name: 'Arial', size: 10 };
-      r.alignment = { vertical: 'top' };
+      r.eachCell(cell => { cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false }; });
     });
 
     // Auto-filter

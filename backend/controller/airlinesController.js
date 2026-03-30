@@ -230,7 +230,7 @@ exports.exportAirlinesExcel = async (req, res) => {
 
     // ── Data rows ──
     const dataFont      = { name: 'Arial', size: 10 };
-    const dataCenterAlign = { vertical: 'top', horizontal: 'center', wrapText: false };
+    const dataCenterAlign = { vertical: 'middle', horizontal: 'center', wrapText: false };
 
     docs.forEach((d) => {
       const isUnlimited = d.subscriptionPlan === 'Unlimited Plan';
