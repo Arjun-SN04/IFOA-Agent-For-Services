@@ -71,13 +71,26 @@ export default function AirlinesSuccessPage({ airlineName }) {
               </a>
             </div>
 
-            <Link to="/"
-              className="flex w-full items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold px-8 py-3.5 rounded-xl transition-all duration-150 shadow-sm hover:shadow-md">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              Return to Home
-            </Link>
+            <div className="flex flex-col gap-3">
+              <Link to="/dashboard/subscription"
+                className="flex w-full items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3.5 rounded-xl transition-all duration-150 shadow-md shadow-blue-200">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
+                </svg>
+                View My Subscription
+              </Link>
+              <Link to="/dashboard"
+                className="flex w-full items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold px-8 py-3.5 rounded-xl transition-all duration-150 shadow-sm hover:shadow-md">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Go to Dashboard
+              </Link>
+              <Link to="/"
+                className="flex w-full items-center justify-center gap-2 border border-gray-200 text-gray-600 font-bold px-8 py-3 rounded-xl transition-all hover:bg-gray-50">
+                Return to Home
+              </Link>
+            </div>
           </div>
         </div>
 

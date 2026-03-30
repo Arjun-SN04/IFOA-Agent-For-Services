@@ -301,6 +301,9 @@ export default function ChatBot() {
   const { pathname } = useLocation()
   const [heroVisible, setHeroVisible] = useState(true)
 
+  // Never show chatbot on login / signup pages
+  const isAuthPage = pathname === '/login' || pathname === '/signup'
+
   useEffect(() => {
     // Reset: assume hero is visible on every navigation (safe default)
     setHeroVisible(true)
@@ -344,8 +347,8 @@ export default function ChatBot() {
     }
   }, [messages])
 
-  // Don't render anything while hero is visible
-  if (heroVisible) return null
+  // Don't render on auth pages or while hero is visible
+  if (isAuthPage || heroVisible) return null
 
   return (
     <div className="fixed bottom-6 right-6 z-[9999]">

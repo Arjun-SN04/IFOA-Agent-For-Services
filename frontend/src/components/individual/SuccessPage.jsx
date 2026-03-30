@@ -75,16 +75,25 @@ export default function SuccessPage({ name }) {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                to="/"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+                to="/dashboard/subscription"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700 shadow-md shadow-blue-200"
               >
-                Return home
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
+                </svg>
+                View My Subscription
               </Link>
               <Link
-                to="/individual/register"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-200 px-6 py-3 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
+                to="/dashboard"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800"
               >
-                Start another registration
+                Go to Dashboard
+              </Link>
+              <Link
+                to="/"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 px-6 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Return home
               </Link>
             </div>
           </div>
