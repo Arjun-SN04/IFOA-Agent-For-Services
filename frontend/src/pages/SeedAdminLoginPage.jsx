@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_blanc_V.png'
+import axios from 'axios'
 
 export default function SeedAdminLoginPage() {
   const { setSession } = useAuth()
@@ -19,20 +20,12 @@ export default function SeedAdminLoginPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/seed-admin-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.message || 'Login failed.')
-        return
-      }
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+      const { data } = await axios.post(`${BASE_URL}/auth/seed-admin-login`, { email, password })
       setSession(data.token, data.user)
       navigate('/admin', { replace: true })
-    } catch {
-      setError('Network error. Please try again.')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Network error. Please try again.')
     } finally {
       setLoading(false)
     }
