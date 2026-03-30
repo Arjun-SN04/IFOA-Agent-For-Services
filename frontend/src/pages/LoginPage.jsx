@@ -22,11 +22,13 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const user = await login(email, password)
-      // Redirect based on role
+      if (user.role === 'admin') {
+        // Admins must use the dedicated admin login URL
+        setError('Admin accounts cannot log in here. Please use the admin portal.')
+        return
+      }
       if (from && from !== '/login') {
         navigate(from, { replace: true })
-      } else if (user.role === 'admin') {
-        navigate('/admin', { replace: true })
       } else {
         navigate('/dashboard', { replace: true })
       }

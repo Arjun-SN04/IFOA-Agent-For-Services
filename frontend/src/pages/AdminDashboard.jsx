@@ -525,7 +525,11 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                 <p className="text-slate-400 text-[10px] mt-0.5">{r.phone || '—'}</p>
               </td>
               <td className="px-4 py-4 text-slate-600 text-xs">{r.country || '—'}</td>
-              <td className="px-4 py-4"><Badge value={r.subscriptionPlan} type="plan" /></td>
+              <td className="px-4 py-4">
+                <span className="text-xs text-slate-700 font-medium leading-snug">
+                  {r.subscriptionPlan?.replace(' Subscription Plan', '').replace(' Plan', '') || '—'}
+                </span>
+              </td>
               <td className="px-4 py-4 font-semibold text-slate-900 text-sm">{fmtMoney(r.price)}</td>
               <td className="px-4 py-4"><Badge value={r.status} type="status" /></td>
               <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
