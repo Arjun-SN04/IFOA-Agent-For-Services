@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import axios from 'axios'
 
-const API = axios.create({ baseURL: 'http://localhost:5000/api' })
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
+const API = axios.create({ baseURL: BASE_URL })
 
 const AuthContext = createContext(null)
 
@@ -55,14 +57,12 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
-  // Directly set session from token + user object (used by seed-admin pages)
   const setSession = (newToken, newUser) => {
     setToken(newToken)
     setUser(newUser)
     localStorage.setItem('ifoa_token', newToken)
   }
 
-  // Update email and/or password
   const updateCredentials = async (currentPassword, newEmail, newPassword) => {
     const res = await API.put('/auth/update-credentials', { currentPassword, newEmail, newPassword })
     setToken(res.data.token)
@@ -71,7 +71,6 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
-  // Link a registration record to this account after form submission
   const linkRegistration = async (registrationId, registrationModel) => {
     const res = await API.put('/auth/link-registration', { registrationId, registrationModel })
     setToken(res.data.token)

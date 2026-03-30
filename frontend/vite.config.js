@@ -6,6 +6,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react-phone-input-2'],
   },
+  // Only used in local dev — in production the env var VITE_API_URL points to Render
   server: {
     proxy: {
       '/api': {
