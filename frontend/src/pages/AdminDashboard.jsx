@@ -498,58 +498,79 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
   if (!data.length) return <EmptyState message="No individual records found" />
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <table className="w-full text-sm table-fixed">
-        <thead>
-          <tr className="border-b border-slate-100 bg-slate-50">
-            {['Name & Certificate', 'Contact', 'Country', 'Plan', 'Price', 'Status', 'Payment', 'Submitted', ''].map((h, i) => (
-              <th key={h + i} className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {data.map(r => (
-            <tr key={r._id} className="hover:bg-slate-50/60 transition-colors group cursor-pointer" onClick={() => onView(r)}>
-              <td className="px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 text-xs font-black flex items-center justify-center flex-shrink-0">
-                    {((r.firstName?.[0] || '') + (r.lastName?.[0] || '')).toUpperCase() || 'I'}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900 truncate max-w-[140px]">{[r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ') || '—'}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{r.primaryCertificate || 'No cert type'}</p>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-4">
-                <p className="text-slate-700 text-xs truncate max-w-[160px]">{r.email || '—'}</p>
-                <p className="text-slate-400 text-[10px] mt-0.5">{r.phone || '—'}</p>
-              </td>
-              <td className="px-4 py-4 text-slate-600 text-xs">{r.country || '—'}</td>
-              <td className="px-4 py-4">
-                <span className="text-xs text-slate-700 font-medium leading-snug">
-                  {r.subscriptionPlan?.replace(' Subscription Plan', '').replace(' Plan', '') || '—'}
-                </span>
-              </td>
-              <td className="px-4 py-4 font-semibold text-slate-900 text-sm">{fmtMoney(r.price)}</td>
-              <td className="px-4 py-4"><Badge value={r.status} type="status" /></td>
-              <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
-              <td className="px-4 py-4 text-slate-400 text-xs">{fmtDate(r.createdAt)}</td>
-              <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => onEdit(r)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
-                    Edit
-                  </button>
-                  <button onClick={() => onDelete(r._id, 'individual')} disabled={deleting === r._id} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
-                    {deleting === r._id ? '…' : 'Del'}
-                  </button>
-                </div>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ minWidth: 900 }}>
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50">
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Name & Certificate</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Price</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {data.map(r => (
+              <tr key={r._id} className="hover:bg-slate-50/60 transition-colors cursor-pointer" onClick={() => onView(r)}>
+                <td className="px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                      {((r.firstName?.[0] || '') + (r.lastName?.[0] || '')).toUpperCase() || 'I'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 text-sm leading-tight truncate w-32">
+                        {[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 truncate w-32">{r.primaryCertificate || 'No cert type'}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-slate-700 text-xs truncate w-36">{r.email || '—'}</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">{r.phone || '—'}</p>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-slate-600 text-xs truncate w-20">{r.country || '—'}</p>
+                </td>
+                <td className="px-4 py-4">
+                  <span className="inline-block text-xs text-slate-700 font-medium leading-snug">
+                    {r.subscriptionPlan?.includes('Multiple') ? 'Multiple Yrs'
+                      : r.subscriptionPlan?.includes('Unlimited') ? 'Unlimited'
+                      : r.subscriptionPlan?.includes('1 Year') ? '1 Year' : r.subscriptionPlan || '—'}
+                  </span>
+                </td>
+                <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(r.price)}</td>
+                <td className="px-4 py-4"><Badge value={r.status} type="status" /></td>
+                <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
+                <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(r.createdAt)}</td>
+                <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onEdit(r)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap"
+                    >
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => onDelete(r._id, 'individual')}
+                      disabled={deleting === r._id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap"
+                    >
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
+                      {deleting === r._id ? '…' : 'Delete'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -558,60 +579,73 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
   if (!data.length) return <EmptyState message="No airline records found" />
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <table className="w-full text-sm table-fixed">
-        <thead>
-          <tr className="border-b border-slate-100 bg-slate-50">
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[22%]">Airline</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[18%]">Contact</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[10%]">Country</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[16%]">Plan</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[7%]">Holders</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[8%]">Total</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[8%]">Payment</th>
-            <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[8%]">Submitted</th>
-            <th className="px-4 py-3.5 w-[3%]"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {data.map(r => (
-            <tr key={r._id} className="hover:bg-slate-50/60 transition-colors group cursor-pointer" onClick={() => onView(r)}>
-              <td className="px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0">✈</div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">{r.airlineName || '—'}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">{r.city || r.country || '—'}</p>
-                  </div>
-                </div>
-              </td>
-              <td className="px-4 py-4">
-                <p className="text-slate-700 text-xs truncate">{[r.firstName, r.lastName].filter(Boolean).join(' ') || [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || '—'}</p>
-                <p className="text-slate-400 text-[10px] mt-0.5 truncate">{r.email || r.contactEmail || '—'}</p>
-              </td>
-              <td className="px-4 py-4 text-slate-600 text-xs truncate">{r.country || '—'}</td>
-              <td className="px-4 py-4"><Badge value={r.subscriptionPlan} type="plan" /></td>
-              <td className="px-4 py-4 text-center">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">{r.certificateHolders?.length || 0}</span>
-              </td>
-              <td className="px-4 py-4 font-semibold text-slate-900 text-sm">{fmtMoney(r.totalAmount || r.totalServiceFees)}</td>
-              <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
-              <td className="px-4 py-4 text-slate-400 text-xs">{fmtDate(r.createdAt)}</td>
-              <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => onEdit(r)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
-                    Edit
-                  </button>
-                  <button onClick={() => onDelete(r._id, 'airline')} disabled={deleting === r._id} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
-                    {deleting === r._id ? '…' : 'Del'}
-                  </button>
-                </div>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ minWidth: 960 }}>
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50">
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-48">Airline</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {data.map(r => (
+              <tr key={r._id} className="hover:bg-slate-50/60 transition-colors cursor-pointer" onClick={() => onView(r)}>
+                <td className="px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0">✈</div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 text-sm leading-tight truncate w-28">{r.airlineName || '—'}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 truncate w-28">{r.city || r.country || '—'}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-slate-700 text-xs truncate w-36">
+                    {[r.firstName, r.lastName].filter(Boolean).join(' ') || [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || '—'}
+                  </p>
+                  <p className="text-slate-400 text-[11px] mt-0.5 truncate w-36">{r.email || r.contactEmail || '—'}</p>
+                </td>
+                <td className="px-4 py-4">
+                  <p className="text-slate-600 text-xs truncate w-20">{r.country || '—'}</p>
+                </td>
+                <td className="px-4 py-4"><Badge value={r.subscriptionPlan} type="plan" /></td>
+                <td className="px-4 py-4">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">{r.certificateHolders?.length || 0}</span>
+                </td>
+                <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(r.totalAmount || r.totalServiceFees)}</td>
+                <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
+                <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(r.createdAt)}</td>
+                <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => onEdit(r)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap"
+                    >
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => onDelete(r._id, 'airline')}
+                      disabled={deleting === r._id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap"
+                    >
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
+                      {deleting === r._id ? '…' : 'Delete'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
