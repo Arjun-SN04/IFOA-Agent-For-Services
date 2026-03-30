@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_blanc_V.png'
-import axios from 'axios'
+import { seedAdminLogin } from '../services/api'
 
 export default function SeedAdminLoginPage() {
   const { setSession } = useAuth()
@@ -20,8 +20,7 @@ export default function SeedAdminLoginPage() {
     setError('')
     setLoading(true)
     try {
-      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-      const { data } = await axios.post(`${BASE_URL}/auth/seed-admin-login`, { email, password })
+      const { data } = await seedAdminLogin({ email, password })
       setSession(data.token, data.user)
       navigate('/admin', { replace: true })
     } catch (err) {

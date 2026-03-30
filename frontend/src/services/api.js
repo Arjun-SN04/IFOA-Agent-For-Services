@@ -28,5 +28,9 @@ export const deleteAirlinesSubscription = (id) => API.delete(`/airlines/${id}`)
 export const exportAirlinesExcel = () => `${BASE_URL}/airlines/export/excel`
 
 // ── Auth ──
+export const login = (data) => API.post('/auth/login', data)
+export const signup = (data) => API.post('/auth/signup', data)
+export const seedAdminLogin = (data) => API.post('/auth/seed-admin-login', data)
+export const seedAdminSignup = (data) => API.post('/auth/seed-admin-signup', data)
 export const updateCredentials = (data) => API.put('/auth/update-credentials', data)
 export const linkRegistration = (data) => API.put('/auth/link-registration', data)
