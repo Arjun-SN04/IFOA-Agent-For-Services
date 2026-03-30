@@ -144,6 +144,44 @@ const fadeUp = {
   show: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.55, ease: 'easeOut' } }),
 }
 
+// ── Wrong-role banner: shown at the top of the form when an individual user visits the airlines form ──
+function WrongRoleBanner() {
+  return (
+    <div className="rounded-t-3xl border-b border-amber-200 bg-amber-50 px-7 py-5">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center bg-amber-100 border border-amber-200 mt-0.5">
+          <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-black text-amber-900 mb-1">Individual Account Detected — Form Submission Disabled</p>
+          <p className="text-xs text-amber-700 leading-relaxed">
+            You are signed in with an <strong>Individual account</strong>. This form requires an{' '}
+            <strong>Airlines account</strong> to submit. You can browse and fill in the form freely,
+            but the final submit button will be disabled.
+          </p>
+        </div>
+        <div className="flex-shrink-0 flex gap-2 flex-wrap justify-end">
+          <Link
+            to="/signup"
+            className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all whitespace-nowrap"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+            Create Airlines Account
+          </Link>
+          <Link
+            to="/individual/register"
+            className="inline-flex items-center gap-1.5 border border-amber-300 text-amber-800 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-amber-100 transition-all whitespace-nowrap"
+          >
+            👤 Go to Individual Form
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AuthModal({ onClose }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -208,6 +246,8 @@ function AuthModal({ onClose }) {
 
 export default function AirlinesForm() {
   const { user, linkRegistration } = useAuth()
+  // Block individual users from filling the airlines form
+  const isBlocked = user?.role === 'individual'
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState(INIT)
   const [submitted, setSubmitted] = useState(false)
@@ -229,8 +269,9 @@ export default function AirlinesForm() {
     }, 50)
   }
 
-  // Require auth before advancing beyond step 1
+  // Require auth before advancing beyond step 2
   const requireAuth = () => {
+    if (isBlocked) return false
     if (!user) { setShowAuthModal(true); return false }
     return true
   }
@@ -258,8 +299,8 @@ export default function AirlinesForm() {
 
   if (submitted) return <><Navbar /><AirlinesSuccessPage airlineName={formData.airlineName} /></>
 
-  // Step 1 → 2 now requires auth
-  const handleNextToStep2 = () => { if (!requireAuth()) return; goToStep(2) }
+  // Step 1 → 2 is free; auth required from step 2 → 3 onwards
+  const handleNextToStep2 = () => { if (isBlocked) return; goToStep(2) }
   const handleNextToStep3 = () => { if (!requireAuth()) return; goToStep(3) }
   const handleNextToStep4 = () => { if (!requireAuth()) return; goToStep(4) }
 
@@ -274,7 +315,7 @@ export default function AirlinesForm() {
       </AnimatePresence>
 
       {/* ═══ HERO ═══ */}
-      <section className="relative h-[75vh] min-h-[480px] flex items-center justify-center overflow-hidden">
+     <section data-hero className="relative h-[75vh] min-h-[480px] flex items-center justify-center overflow-hidden">
         <img
           src={cockpitImg}
           alt="Aircraft cockpit professional"
@@ -548,7 +589,7 @@ export default function AirlinesForm() {
       </section>
 
       {/* ═══ REGISTRATION FORM ═══ */}
-      <section ref={formRef} className="bg-white py-16 px-6 border-t border-gray-100">
+      <section ref={formRef} className="bg-white py-16 px-6 border-t border-gray-100" id="registration-form">
         <div className="max-w-3xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="text-center mb-10">
@@ -564,13 +605,14 @@ export default function AirlinesForm() {
               <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
                 style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626' }}>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                Sign in or create an account to proceed past Step 1
+                Sign in or create an account to proceed past Step 2
               </div>
             )}
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="rounded-3xl border border-gray-200 bg-white shadow-[0_24px_80px_-30px_rgba(15,23,42,0.15)] overflow-hidden">
+            className="relative rounded-3xl border border-gray-200 bg-white shadow-[0_24px_80px_-30px_rgba(15,23,42,0.15)] overflow-hidden">
+            {isBlocked && <WrongRoleBanner />}
 
             <div className="bg-gradient-to-b from-white to-gray-50/80 border-b border-gray-100 px-7 py-7">
               <div className="flex items-start justify-between gap-4 mb-6">
@@ -588,7 +630,7 @@ export default function AirlinesForm() {
               <div className="flex gap-2 mb-4 overflow-x-auto pb-0.5">
                 {STEPS.map((item, i) => {
                   const num = i + 1; const current = num === step; const done = num < step
-                  const locked = num > 1 && !user
+                  const locked = num > 2 && !user
                   return (
                     <div key={item.label}
                       className={`min-w-[7rem] flex-1 rounded-2xl px-4 py-3 border transition-all duration-200 relative ${
@@ -601,7 +643,7 @@ export default function AirlinesForm() {
                       <p className="mt-0.5 text-sm font-bold truncate">{item.label}</p>
                       {locked && (
                         <span className="absolute top-2 right-2">
-                          <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                          <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                         </span>
                       )}
                     </div>
@@ -626,7 +668,7 @@ export default function AirlinesForm() {
                   {step === 1 && <AirlinesStep1PlanAndDetails data={formData} update={update} onNext={handleNextToStep2} />}
                   {step === 2 && <AirlinesStep2Holders data={formData} update={update} onNext={handleNextToStep3} onBack={() => goToStep(1)} />}
                   {step === 3 && <AirlinesStep3Preview data={formData} update={update} onNext={handleNextToStep4} onBack={() => goToStep(2)} />}
-                  {step === 4 && <AirlinesStep4Payment data={formData} update={update} onBack={() => goToStep(3)} onSubmit={handleSubmit} submitting={submitting} error={error} />}
+                  {step === 4 && <AirlinesStep4Payment data={formData} update={update} onBack={() => goToStep(3)} onSubmit={handleSubmit} submitting={submitting} error={error} isBlocked={isBlocked} />}
                 </motion.div>
               </AnimatePresence>
             </div>

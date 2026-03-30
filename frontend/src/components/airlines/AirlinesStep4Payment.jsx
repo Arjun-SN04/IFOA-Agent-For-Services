@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, submitting, error }) {
+export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, submitting, error, isBlocked }) {
   const [errors, setErrors] = useState({})
 
   const holders = data.certificateHolders || []
@@ -41,6 +41,23 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, s
 
   return (
     <div className="space-y-7">
+
+      {/* Wrong-role warning — shown when an individual user reaches step 4 */}
+      {isBlocked && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-xl p-4 text-sm text-amber-800">
+          <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <div>
+            <p className="font-bold mb-0.5">Submission blocked — wrong account type</p>
+            <p className="text-amber-700 text-xs leading-relaxed">
+              You are signed in with an <strong>Individual account</strong>. Only users with an{' '}
+              <strong>Airlines account</strong> can submit this form. Please create a new Airlines account
+              or sign in with one to complete your registration.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Saved notification */}
       <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
@@ -137,9 +154,14 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, s
           Previous
         </button>
         <button
-          onClick={() => { if (validate()) onSubmit() }}
-          disabled={submitting}
-          className="inline-flex items-center gap-2.5 px-8 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl transition-all duration-150 shadow-sm hover:shadow-md hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-52 justify-center"
+          onClick={() => { if (!isBlocked && validate()) onSubmit() }}
+          disabled={submitting || isBlocked}
+          title={isBlocked ? 'You need an Airlines account to submit this form' : undefined}
+          className={`inline-flex items-center gap-2.5 px-8 py-3 text-white font-bold rounded-xl transition-all duration-150 shadow-sm min-w-52 justify-center ${
+            isBlocked
+              ? 'bg-gray-300 cursor-not-allowed opacity-60'
+              : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 hover:shadow-md hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none'
+          }`}
         >
           {submitting ? (
             <>

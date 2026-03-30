@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function Step4Payment({ data, update, onBack, onSubmit, submitting, error }) {
+export default function Step4Payment({ data, update, onBack, onSubmit, submitting, error, isBlocked }) {
   const [errors, setErrors] = useState({})
 
   const validate = () => {
@@ -21,6 +21,24 @@ export default function Step4Payment({ data, update, onBack, onSubmit, submittin
 
   return (
     <div className="space-y-6">
+
+      {/* Wrong-role warning — shown when an airlines user reaches step 4 */}
+      {isBlocked && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-xl p-4 text-sm text-amber-800">
+          <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <div>
+            <p className="font-bold mb-0.5">Submission blocked — wrong account type</p>
+            <p className="text-amber-700 text-xs leading-relaxed">
+              You are signed in with an <strong>Airlines account</strong>. Only users with an{' '}
+              <strong>Individual account</strong> can submit this form. Please create a new Individual account
+              or sign in with one to complete your registration.
+            </p>
+          </div>
+        </div>
+      )}
+
       <section className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -136,9 +154,14 @@ export default function Step4Payment({ data, update, onBack, onSubmit, submittin
         </button>
 
         <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="inline-flex min-w-[14rem] items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none"
+          onClick={() => { if (!isBlocked) handleSubmit() }}
+          disabled={submitting || isBlocked}
+          title={isBlocked ? 'You need an Individual account to submit this form' : undefined}
+          className={`inline-flex min-w-[14rem] items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-bold text-white transition-all ${
+            isBlocked
+              ? 'bg-gray-300 cursor-not-allowed opacity-60'
+              : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none'
+          }`}
         >
           {submitting ? (
             <>

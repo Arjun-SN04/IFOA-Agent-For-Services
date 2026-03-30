@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import './App.css'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import ChatBot from './components/ChatBot'
 
 // Public pages
 import Home from './pages/Home'
@@ -39,6 +40,7 @@ function App() {
   return (
     <AuthProvider>
       <ScrollToTop />
+      <ChatBot />
       <Routes>
         {/* ── Public ─────────────────────────────────────────── */}
         <Route path="/" element={<Home />} />
