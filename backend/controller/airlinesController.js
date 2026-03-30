@@ -62,10 +62,30 @@ exports.getAllAirlinesSubscriptions = async (req, res) => {
   }
 };
 
+// ── Read One by Email (fallback when registrationId not linked) ─────────────
+exports.getAirlinesSubscriptionByEmail = async (req, res) => {
+  try {
+    const email = req.query.email || req.params.email;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+    // Search both collections, return most recent match
+    const [newDoc, legacyDoc] = await Promise.all([
+      Airlines.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 }),
+      AirlinesSubscription.findOne({ contactEmail: email.toLowerCase() }).sort({ createdAt: -1 }),
+    ]);
+    const doc = newDoc || legacyDoc;
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── Read One ─────────────────────────────────────────────────────────────────
 exports.getAirlinesSubscriptionById = async (req, res) => {
   try {
-    const doc = await Airlines.findById(req.params.id);
+    // Search both Airlines (new) and AirlinesSubscription (legacy) by ID
+    let doc = await Airlines.findById(req.params.id);
+    if (!doc) doc = await AirlinesSubscription.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: doc });
   } catch (err) {

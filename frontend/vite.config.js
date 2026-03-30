@@ -6,4 +6,12 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react-phone-input-2'],
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

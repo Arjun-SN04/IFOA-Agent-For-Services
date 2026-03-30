@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import logo from '../assets/logo.png'
+import logo from '../assets/IFOA_USA_blanc_V.png'
 
 const roles = [
   { value: 'individual', label: 'Individual Pilot / Dispatcher', desc: 'Part 61/65 certificate holders' },
@@ -12,6 +12,8 @@ const roles = [
 export default function SignupPage() {
   const { signup } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = location.state?.from?.pathname
 
   const [role, setRole] = useState('individual')
   const [firstName, setFirstName] = useState('')
@@ -26,20 +28,16 @@ export default function SignupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
-      return
-    }
-    if (password !== confirmPw) {
-      setError('Passwords do not match.')
-      return
-    }
-
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (password !== confirmPw) { setError('Passwords do not match.'); return }
     setLoading(true)
     try {
       const user = await signup(email, password, role, firstName, lastName)
-      navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true })
+      if (from && from !== '/signup' && from !== '/login') {
+        navigate(from, { replace: true })
+      } else {
+        navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true })
+      }
     } catch (err) {
       setError(err?.response?.data?.message || 'Signup failed. Please try again.')
     } finally {
@@ -52,9 +50,22 @@ export default function SignupPage() {
       {/* Left branding panel */}
       <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden flex-col justify-between p-12">
         <img
-          src="https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=1400&q=85&auto=format&fit=crop"
+          src="https://images.unsplash.com/photo-1529074963764-98f45c47344b?w=1400&q=85&auto=format&fit=crop&crop=center"
           alt="Aviation"
           className="absolute inset-0 w-full h-full object-cover"
+          onError={e => {
+            const fallbacks = [
+              'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=1400&q=85&auto=format&fit=crop',
+              'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=1400&q=85&auto=format&fit=crop',
+            ]
+            const idx = fallbacks.indexOf(e.target.src)
+            if (idx < fallbacks.length - 1) {
+              e.target.src = fallbacks[idx + 1]
+            } else {
+              e.target.onerror = null
+              e.target.style.display = 'none'
+            }
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
 
@@ -65,13 +76,14 @@ export default function SignupPage() {
         </div>
 
         <div className="relative z-10 space-y-5">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-600/20 px-4 py-2">
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-blue-300 text-xs font-bold uppercase tracking-widest">Join IFOA USA</span>
+          <div className="inline-flex items-center rounded-full px-4 py-2 bg-white/5 backdrop-blur-sm">
+            <span className="text-white text-xs font-semibold tracking-wide">
+              Join IFOA USA
+            </span>
           </div>
           <h1 className="text-4xl font-black text-white leading-tight">
             Stay FAA<br />
-            <span className="text-sky-300">Compliant</span>
+            <span className="text-red-400">Compliant</span>
           </h1>
           <div className="space-y-3">
             {[
@@ -80,8 +92,8 @@ export default function SignupPage() {
               'FAA Compliance Guaranteed',
             ].map(f => (
               <div key={f} className="flex items-center gap-3 text-sm text-slate-300">
-                <div className="w-5 h-5 rounded-full bg-blue-600/30 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <div className="w-5 h-5 rounded-full bg-red-600/30 border border-red-500/40 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
@@ -97,7 +109,7 @@ export default function SignupPage() {
       </div>
 
       {/* Right — form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-white overflow-hidden">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-white overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -106,7 +118,11 @@ export default function SignupPage() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center mb-8">
-            <Link to="/"><img src={logo} alt="IFOA USA" className="h-10 w-auto" /></Link>
+            <Link to="/">
+              <div className="bg-slate-900 rounded-xl px-3 py-2 flex items-center">
+                <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
+              </div>
+            </Link>
           </div>
 
           <div className="mb-8">
@@ -129,16 +145,9 @@ export default function SignupPage() {
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Account Type</label>
               <div className="grid grid-cols-2 gap-2">
                 {roles.map(r => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setRole(r.value)}
-                    className={`rounded-xl border p-3 text-left transition-all ${
-                      role === r.value
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
+                  <button key={r.value} type="button" onClick={() => setRole(r.value)}
+                    className={`rounded-xl border p-3 text-left transition-all ${role === r.value ? 'border-red-600 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                      }`}>
                     <p className="text-xs font-bold leading-tight">{r.label}</p>
                     <p className="text-[10px] mt-0.5 opacity-70">{r.desc}</p>
                   </button>
@@ -150,53 +159,29 @@ export default function SignupPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">First Name</label>
-                <input
-                  type="text"
-                  required
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  placeholder="John"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
+                <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Last Name</label>
-                <input
-                  type="text"
-                  required
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  placeholder="Doe"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
+                <input type="text" required value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20" />
               </div>
             </div>
 
             {/* Email */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Email Address</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-              />
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20" />
             </div>
 
             {/* Password */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Password</label>
               <div className="relative">
-                <input
-                  type={showPw ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Min. 8 characters"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
+                <input type={showPw ? 'text' : 'password'} required value={password} onChange={e => setPassword(e.target.value)} placeholder="Min. 8 characters"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20" />
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition p-1">
                   {showPw
@@ -210,29 +195,14 @@ export default function SignupPage() {
             {/* Confirm Password */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Confirm Password</label>
-              <input
-                type={showPw ? 'text' : 'password'}
-                required
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
-                placeholder="Repeat password"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-              />
+              <input type={showPw ? 'text' : 'password'} required value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Repeat password"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20" />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 px-6 py-3.5 text-sm font-bold text-white transition-all flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={loading}
+              className="w-full rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-60 px-6 py-3.5 text-sm font-bold text-white transition-all flex items-center justify-center gap-2">
               {loading ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-                  </svg>
-                  Creating account…
-                </>
+                <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Creating account…</>
               ) : 'Create Account'}
             </button>
           </form>
@@ -240,7 +210,7 @@ export default function SignupPage() {
           <div className="mt-6 text-center">
             <p className="text-slate-500 text-sm">
               Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 font-semibold hover:text-blue-700 transition-colors">Sign in</Link>
+              <Link to="/login" className="text-red-600 font-semibold hover:text-red-700 transition-colors">Sign in</Link>
             </p>
           </div>
           <div className="mt-3 text-center">

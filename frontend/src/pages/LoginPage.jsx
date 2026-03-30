@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import logo from '../assets/logo.png'
+import logo from '../assets/IFOA_USA_blanc_V.png'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -55,13 +55,14 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-600/20 px-4 py-2 mb-6">
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-blue-300 text-xs font-bold uppercase tracking-widest">FAA Compliant Platform</span>
+          <div className="inline-flex items-center rounded-lg border border-gray-500 px-4 py-1.5 mb-6">
+            <span className="text-white text-xs font-semibold tracking-wide">
+              FAA Compliant Platform
+            </span>
           </div>
           <h1 className="text-4xl font-black text-white leading-tight mb-4">
             Your U.S. Agent<br />
-            <span className="text-sky-300">for Service</span>
+            <span className="text-red-400">for Service</span>
           </h1>
           <p className="text-white/70 leading-relaxed text-sm max-w-sm">
             Manage FAA correspondence and regulatory compliance from anywhere in the world.
@@ -89,7 +90,9 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden flex justify-center mb-8">
             <Link to="/">
-              <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
+              <div className="bg-slate-900 rounded-xl px-3 py-2 flex items-center">
+                <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
+              </div>
             </Link>
           </div>
 
@@ -116,20 +119,20 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Password</label>
-              <div className="relative">
+                <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Password</label>
+                <div className="relative">
                 <input
-                  type={showPw ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                type={showPw ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
                 />
                 <button
                   type="button"
@@ -147,7 +150,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 px-6 py-3.5 text-sm font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"
+              className="w-full rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-60 px-6 py-3.5 text-sm font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -164,7 +167,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-slate-500 text-sm">
               Don't have an account?{' '}
-              <Link to="/signup" className="text-blue-600 font-semibold hover:text-blue-700 transition-colors">
+              <Link to="/signup" className="text-red-600 font-semibold hover:text-red-700 transition-colors">
                 Create one
               </Link>
             </p>

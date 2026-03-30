@@ -4,6 +4,7 @@ const {
   createIndividual,
   getAllIndividuals,
   getIndividualById,
+  getIndividualByEmail,
   updateIndividual,
   deleteIndividual,
   exportToExcel,
@@ -11,6 +12,9 @@ const {
 
 // Public
 router.post('/', createIndividual);
+
+// Email lookup (must be before /:id to avoid conflict)
+router.get('/by-email', getIndividualByEmail);
 
 // Admin
 router.get('/', getAllIndividuals);

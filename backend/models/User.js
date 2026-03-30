@@ -9,7 +9,7 @@ const UserSchema = new mongoose.Schema({
   lastName: { type: String },
   // Reference to their registration record (for airline/individual)
   registrationId: { type: mongoose.Schema.Types.ObjectId, refPath: 'registrationModel' },
-  registrationModel: { type: String, enum: ['Individual', 'AirlinesSubscription'] },
+  registrationModel: { type: String, enum: ['Individual', 'AirlinesSubscription', 'Airlines'] },
 }, { timestamps: true });
 
 // Hash password before save

@@ -22,6 +22,20 @@ exports.getAllIndividuals = async (req, res) => {
   }
 };
 
+// Get individual by email (used as fallback when registrationId not linked yet)
+exports.getIndividualByEmail = async (req, res) => {
+  try {
+    const email = req.query.email || req.params.email;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+    // Return the most recent submission for this email
+    const individual = await Individual.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 });
+    if (!individual) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, data: individual });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // Get single individual
 exports.getIndividualById = async (req, res) => {
   try {

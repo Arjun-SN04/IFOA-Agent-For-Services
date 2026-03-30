@@ -17,8 +17,8 @@ function InfoRow({ label, value }) {
 
 function PlanBadge({ plan }) {
   const colors = {
-    '1 Year Subscription Plan': 'bg-blue-50 border-blue-200 text-blue-700',
-    'Multiple Years Subscription Plan': 'bg-violet-50 border-violet-200 text-violet-700',
+    '1 Year Subscription Plan': 'bg-red-50 border-red-200 text-red-700',
+    'Multiple Years Subscription Plan': 'bg-slate-100 border-slate-300 text-slate-700',
     'Unlimited Plan': 'bg-emerald-50 border-emerald-200 text-emerald-700',
   }
   return (
@@ -58,14 +58,37 @@ export default function ProfilePage() {
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'
 
   useEffect(() => {
-    if (!user?.registrationId) { setSubLoading(false); return }
-    const endpoint = user.role === 'airline'
-      ? `/airlines/${user.registrationId}`
-      : `/individuals/${user.registrationId}`
-    API.get(endpoint, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => setSub(r.data.data))
-      .catch(() => setSub(null))
-      .finally(() => setSubLoading(false))
+    if (!user) { setSubLoading(false); return }
+    const headers = { Authorization: `Bearer ${token}` }
+    const isAirline = user.role === 'airline'
+
+    const load = async () => {
+      try {
+        if (user.registrationId) {
+          const url = isAirline
+            ? `/airlines/${user.registrationId}`
+            : `/individuals/${user.registrationId}`
+          const r = await API.get(url, { headers })
+          setSub(r.data.data)
+          return
+        }
+        // Fallback: look up by email
+        if (user.email) {
+          const url = isAirline
+            ? `/airlines/by-email?email=${encodeURIComponent(user.email)}`
+            : `/individuals/by-email?email=${encodeURIComponent(user.email)}`
+          const r = await API.get(url, { headers })
+          setSub(r.data.data)
+          return
+        }
+        setSub(null)
+      } catch {
+        setSub(null)
+      } finally {
+        setSubLoading(false)
+      }
+    }
+    load()
   }, [user])
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
@@ -76,21 +99,21 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto">
         {/* Page header */}
         <div className="mb-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Account</p>
           <h1 className="text-2xl font-black text-slate-900">My Profile</h1>
           <p className="text-slate-500 text-sm mt-1">Your account information and active subscription plan.</p>
         </div>
 
         {/* Avatar card */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6 flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/30">
+          <div className="w-16 h-16 rounded-2xl bg-red-600 text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md shadow-red-600/30">
             {initials}
           </div>
           <div>
             <h2 className="text-xl font-black text-slate-900">{fullName}</h2>
             <p className="text-slate-500 text-sm">{user?.email}</p>
-            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-600 capitalize">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-600 capitalize">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
               {user?.role}
             </span>
           </div>
@@ -119,7 +142,7 @@ export default function ProfilePage() {
 
           {subLoading ? (
             <div className="px-6 py-10 flex items-center justify-center">
-              <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
                 <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
               </svg>
@@ -136,7 +159,7 @@ export default function ProfilePage() {
               <p className="text-slate-500 text-sm mb-4">Register to activate your FAA compliance service.</p>
               <Link
                 to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
-                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
               >
                 Register Now
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -147,10 +170,17 @@ export default function ProfilePage() {
           ) : user?.role === 'airline' ? (
             /* ── AIRLINE SUBSCRIPTION DETAILS ── */
             <div className="px-6 py-4">
-              {/* Plan highlight banner */}
-              <div className="rounded-xl bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-100 p-4 mb-4 flex items-center justify-between">
+            <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
+            (sub.paymentStatus === 'paid' || sub.status === 'Active')
+            ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-100'
+            : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100'
+            }`}>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Active Plan</p>
+                  <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-red-500' : 'text-amber-600'
+                  }`}>
+                    {(sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'Active Plan' : 'Pending Plan'}
+                  </p>
                   <PlanBadge plan={sub.subscriptionPlan} />
                 </div>
                 <div className="text-right">
@@ -169,7 +199,6 @@ export default function ProfilePage() {
               <InfoRow label="Payment Status" value={<StatusBadge status={sub.paymentStatus} />} />
               <InfoRow label="Submitted" value={fmt(sub.submittedAt || sub.createdAt)} />
 
-              {/* Certificate holders list */}
               {sub.certificateHolders?.length > 0 && (
                 <div className="mt-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Certificate Holders</p>
@@ -185,8 +214,8 @@ export default function ProfilePage() {
                           </div>
                           <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border ${
                             h.certificateStatus === 'EXISTING'
-                              ? 'bg-blue-50 border-blue-200 text-blue-600'
-                              : 'bg-violet-50 border-violet-200 text-violet-600'
+                              ? 'bg-red-50 border-red-200 text-red-600'
+                              : 'bg-slate-100 border-slate-300 text-slate-600'
                           }`}>{h.certificateStatus}</span>
                         </div>
                         {h.hasSecondary && (
@@ -205,10 +234,17 @@ export default function ProfilePage() {
           ) : (
             /* ── INDIVIDUAL SUBSCRIPTION DETAILS ── */
             <div className="px-6 py-4">
-              {/* Plan highlight banner */}
-              <div className="rounded-xl bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-100 p-4 mb-4 flex items-center justify-between">
+            <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
+            (sub.paymentStatus === 'paid' || sub.status === 'Active')
+            ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-100'
+            : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100'
+            }`}>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Active Plan</p>
+                  <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-red-500' : 'text-amber-600'
+                  }`}>
+                    {(sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'Active Plan' : 'Pending Plan'}
+                  </p>
                   <PlanBadge plan={sub.subscriptionPlan} />
                 </div>
                 <div className="text-right">
@@ -239,8 +275,8 @@ export default function ProfilePage() {
 
         {/* Quick link to documents */}
         <Link to="/dashboard/documents"
-          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-red-200 hover:shadow-md transition-all flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" />
             </svg>

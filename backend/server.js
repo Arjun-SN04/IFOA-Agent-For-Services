@@ -14,6 +14,7 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/individuals', require('./routes/individualRoutes'));
 app.use('/api/airlines', require('./routes/airlinesRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 
 // Health check
 app.get('/', (req, res) => res.json({ message: 'Agent for Service API is running' }));

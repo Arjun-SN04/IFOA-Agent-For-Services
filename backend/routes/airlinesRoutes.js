@@ -4,6 +4,7 @@ const {
   createAirlinesSubscription,
   getAllAirlinesSubscriptions,
   getAirlinesSubscriptionById,
+  getAirlinesSubscriptionByEmail,
   updateAirlinesSubscription,
   deleteAirlinesSubscription,
   exportAirlinesExcel,
@@ -11,6 +12,9 @@ const {
 
 // Public
 router.post('/', createAirlinesSubscription);
+
+// Email lookup (must be before /:id to avoid conflict)
+router.get('/by-email', getAirlinesSubscriptionByEmail);
 
 // Admin
 router.get('/', getAllAirlinesSubscriptions);

@@ -1,7 +1,38 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 const PhoneInput = PhoneInputLib.default || PhoneInputLib
+
+const COUNTRY_TO_ISO2 = {
+  'Afghanistan': 'af', 'Albania': 'al', 'Algeria': 'dz', 'American Samoa': 'as', 'Andorra': 'ad',
+  'Angola': 'ao', 'Anguilla': 'ai', 'Antigua and Barbuda': 'ag', 'Argentina': 'ar', 'Armenia': 'am',
+  'Australia': 'au', 'Austria': 'at', 'Azerbaijan': 'az', 'Bahamas': 'bs', 'Bahrain': 'bh',
+  'Bangladesh': 'bd', 'Barbados': 'bb', 'Belarus': 'by', 'Belgium': 'be', 'Belize': 'bz',
+  'Benin': 'bj', 'Bhutan': 'bt', 'Bolivia': 'bo', 'Bosnia and Herzegovina': 'ba', 'Botswana': 'bw',
+  'Brazil': 'br', 'Brunei': 'bn', 'Bulgaria': 'bg', 'Burkina Faso': 'bf', 'Burundi': 'bi',
+  'Cambodia': 'kh', 'Cameroon': 'cm', 'Canada': 'ca', 'Cayman Islands': 'ky', 'Chile': 'cl',
+  'China': 'cn', 'Colombia': 'co', 'Costa Rica': 'cr', 'Croatia': 'hr', 'Cuba': 'cu',
+  'Cyprus': 'cy', 'Czech Republic': 'cz', 'Denmark': 'dk', 'Dominican Republic': 'do', 'Ecuador': 'ec',
+  'Egypt': 'eg', 'El Salvador': 'sv', 'Estonia': 'ee', 'Ethiopia': 'et', 'Finland': 'fi',
+  'France': 'fr', 'Germany': 'de', 'Ghana': 'gh', 'Greece': 'gr', 'Guatemala': 'gt',
+  'Haiti': 'ht', 'Honduras': 'hn', 'Hong Kong': 'hk', 'Hungary': 'hu', 'Iceland': 'is',
+  'India': 'in', 'Indonesia': 'id', 'Iraq': 'iq', 'Ireland': 'ie', 'Israel': 'il',
+  'Italy': 'it', 'Jamaica': 'jm', 'Japan': 'jp', 'Jordan': 'jo', 'Kazakhstan': 'kz',
+  'Kenya': 'ke', 'Korea (Republic of)': 'kr', 'Kuwait': 'kw', 'Latvia': 'lv', 'Lebanon': 'lb',
+  'Libya': 'ly', 'Lithuania': 'lt', 'Luxembourg': 'lu', 'Malaysia': 'my', 'Maldives': 'mv',
+  'Malta': 'mt', 'Mexico': 'mx', 'Moldova': 'md', 'Monaco': 'mc', 'Mongolia': 'mn',
+  'Morocco': 'ma', 'Mozambique': 'mz', 'Myanmar': 'mm', 'Nepal': 'np', 'Netherlands': 'nl',
+  'New Zealand': 'nz', 'Nicaragua': 'ni', 'Nigeria': 'ng', 'Norway': 'no', 'Oman': 'om',
+  'Pakistan': 'pk', 'Palestine': 'ps', 'Panama': 'pa', 'Paraguay': 'py', 'Peru': 'pe',
+  'Philippines': 'ph', 'Poland': 'pl', 'Portugal': 'pt', 'Puerto Rico': 'pr', 'Qatar': 'qa',
+  'Romania': 'ro', 'Russian Federation': 'ru', 'Rwanda': 'rw', 'Saudi Arabia': 'sa', 'Senegal': 'sn',
+  'Serbia': 'rs', 'Singapore': 'sg', 'Slovakia': 'sk', 'Slovenia': 'si', 'Somalia': 'so',
+  'South Africa': 'za', 'Spain': 'es', 'Sri Lanka': 'lk', 'Sudan': 'sd', 'Sweden': 'se',
+  'Switzerland': 'ch', 'Syria': 'sy', 'Taiwan': 'tw', 'Tanzania': 'tz', 'Thailand': 'th',
+  'Tunisia': 'tn', 'Türkiye': 'tr', 'Uganda': 'ug', 'Ukraine': 'ua', 'United Arab Emirates': 'ae',
+  'United Kingdom': 'gb', 'United States of America': 'us', 'Uruguay': 'uy', 'Uzbekistan': 'uz',
+  'Venezuela': 've', 'Vietnam': 'vn', 'Yemen': 'ye', 'Zambia': 'zm', 'Zimbabwe': 'zw',
+}
 
 /* ─── Pricing per holder range ─── */
 const PRICE_MAP = {
@@ -90,7 +121,7 @@ function CountrySelect({ value, onChange, error }) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white border border-blue-600 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-blue-600 rounded-xl shadow-xl overflow-hidden">
           <div className="p-2 border-b border-gray-100 bg-gray-50">
             <input
               autoFocus
@@ -125,6 +156,14 @@ function CountrySelect({ value, onChange, error }) {
 
 export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
   const [errors, setErrors] = useState({})
+  const [phoneCountry, setPhoneCountry] = useState('us')
+
+  useEffect(() => {
+    if (data.country) {
+      const iso2 = COUNTRY_TO_ISO2[data.country]
+      if (iso2) setPhoneCountry(iso2)
+    }
+  }, [data.country])
 
   const inputCls = (field) =>
     `w-full px-3.5 py-2.5 border rounded-xl text-sm text-gray-900 bg-white outline-none transition-all duration-150 focus:ring-2 focus:ring-blue-600/15 placeholder:text-gray-400 ${
@@ -381,12 +420,16 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
               `}</style>
               <div className="airlines-phone">
                 <PhoneInput
-                  country="us"
+                  country={phoneCountry}
                   value={data.phone || ''}
-                  onChange={phone => update({ phone })}
+                  onChange={(phone, countryData) => {
+                    update({ phone })
+                    if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                  }}
                   enableSearch
                   searchPlaceholder="Search country..."
                   preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                  dropdownStyle={{ bottom: '100%', top: 'auto' }}
                 />
               </div>
             </Field>
