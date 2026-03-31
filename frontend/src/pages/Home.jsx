@@ -558,25 +558,8 @@ export default function Home() {
               {/* Divider */}
               <div className="h-px bg-gray-200 w-full" />
 
-              {/* Consequences block */}
-              <div>
-                <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-3">Consequences</p>
-                <h3 className="text-2xl font-black text-gray-900 mb-5">What If You Miss the Deadline?</h3>
-                <div className="space-y-4 mb-8">
-                  <div className="border-l-4 border-red-600 pl-5 py-1">
-                    <p className="font-bold text-gray-900 mb-1 text-sm">Current Certificate Holders</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      Your FAA certificate remains valid, but you cannot exercise its privileges until you appoint a U.S. Agent for Service.
-                    </p>
-                  </div>
-                  <div className="border-l-4 border-gray-300 pl-5 py-1">
-                    <p className="font-bold text-gray-900 mb-1 text-sm">New Applicants</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      You cannot complete FAA certification processes without officially naming a U.S. Agent for Service on your application.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3 justify-end">
+              {/* btn block */}
+              <div className="flex flex-wrap gap-3 justify-start">
                   <Link
                     to="/individual/register"
                     className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-7 py-3.5 rounded-xl text-sm transition-all duration-200 shadow-md shadow-red-200"
@@ -593,7 +576,6 @@ export default function Home() {
                     ✈ Airlines Plan
                   </Link>
                 </div>
-              </div>
             </motion.div>
 
             {/* ══ RIGHT: DGR Crew image + bottom text ══ */}
