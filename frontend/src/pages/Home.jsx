@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import Navbar from '../components/Navbar'
+import Footer from '../components/layout/footer'
 import classicStamp from '../assets/Classic-Stamp.png'
-import ifoaLogo from '../assets/IFOA_USA_blanc_V.png'
+import dgrCrewImg from '../assets/DGR-Crew.jpg'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -53,6 +54,7 @@ const PLANS = [
     subtitle: 'Unlimited Subscription',
     price: '$299.00',
     subtitleColor: 'text-red-600',
+    bestValue: true,
     features: [
       'The Most Economic Flat Rate',
       'Dedicated U.S. Mailing Address',
@@ -103,8 +105,21 @@ function PlanCard({ plan, index }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: index * 0.09, duration: 0.5 }}
-      className="flex flex-col bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+      className={`relative flex flex-col rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
+        plan.bestValue
+          ? 'border-2 border-yellow-400 bg-white'
+          : 'border border-gray-200 bg-white'
+      }`}
     >
+      {/* Best Value badge */}
+      {plan.bestValue && (
+        <div className="absolute top-3 right-3 z-10 bg-yellow-400 text-yellow-900 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
+          <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
+          Best Value
+        </div>
+      )}
       <div className="relative h-44 overflow-hidden bg-gray-100">
         <img
           src={plan.img}
@@ -112,11 +127,19 @@ function PlanCard({ plan, index }) {
           className="w-full h-full object-cover"
           onError={e => { e.target.onerror = null; e.target.src = plan.imgFallback }}
         />
+        {plan.bestValue && (
+          <div className="absolute inset-0 bg-gradient-to-t from-yellow-400/10 to-transparent pointer-events-none" />
+        )}
       </div>
       <div className="flex flex-col flex-1 p-6">
-        <h3 className="text-xl font-black text-gray-900 mb-1">{plan.name}</h3>
+        <h3 className={`text-xl font-black mb-1 ${ plan.bestValue ? 'text-gray-900' : 'text-gray-900' }`}>{plan.name}</h3>
         <p className="text-2xl font-black text-gray-900 mb-1">{plan.price}</p>
         <p className={`text-sm font-bold mb-4 ${plan.subtitleColor}`}>{plan.subtitle}</p>
+        {plan.bestValue && (
+          <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-4 font-semibold">
+            🌟 Pay once, covered for life — no renewals!
+          </p>
+        )}
         <ul className="space-y-2 mb-6 flex-1">
           {plan.features.map(f => (
             <li key={f} className="text-sm text-gray-600 text-center">{f}</li>
@@ -124,7 +147,11 @@ function PlanCard({ plan, index }) {
         </ul>
         <Link
           to={plan.to}
-          className="block text-center py-3 px-6 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-all duration-200"
+          className={`block text-center py-3 px-6 font-bold rounded-xl text-sm transition-all duration-200 ${
+            plan.bestValue
+              ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-md shadow-yellow-200'
+              : 'bg-red-600 hover:bg-red-700 text-white'
+          }`}
         >
           {plan.cta}
         </Link>
@@ -405,7 +432,7 @@ export default function Home() {
             </div>
             <div className="h-0.5 w-full bg-gray-200 rounded-full" />
           </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {PLANS.map((plan, i) => <PlanCard key={plan.name} plan={plan} index={i} />)}
           </div>
         </div>
@@ -468,52 +495,160 @@ export default function Home() {
               Why and Who Needs a FAA<br />Agent for Service?
             </h2>
           </motion.div>
-          <div className="grid lg:grid-cols-2 gap-12 items-start">
-            <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-              <p className="text-gray-600 leading-relaxed mb-6 text-base">
-                Recent updates to FAA Compliance Requirements now mandate that individuals and businesses holding FAA Certificates with a permanent address outside the United States must designate a U.S. Agent for Service, as outlined in{' '}
-                <strong className="text-gray-900">14 CFR Part 3, Subpart C</strong> and{' '}
-                <strong className="text-gray-900">FAA Advisory Circular AC 3-1</strong>.
-              </p>
-              <ul className="space-y-3 mb-8">
-                {['FAA-Certificated Pilots (Part 61)', 'Aircraft Mechanics & Dispatchers (Part 65)', 'Flight & Ground Instructors', 'Aircraft Owners (Part 47)', 'Aviation Businesses (Part 107)'].map(item => (
-                  <li key={item} className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
-                    <span className="text-gray-700 font-medium">{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-gray-600 leading-relaxed text-sm">
-                An Agent for Service is a representative (entity or an individual who is 18 or older) with a U.S. address designated by a certificate holder to receive official FAA correspondence, legal notices, and other critical communications on his/her behalf.
-              </p>
-            </motion.div>
-            <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }} className="flex flex-col gap-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-stretch">
+
+            {/* ══ LEFT: all text content stacked ══ */}
+            <motion.div
+              initial={{ opacity: 0, x: -24 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="flex flex-col justify-between gap-10"
+            >
+              {/* Regulation block */}
               <div>
-                <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-4">Consequences</p>
-                <h3 className="text-2xl font-black text-gray-900 mb-6">What If You Miss the Deadline?</h3>
-                <div className="space-y-4">
-                  <div className="border-l-4 border-gray-900 pl-5 py-1">
-                    <p className="font-bold text-gray-900 mb-1">Current Certificate Holders</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">Your FAA certificate remains valid, but you cannot exercise its privileges until you appoint a U.S. Agent for Service.</p>
+                <p className="text-gray-600 leading-relaxed mb-6 text-base">
+                  Recent updates to FAA Compliance Requirements now mandate that individuals and businesses holding FAA
+                  Certificates with a permanent address outside the United States must designate a U.S. Agent for Service,
+                  as outlined in{' '}
+                  <a
+                    href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold text-gray-900 underline underline-offset-2 hover:text-red-600 transition-colors duration-200"
+                  >14 CFR Part 3, Subpart C</a> and{' '}
+                  <a
+                    href="https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_3-1.pdf"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold text-gray-900 underline underline-offset-2 hover:text-red-600 transition-colors duration-200"
+                  >FAA Advisory Circular AC 3-1</a>.
+                </p>
+                <ul className="space-y-2.5 mb-7">
+                  {[
+                    'FAA-Certificated Pilots (Part 61)',
+                    'Aircraft Mechanics & Dispatchers (Part 65)',
+                    'Flight & Ground Instructors',
+                    'Aircraft Owners (Part 47)',
+                    'Aviation Businesses (Part 107)',
+                  ].map(item => (
+                    <li key={item} className="flex items-center gap-3">
+                      <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
+                      <span className="text-gray-700 font-medium text-sm">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-gray-500 leading-relaxed text-sm">
+                  An Agent for Service is a representative (entity or an individual who is 18 or older) with a U.S.
+                  address designated by a certificate holder to receive official FAA correspondence, legal notices, and
+                  other critical communications on his/her behalf.
+                </p>
+                <p className="text-gray-500 leading-relaxed text-sm mt-4">
+                  The Agent for Service shall ensure the timely delivery of essential documents and continued compliance
+                  with FAA regulations. More information in the{' '}
+                  <a
+                    href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C/section-3.302"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-red-600 font-semibold underline underline-offset-2 hover:text-red-800 transition-colors duration-200"
+                  >14 CFR Part Subpart C Section 3.302</a>.
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-gray-200 w-full" />
+
+              {/* Consequences block */}
+              <div>
+                <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-3">Consequences</p>
+                <h3 className="text-2xl font-black text-gray-900 mb-5">What If You Miss the Deadline?</h3>
+                <div className="space-y-4 mb-8">
+                  <div className="border-l-4 border-red-600 pl-5 py-1">
+                    <p className="font-bold text-gray-900 mb-1 text-sm">Current Certificate Holders</p>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      Your FAA certificate remains valid, but you cannot exercise its privileges until you appoint a U.S. Agent for Service.
+                    </p>
                   </div>
-                  <div className="border-l-4 border-gray-900 pl-5 py-1">
-                    <p className="font-bold text-gray-900 mb-1">New Applicants</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">You cannot complete FAA certification processes without officially naming a U.S. Agent for Service on your application.</p>
+                  <div className="border-l-4 border-gray-300 pl-5 py-1">
+                    <p className="font-bold text-gray-900 mb-1 text-sm">New Applicants</p>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      You cannot complete FAA certification processes without officially naming a U.S. Agent for Service on your application.
+                    </p>
                   </div>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Link to="/individual/register"
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-7 py-3.5 rounded-xl text-sm transition-all duration-200 shadow-md">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                  Register as Individual
-                </Link>
-                <Link to="/airlines/register"
-                  className="inline-flex items-center gap-2 border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 font-semibold px-7 py-3.5 rounded-xl text-sm transition-all duration-200">
-                  ✈ Airlines Plan
-                </Link>
+                <div className="flex flex-wrap gap-3 justify-end">
+                  <Link
+                    to="/individual/register"
+                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-7 py-3.5 rounded-xl text-sm transition-all duration-200 shadow-md shadow-red-200"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Register as Individual
+                  </Link>
+                  <Link
+                    to="/airlines/register"
+                    className="inline-flex items-center gap-2 border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 font-semibold px-7 py-3.5 rounded-xl text-sm transition-all duration-200"
+                  >
+                    ✈ Airlines Plan
+                  </Link>
+                </div>
               </div>
             </motion.div>
+
+            {/* ══ RIGHT: DGR Crew image + bottom text ══ */}
+            <motion.div
+              initial={{ opacity: 0, x: 24 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.65, delay: 0.1 }}
+              className="flex flex-col gap-5"
+            >
+              {/* Image container — fixed height, no cropping */}
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl w-full" style={{ height: 380 }}>
+                <img
+                  src={dgrCrewImg}
+                  alt="FAA certified aviation crew"
+                  className="w-full h-full object-cover object-top"
+                />
+                {/* Subtle top vignette */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/50" />
+                {/* Top-left regulation pill */}
+                <div className="absolute top-4 left-4">
+                  <span className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full">
+                    14 CFR Part 3 · Subpart C
+                  </span>
+                </div>
+              </div>
+
+              {/* Info card below the image */}
+              <div className="rounded-2xl border border-gray-200 bg-white px-6 py-5 flex items-center justify-between gap-4 shadow-sm">
+                <div>
+                  <p className="text-gray-900 font-black text-base leading-tight">FAA Certified Crew</p>
+                  <p className="text-gray-500 text-xs mt-1 leading-relaxed">Fully compliant U.S. Agent for Service — Daytona Beach, FL</p>
+                </div>
+                <span className="w-11 h-11 rounded-xl bg-red-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-red-200">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </span>
+              </div>
+
+              {/* Stat pills row */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: '14 CFR', label: 'Regulation' },
+                  { value: 'Part 3', label: 'Subpart C' },
+                  { value: '100%', label: 'FAA Compliant' },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center">
+                    <p className="text-gray-900 font-black text-sm">{s.value}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5 font-medium">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
           </div>
         </div>
       </section>
@@ -590,87 +725,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── IFOA CONTACT ── */}
-      <section className="relative border-t border-white/10 overflow-hidden px-6 py-20">
-        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
-          <div className="absolute inset-0 bg-[#0a1525]" />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #1a6b5a 0%, #1a4d7a 35%, #0f2d55 65%, #081525 100%)' }} />
-          <div className="absolute -top-32 -left-32 w-[700px] h-[700px] rounded-full opacity-40" style={{ background: 'radial-gradient(ellipse at 30% 30%, #22d9a0 0%, #0fa878 20%, #0b6e87 45%, transparent 70%)' }} />
-          <div className="absolute top-0 right-0 w-[50%] h-full opacity-20" style={{ background: 'linear-gradient(to left, #2a6fba 0%, #1a4d9a 30%, transparent 100%)' }} />
-          <div className="absolute inset-0 opacity-[0.06]" style={{ background: 'linear-gradient(118deg, transparent 20%, rgba(200,220,240,0.8) 45%, rgba(180,210,230,0.4) 50%, transparent 65%)' }} />
-          <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
-            <defs><pattern id="faaGrid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="white" strokeWidth="0.5"/><circle cx="16" cy="16" r="0.5" fill="white" opacity="0.6"/></pattern></defs>
-            <rect width="100%" height="100%" fill="url(#faaGrid)" />
-          </svg>
-          <div className="absolute inset-0 opacity-[0.04]" style={{ background: 'repeating-linear-gradient(108deg, transparent 0px, transparent 14px, rgba(255,255,255,0.6) 14px, rgba(255,255,255,0.6) 15px)' }} />
-          <div className="absolute bottom-[-80px] right-[2%] w-[420px] h-[420px] rounded-full border border-teal-200/15" />
-          <div className="absolute bottom-[-45px] right-[2%] w-[310px] h-[310px] rounded-full border border-teal-200/10" />
-          <div className="absolute bottom-[-15px] right-[2%] w-[210px] h-[210px] rounded-full border border-teal-200/[0.07]" style={{ background: 'radial-gradient(circle at 55% 45%, rgba(0,200,160,0.06) 0%, transparent 70%)' }} />
-          <div className="absolute bottom-[10px] right-[2%] w-[120px] h-[120px] rounded-full border border-teal-200/[0.05]" />
-          <svg className="absolute bottom-4 right-[14%] w-[160px] h-[90px] opacity-[0.06]" viewBox="0 0 200 120" fill="white"><path d="M180 55 L100 40 L60 10 L50 18 L80 45 L20 35 L10 42 L75 65 L60 110 L72 110 L90 68 L130 75 Z" /></svg>
-          <div className="absolute top-0 left-[30%] w-[1px] h-full" style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(0,220,160,0.35) 50%, transparent 100%)', opacity: 0.12 }} />
-          <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(0,220,160,0.7) 25%, rgba(100,180,255,0.5) 60%, transparent 100%)', opacity: 0.4 }} />
-        </div>
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 md:grid-cols-2">
-          <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <h2 className="mb-8 text-3xl font-black leading-tight text-white sm:text-4xl">Are You Ready to Appoint<br />Your Agent for Service?</h2>
-            <img src={ifoaLogo} alt="IFOA USA" className="h-24 w-auto object-contain" />
-          </motion.div>
-          <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <p className="mb-8 leading-relaxed text-white/80">Our <strong className="text-white">Daytona Beach</strong> office ensures fast and efficient handling and forwarding of our customers' mail.</p>
-            <div className="mb-8 space-y-4">
-              {[
-                { icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>, label: 'IFOA USA Corp, 1616 Concierge Blvd Suite 100 (1st Floor), Daytona Beach, FL 32117, USA' },
-                { icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" /></svg>, label: 'agent@theifoa.com', href: 'mailto:agent@theifoa.com' },
-                { icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>, label: '+1 508 838 5880', href: 'tel:+15088385880' },
-              ].map((row, i) => (
-                <div key={i} className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-teal-300/20 bg-white/10 backdrop-blur-sm text-white">{row.icon}</div>
-                  {row.href ? <a href={row.href} className="text-sm font-medium leading-relaxed text-white hover:text-teal-200 transition-colors self-center">{row.label}</a> : <span className="text-sm leading-relaxed text-white/80 self-center">{row.label}</span>}
-                </div>
-              ))}
-            </div>
-            <Link to="/individual/register" className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-8 py-3.5 text-sm font-bold text-white transition-all duration-200 shadow-lg shadow-red-900/30">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              Sign Up Now
-            </Link>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer className="bg-black text-gray-400 py-12 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-10 mb-10">
-            <div>
-              <h3 className="text-white font-bold text-base mb-3">IFOA USA Corp</h3>
-              <p className="text-sm leading-relaxed">Your trusted U.S. Agent for Service for FAA compliance worldwide.</p>
-            </div>
-            <div>
-              <h3 className="text-white font-bold text-sm mb-3 uppercase tracking-widest">Contact</h3>
-              <div className="space-y-1.5 text-sm">
-                <p>1616 Concierge Blvd Suite 100</p>
-                <p>Daytona Beach, FL 32117, USA</p>
-                <p className="mt-3">agent@theifoa.com</p>
-                <p>+1 508 838 5880</p>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-white font-bold text-sm mb-3 uppercase tracking-widest">Quick Links</h3>
-              <div className="space-y-1.5 text-sm">
-                <Link to="/" className="block hover:text-white transition-colors">Home</Link>
-                <Link to="/individual/register" className="block hover:text-white transition-colors">Individual Registration</Link>
-                <Link to="/airlines/register" className="block hover:text-white transition-colors">Airlines Registration</Link>
-                <Link to="/login" className="block hover:text-white transition-colors">Login</Link>
-                <a href="https://usas.faa.gov/signin" target="_blank" rel="noreferrer" className="block hover:text-white transition-colors">FAA USAS Portal</a>
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-white/5 pt-6 text-xs text-gray-600">
-            <p>© {new Date().getFullYear()} IFOA USA Corp — International Flight Operations Academy GmbH. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from '../components/Navbar'
+import Footer from '../components/layout/footer'
 import cockpitImg from '../assets/cokpit.png'
 import Step1PersonalInfo from '../components/individual/Step1PersonalInfo'
 import Step2Certificates from '../components/individual/Step2Certificates'
@@ -137,16 +138,16 @@ const fadeUp = {
 // ── Wrong-role banner: shown at the top of the form when an airline user visits the individual form ──
 function WrongRoleBanner() {
   return (
-    <div className="rounded-t-3xl border-b border-amber-200 bg-amber-50 px-7 py-5">
+    <div className="rounded-t-3xl border-b border-blue-200 bg-blue-50 px-7 py-5">
       <div className="flex items-start gap-4">
-        <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center bg-amber-100 border border-amber-200 mt-0.5">
-          <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center bg-blue-100 border border-blue-200 mt-0.5">
+          <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-amber-900 mb-1">Airlines Account Detected — Form Submission Disabled</p>
-          <p className="text-xs text-amber-700 leading-relaxed">
+          <p className="text-sm font-black text-blue-900 mb-1">Airlines Account Detected — Form Submission Disabled</p>
+          <p className="text-xs text-blue-700 leading-relaxed">
             You are signed in with an <strong>Airlines account</strong>. This form requires an{' '}
             <strong>Individual account</strong> to submit. You can browse and fill in the form freely,
             but the final submit button will be disabled.
@@ -162,7 +163,7 @@ function WrongRoleBanner() {
           </Link>
           <Link
             to="/airlines/register"
-            className="inline-flex items-center gap-1.5 border border-amber-300 text-amber-800 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-amber-100 transition-all whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 border border-blue-300 text-blue-800 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-blue-100 transition-all whitespace-nowrap"
           >
             ✈ Go to Airlines Form
           </Link>
@@ -328,14 +329,14 @@ export default function IndividualForm() {
       </section>
 
       {/* ═══ DEADLINE BANNER ═══ */}
-      <div className="bg-gradient-to-r from-black to-red-950 text-white">
+      <div className="bg-gray-950 border-b border-red-900/40">
         <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
-          <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest whitespace-nowrap text-red-300">
+          <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest whitespace-nowrap text-red-500">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
             Key FAA Deadlines
           </span>
-          <div className="w-px h-5 bg-white/20 hidden sm:block" />
-          <p className="text-sm leading-relaxed text-red-100">
+          <div className="w-px h-5 bg-red-800 hidden sm:block" />
+          <p className="text-sm leading-relaxed text-gray-300">
             <strong className="text-white">02 Apr 2025</strong> — New applicants with non-U.S. addresses must appoint a U.S. Agent. &nbsp;
             <strong className="text-white">07 Jul 2025</strong> — Existing certificate holders must designate an Agent to maintain FAA certification.
           </p>
@@ -712,26 +713,7 @@ export default function IndividualForm() {
         </div>
       </section>
 
-      {/* ═══ FOOTER ═══ */}
-      <footer className="bg-black text-gray-400 py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="text-white font-bold text-sm">IFOA USA Corp</p>
-            <p className="text-xs mt-1">1616 Concierge Blvd Suite 100, Daytona Beach, FL 32117, USA</p>
-          </div>
-          <div className="text-xs space-y-1 text-right">
-            <p><a href="mailto:agent@theifoa.com" className="hover:text-white transition-colors">agent@theifoa.com</a></p>
-            <p><a href="tel:+15088385880" className="hover:text-white transition-colors">+1 508 838 5880</a></p>
-          </div>
-        </div>
-        <div className="max-w-6xl mx-auto mt-6 pt-6 border-t border-white/5 text-xs text-gray-600 flex flex-wrap gap-4 justify-between">
-          <p>© {new Date().getFullYear()} IFOA USA Corp — International Flight Operations Academy GmbH</p>
-          <div className="flex gap-4">
-            <Link to="/" className="hover:text-white transition-colors">Home</Link>
-            <Link to="/airlines/register" className="hover:text-white transition-colors">Airlines Plan</Link>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </>
   )
 }

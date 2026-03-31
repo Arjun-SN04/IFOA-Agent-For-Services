@@ -316,9 +316,13 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
           Address <span className="text-red-400">*</span>
         </h3>
         <div className="space-y-4">
-          <Field label="Address Line 1" required error={errors.addressLine1}>
+          <Field label="Address" required error={errors.addressLine1}>
             <input type="text" placeholder="Street address" value={data.addressLine1 || ''}
               onChange={e => update({ addressLine1: e.target.value })} className={inputCls('addressLine1')} />
+          </Field>
+          <Field label="Address Line 1" error={errors.addressLine2}>
+            <input type="text" placeholder="Apt, suite, floor, building (optional)" value={data.addressLine2 || ''}
+              onChange={e => update({ addressLine2: e.target.value })} className={inputCls('addressLine2')} />
           </Field>
           <div className="grid sm:grid-cols-3 gap-4">
             <Field label="City">

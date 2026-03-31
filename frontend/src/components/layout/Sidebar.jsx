@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
 // ─── Nav item config per role ───────────────────────────────────────────────
 const adminNav = [
@@ -45,13 +46,13 @@ function NavItem({ item, collapsed }) {
     <Link
       to={item.to}
       title={collapsed ? item.label : undefined}
-      className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 ${
+      className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-150 ${
         active
           ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-md shadow-red-500/20'
-          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+          : 'text-slate-800 hover:bg-gray-100 hover:text-red-600'
       }`}
     >
-      <span className={`flex-shrink-0 w-[18px] h-[18px] ${active ? 'text-white' : 'text-slate-400 group-hover:text-red-500'}`}>
+      <span className={`flex-shrink-0 w-[18px] h-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-red-500'}`}>
         {item.icon}
       </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -59,7 +60,7 @@ function NavItem({ item, collapsed }) {
   )
 }
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const nav = user?.role === 'admin' ? adminNav : userNav
@@ -78,24 +79,39 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 z-40 h-screen flex flex-col bg-white border-r border-slate-200/80 shadow-sm transition-all duration-300 ${
+      className={`fixed left-0 top-0 z-40 h-screen flex flex-col bg-white border-r border-slate-200 shadow-sm transition-all duration-300 ${
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
+      style={{
+        transform:
+          typeof window !== 'undefined' && window.innerWidth < 768 && !mobileOpen
+            ? 'translateX(-100%)'
+            : 'translateX(0)',
+      }}
     >
       {/* ── Top strip: branding + collapse toggle ── */}
       <div
-        className={`flex h-16 flex-shrink-0 items-center border-b border-slate-100 bg-white ${
+        className={`flex h-[64px] flex-shrink-0 items-center border-b border-slate-100 bg-white ${
           collapsed ? 'justify-center px-2' : 'justify-between px-3'
         }`}
       >
-        {!collapsed && (
-          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 pl-1 select-none">
-            Agent for Service
-          </span>
+        {collapsed ? (
+          <Link to="/" title="Go to Home" className="flex items-center justify-center">
+            <img src={ifoaLogo} alt="IFOA USA" className="h-7 w-auto object-contain" />
+          </Link>
+        ) : (
+          <Link to="/" className="flex items-center pl-1 group" title="Go to Home">
+            <img
+              src={ifoaLogo}
+              alt="IFOA USA"
+              className="h-9 w-auto object-contain flex-shrink-0"
+            />
+          </Link>
         )}
+
         <button
           onClick={onToggle}
-          className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors flex-shrink-0"
+          className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -109,32 +125,41 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* ── Profile Badge ── */}
       <div
-        className={`flex-shrink-0 border-b border-slate-100 bg-slate-50/80 ${
-          collapsed ? 'px-2 py-3 flex justify-center' : 'px-4 py-3'
+        className={`flex-shrink-0 border-b border-slate-100 ${
+          collapsed ? 'px-2 py-3 flex justify-center' : 'px-3 py-3'
         }`}
+        style={{ background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)' }}
       >
         {collapsed ? (
           <div
             title={`${fullName} (${user?.role ?? 'user'})`}
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-xs font-bold shadow shadow-red-400/30 cursor-default"
+            className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-white text-xs font-black shadow-md shadow-red-300/40 cursor-default border-2 border-red-100"
           >
             {initials}
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white text-xs font-bold shadow shadow-red-400/30 flex-shrink-0">
-              {initials}
+            {/* Avatar */}
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white text-sm font-black shadow-md shadow-red-300/40 border-2 border-red-100">
+                {initials}
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-white" />
             </div>
+
+            {/* Info */}
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-700 truncate leading-tight">{fullName}</p>
-              <p className="text-[10px] text-slate-400 truncate leading-tight">{user?.email}</p>
+              <p className="text-sm font-black text-slate-900 truncate leading-tight">{fullName}</p>
+              <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{user?.email}</p>
+              {/* Role pill */}
               <span
-                className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide mt-0.5 ${
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider mt-1 border ${
                   user?.role === 'admin'
-                    ? 'bg-red-100 text-red-600'
-                    : 'bg-sky-100 text-sky-600'
+                    ? 'bg-red-600 text-white border-red-500'
+                    : 'bg-white text-red-600 border-red-200'
                 }`}
               >
+                
                 {user?.role ?? 'user'}
               </span>
             </div>
@@ -147,11 +172,11 @@ export default function Sidebar({ collapsed, onToggle }) {
         <Link
           to="/"
           title={collapsed ? 'Home' : undefined}
-          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-150 text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${
+          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-150 text-slate-800 hover:bg-gray-100 hover:text-red-600 ${
             collapsed ? 'justify-center' : ''
           }`}
         >
-          <span className="flex-shrink-0 w-[18px] h-[18px] text-slate-400">
+          <span className="flex-shrink-0 w-[18px] h-[18px] text-slate-500 group-hover:text-red-500">
             <HomeIcon />
           </span>
           {!collapsed && <span className="truncate">Home</span>}
@@ -159,11 +184,13 @@ export default function Sidebar({ collapsed, onToggle }) {
       </div>
 
       {/* ── Nav ── */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-white">
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4 bg-white">
         {nav.map(group => (
           <div key={group.group}>
             {!collapsed && (
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400/70 px-3 mb-2">{group.group}</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-red-400 px-3 mb-1.5">
+                {group.group}
+              </p>
             )}
             {collapsed && <div className="border-t border-slate-100 mb-2 mx-1" />}
             <div className="space-y-0.5">
@@ -176,13 +203,13 @@ export default function Sidebar({ collapsed, onToggle }) {
       </nav>
 
       {/* ── Bottom: support + logout ── */}
-      <div className="px-3 pb-4 border-t border-slate-100 pt-3 space-y-1 bg-slate-50/60">
+      <div className="px-3 pb-4 border-t border-slate-100 pt-3 space-y-1">
         {!collapsed && (
           <a
             href="mailto:agent@theifoa.com"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
-            <svg className="w-[16px] h-[16px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <svg className="w-[16px] h-[16px] flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
             </svg>
             Contact Support
@@ -191,7 +218,9 @@ export default function Sidebar({ collapsed, onToggle }) {
         <button
           onClick={handleLogout}
           title={collapsed ? 'Logout' : undefined}
-          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-150 ${collapsed ? 'justify-center' : ''}`}
+          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-red-50 hover:text-red-600 transition-all duration-150 ${
+            collapsed ? 'justify-center' : ''
+          }`}
         >
           <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25" />
@@ -208,10 +237,8 @@ export default function Sidebar({ collapsed, onToggle }) {
 function HomeIcon() {
   return (
     <svg fill="none" viewBox="0 0 18 18" stroke="currentColor" strokeWidth={1.6} className="w-full h-full">
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M2.25 9.75 9 3l6.75 6.75" />
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M3.75 8.25V15a.75.75 0 0 0 .75.75h3.75v-3.75h1.5v3.75h3.75a.75.75 0 0 0 .75-.75V8.25" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 9.75 9 3l6.75 6.75" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 8.25V15a.75.75 0 0 0 .75.75h3.75v-3.75h1.5v3.75h3.75a.75.75 0 0 0 .75-.75V8.25" />
     </svg>
   )
 }
@@ -239,8 +266,7 @@ function IndividualsIcon() {
 function AirlinesIcon() {
   return (
     <svg fill="none" viewBox="0 0 18 18" stroke="currentColor" strokeWidth={1.6} className="w-full h-full">
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M15.75 8.25 10.5 5.25V2.25l-1.5.75V5.25L3 7.5v1.5l6-1.5v2.25l-1.5 1.5v1.5l2.25-.75 2.25.75v-1.5l-1.5-1.5V7.5l5.25 1.5v-0.75Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 8.25 10.5 5.25V2.25l-1.5.75V5.25L3 7.5v1.5l6-1.5v2.25l-1.5 1.5v1.5l2.25-.75 2.25.75v-1.5l-1.5-1.5V7.5l5.25 1.5v-0.75Z" />
     </svg>
   )
 }
@@ -267,8 +293,7 @@ function SubscriptionIcon() {
 function DocumentIcon() {
   return (
     <svg fill="none" viewBox="0 0 18 18" stroke="currentColor" strokeWidth={1.6} className="w-full h-full">
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M10.5 1.5H4.5a1.5 1.5 0 0 0-1.5 1.5v12a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5V6l-4.5-4.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H4.5a1.5 1.5 0 0 0-1.5 1.5v12a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5V6l-4.5-4.5Z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5V6H15" />
       <path strokeLinecap="round" d="M6 9.75h6M6 12.75h3.75" />
     </svg>
@@ -278,8 +303,7 @@ function DocumentIcon() {
 function SettingsIcon() {
   return (
     <svg fill="none" viewBox="0 0 18 18" stroke="currentColor" strokeWidth={1.6} className="w-full h-full">
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M7.65 2.1a1.5 1.5 0 0 1 2.7 0l.3.6a1.5 1.5 0 0 0 2.05.65l.6-.3a1.5 1.5 0 0 1 1.9 1.9l-.3.6a1.5 1.5 0 0 0 .65 2.05l.6.3a1.5 1.5 0 0 1 0 2.7l-.6.3a1.5 1.5 0 0 0-.65 2.05l.3.6a1.5 1.5 0 0 1-1.9 1.9l-.6-.3a1.5 1.5 0 0 0-2.05.65l-.3.6a1.5 1.5 0 0 1-2.7 0l-.3-.6a1.5 1.5 0 0 0-2.05-.65l-.6.3a1.5 1.5 0 0 1-1.9-1.9l.3-.6A1.5 1.5 0 0 0 2.45 9.9l-.6-.3a1.5 1.5 0 0 1 0-2.7l.6-.3a1.5 1.5 0 0 0 .65-2.05l-.3-.6a1.5 1.5 0 0 1 1.9-1.9l.6.3a1.5 1.5 0 0 0 2.05-.65l.3-.6Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.65 2.1a1.5 1.5 0 0 1 2.7 0l.3.6a1.5 1.5 0 0 0 2.05.65l.6-.3a1.5 1.5 0 0 1 1.9 1.9l-.3.6a1.5 1.5 0 0 0 .65 2.05l.6.3a1.5 1.5 0 0 1 0 2.7l-.6.3a1.5 1.5 0 0 0-.65 2.05l.3.6a1.5 1.5 0 0 1-1.9 1.9l-.6-.3a1.5 1.5 0 0 0-2.05.65l-.3.6a1.5 1.5 0 0 1-2.7 0l-.3-.6a1.5 1.5 0 0 0-2.05-.65l-.6.3a1.5 1.5 0 0 1-1.9-1.9l.3-.6A1.5 1.5 0 0 0 2.45 9.9l-.6-.3a1.5 1.5 0 0 1 0-2.7l.6-.3a1.5 1.5 0 0 0 .65-2.05l-.3-.6a1.5 1.5 0 0 1 1.9-1.9l.6.3a1.5 1.5 0 0 0 2.05-.65l.3-.6Z" />
       <circle cx="9" cy="9" r="2" />
     </svg>
   )

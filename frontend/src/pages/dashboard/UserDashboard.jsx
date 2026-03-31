@@ -9,10 +9,10 @@ const API = axios.create({ baseURL: 'http://localhost:5000/api' })
 
 function StatCard({ label, value, icon, accent = 'red', sub }) {
   const configs = {
-    red:     { wrap: 'bg-red-50 border-red-100',       icon: 'bg-red-600 text-white',     badge: 'text-red-700' },
+    red:     { wrap: 'bg-red-50 border-red-100',         icon: 'bg-red-600 text-white',     badge: 'text-red-700' },
     emerald: { wrap: 'bg-emerald-50 border-emerald-100', icon: 'bg-emerald-600 text-white', badge: 'text-emerald-700' },
-    amber:   { wrap: 'bg-amber-50 border-amber-100',   icon: 'bg-amber-500 text-white',   badge: 'text-amber-700' },
-    sky:     { wrap: 'bg-sky-50 border-sky-100',       icon: 'bg-sky-600 text-white',     badge: 'text-sky-700' },
+    blue:    { wrap: 'bg-blue-50 border-blue-100',       icon: 'bg-blue-600 text-white',    badge: 'text-blue-700' },
+    sky:     { wrap: 'bg-sky-50 border-sky-100',         icon: 'bg-sky-600 text-white',     badge: 'text-sky-700' },
   }
   const c = configs[accent] || configs.red
   return (
@@ -81,15 +81,14 @@ export default function UserDashboard() {
     load()
   }, [user])
 
-  // Derive subscription status label + accent
   const getSubStatus = () => {
     if (subLoading) return { label: 'Loading…', accent: 'sky', sub: 'Checking subscription' }
-    if (!sub) return { label: 'No Plan', accent: 'amber', sub: 'Register to activate' }
+    if (!sub) return { label: 'No Plan', accent: 'blue', sub: 'Register to activate' }
     const paid = sub.paymentStatus === 'paid' || sub.status === 'Active'
     const failed = sub.paymentStatus === 'failed' || sub.status === 'Inactive'
     if (paid)   return { label: 'Active', accent: 'emerald', sub: sub.subscriptionPlan }
     if (failed) return { label: 'Inactive', accent: 'red', sub: sub.subscriptionPlan }
-    return { label: 'Pending', accent: 'amber', sub: sub.subscriptionPlan }
+    return { label: 'Pending', accent: 'blue', sub: sub.subscriptionPlan }
   }
   const subStatus = getSubStatus()
 
@@ -97,22 +96,22 @@ export default function UserDashboard() {
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
 
-        {/* ── Welcome banner ── */}
+        {/* ── Welcome banner — LIGHT THEME ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
-          className="relative rounded-2xl overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1a0000 45%, #1f0000 100%)' }}
+          className="relative rounded-2xl overflow-hidden border border-blue-100"
+          style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 45%, #e0f2fe 100%)' }}
         >
-          {/* Decorative red glow */}
-          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-20"
-            style={{ background: 'radial-gradient(circle, #ef4444, transparent 70%)' }} />
+          {/* Decorative blue glow */}
+          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-30"
+            style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
           <div className="relative z-10 px-7 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-400/80 mb-1">Welcome back</p>
-              <h1 className="text-2xl font-black text-white">Hello, {user?.firstName || fullName} 👋</h1>
-              <p className="text-slate-400 text-sm mt-1">Here's an overview of your IFOA USA account.</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Welcome back</p>
+              <h1 className="text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
+              <p className="text-slate-500 text-sm mt-1">Here's an overview of your IFOA USA account.</p>
             </div>
             <Link
               to={
@@ -121,7 +120,7 @@ export default function UserDashboard() {
                   : user?.role === 'airline' ? '/airlines/register' : '/individual/register'
               }
               className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', boxShadow: '0 4px 14px rgba(220,38,38,0.35)' }}
+              style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
             >
               {sub ? '📋 View Subscription' : user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -136,7 +135,7 @@ export default function UserDashboard() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.08 }}
-          className="grid sm:grid-cols-3 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
         >
           <StatCard
             label="Subscription Status"
@@ -155,7 +154,7 @@ export default function UserDashboard() {
           <StatCard
             label="Plan"
             value={sub ? sub.subscriptionPlan?.split(' ')[0] + (sub.subscriptionPlan?.includes('Unlimited') ? ' Unlimited' : ' Year') : 'None'}
-            accent={sub ? 'sky' : 'amber'}
+            accent={sub ? 'sky' : 'blue'}
             sub={sub ? `${sub.price ?? sub.totalAmount ?? 0}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
@@ -166,7 +165,7 @@ export default function UserDashboard() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15 }}
-          className="grid sm:grid-cols-2 gap-5"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-5"
         >
           {/* Account info */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -232,21 +231,22 @@ export default function UserDashboard() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.22 }}
-            className="rounded-2xl border border-red-100 bg-red-50 p-5 flex items-start gap-4"
+            className="rounded-2xl border border-blue-200 bg-blue-50 p-5 flex items-start gap-4"
           >
-            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-bold text-red-900 mb-1">Complete your FAA registration</p>
-              <p className="text-xs text-red-700 leading-relaxed">
+              <p className="text-sm font-bold text-blue-900 mb-1">Complete your FAA registration</p>
+              <p className="text-xs text-blue-700 leading-relaxed">
                 Submit your FAA certificate details to activate your U.S. Agent for Service. This is required to receive and manage your FAA correspondence.
               </p>
             </div>
           </motion.div>
         )}
+
         {/* ── Subscription summary — shown when registered ── */}
         {!subLoading && sub && (
           <motion.div
@@ -256,14 +256,14 @@ export default function UserDashboard() {
             className={`rounded-2xl border p-5 flex items-start gap-4 ${
               sub.paymentStatus === 'paid' || sub.status === 'Active'
                 ? 'border-emerald-100 bg-emerald-50'
-                : 'border-amber-100 bg-amber-50'
+                : 'border-blue-200 bg-blue-50'
             }`}
           >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'bg-emerald-100' : 'bg-amber-100'
+              sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'bg-emerald-100' : 'bg-blue-100'
             }`}>
               <svg className={`w-5 h-5 ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-600' : 'text-amber-600'
+                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-600' : 'text-blue-600'
               }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 {sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -272,14 +272,14 @@ export default function UserDashboard() {
             </div>
             <div className="flex-1">
               <p className={`text-sm font-bold mb-1 ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-900' : 'text-amber-900'
+                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-900' : 'text-blue-900'
               }`}>
                 {sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'Your subscription is active'
                   : 'Payment pending — your plan is awaiting confirmation'}
               </p>
               <p className={`text-xs leading-relaxed ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-700' : 'text-amber-700'
+                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-700' : 'text-blue-700'
               }`}>
                 Plan: <strong>{sub.subscriptionPlan}</strong>.
                 {sub.paymentStatus !== 'paid' && sub.status !== 'Active'
@@ -292,7 +292,7 @@ export default function UserDashboard() {
               className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
                 sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-amber-200 text-amber-700 hover:bg-amber-100'
+                  : 'border-blue-200 text-blue-700 hover:bg-blue-100'
               }`}
             >
               View Details →

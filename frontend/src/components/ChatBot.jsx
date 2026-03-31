@@ -1,17 +1,61 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import ifoaLogo from '../assets/IFOA_USA_white.png'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 const SUGGESTIONS = [
   { label: '💰 Compare all plans', q: 'What are all the subscription plans and prices?' },
+  { label: '⭐ Best value plan?', q: 'Which plan is the best value?' },
   { label: '✈️ Who needs this?', q: 'Who needs an Agent for Service?' },
   { label: '🪪 EXISTING vs NEW cert?', q: 'What is the difference between EXISTING and NEW certificate status?' },
   { label: '🔢 FAA Certificate Number?', q: 'What is an FAA Certificate Number and where do I find it?' },
   { label: '📋 What is IACRA/FTN?', q: 'What is the IACRA FTN tracking number?' },
   { label: '💳 How do I pay?', q: 'How does payment work?' },
 ]
+
+const PLAN_INFO = `
+IFOA USA Agent for Service — Subscription Plans:
+
+1. TURBOPROP PLAN — $69.00/year (1 Year Subscription)
+   • Dedicated U.S. Mailing Address
+   • FAA Compliance Guaranteed
+   • Real-Time Notification
+   • Document Scanning & Forwarding
+   • Yearly Payment
+   • Unlimited Certificates
+
+2. JET PLAN — $55.00/year (Up to 5 Years Subscription)
+   • 20% Discount Yearly
+   • Dedicated U.S. Mailing Address
+   • FAA Compliance Guaranteed
+   • Real-Time Notification
+   • Document Scanning & Forwarding
+   • One Payment for the Period
+   • Unlimited Certificates
+
+3. VIP PLAN — $299.00 ONE-TIME (Unlimited / Lifetime Subscription) ⭐ BEST VALUE
+   • The Most Economic Flat Rate — Pay once, covered forever
+   • Dedicated U.S. Mailing Address
+   • FAA Compliance Guaranteed
+   • Real-Time Notification
+   • Document Scanning & Forwarding
+   • One Time Lifetime Payment
+   • Unlimited Certificates
+   WHY IT'S BEST VALUE: $299 once vs $69/year. After just 5 years you start saving money — and you're covered for life with no renewals ever.
+
+4. AIRLINES PLAN — Tailored Price (Choose Subscription Duration)
+   • Volume Discount for operators with 3+ FAA certificate holders
+   • Dedicated U.S. Mailing Address
+   • FAA Compliance Guaranteed
+   • Real-Time Notification
+   • Document Scanning & Forwarding
+   • Credit Card or Wire Payment
+   • Unlimited Certificates
+   Pricing: $60/cert/year (3–5 holders), $55/cert/year (5–10), $49/cert/year (10+)
+   Unlimited option: $265/year (3–5), $255/year (5–10), $245/year (10+)
+`
 
 // ── Pre-registration steps panel ─────────────────────────────────────────────
 function PreStepsPanel({ onContinue }) {
@@ -145,7 +189,10 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
         method: 'POST',
         signal: abortRef.current.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history.map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          messages: history.map(m => ({ role: m.role, content: m.content })),
+          systemContext: PLAN_INFO,
+        }),
       })
 
       const data = await res.json()
@@ -351,7 +398,7 @@ export default function ChatBot() {
   if (isAuthPage || heroVisible) return null
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9999]">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999]">
       {/* FAB */}
       <AnimatePresence mode="wait">
         {!open && (
@@ -364,12 +411,12 @@ export default function ChatBot() {
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.93 }}
             onClick={() => setOpen(true)}
-            className="relative w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl shadow-blue-500/50 flex items-center justify-center"
+            className="relative w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-2xl shadow-red-500/50 flex items-center justify-center"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />
             </svg>
-            <span className="absolute inset-0 rounded-full border-2 border-blue-400 animate-ping opacity-50" />
+            <span className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping opacity-50" />
             {unread > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
                 {unread}
@@ -388,30 +435,33 @@ export default function ChatBot() {
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-0 right-0 bg-white rounded-2xl shadow-2xl shadow-slate-900/25 border border-slate-200 overflow-hidden flex flex-col"
-            style={{ width: 360, height: 560 }}
+            style={{
+              width: typeof window !== 'undefined' && window.innerWidth < 400 ? 'calc(100vw - 24px)' : 360,
+              height: typeof window !== 'undefined' && window.innerHeight < 600 ? 'calc(100vh - 100px)' : 560,
+            }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-700 to-blue-600 flex-shrink-0">
+            <div className="relative flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-white font-black text-xs border border-white/20">
-                    IF
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
+                    <img src={ifoaLogo} alt="IFOA" className="h-8 w-auto object-contain" />
                   </div>
-                  <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-green-400 border-2 border-blue-700" />
+                  
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white leading-none">IFOA Assistant</p>
-                  <p className="text-[11px] text-blue-200 mt-0.5">
+                  <p className="text-sm font-bold text-gray-900 leading-none">IFOA Assistant</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
                     {view === 'presteps' ? 'Before you start' : 'Form help · Always here'}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {view === 'chat' && (
                   <button
                     onClick={() => setView('presteps')}
                     title="Pre-registration steps"
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white/80 hover:text-white transition-all"
+                    className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-all"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -420,7 +470,7 @@ export default function ChatBot() {
                 )}
                 <button
                   onClick={() => setOpen(false)}
-                  className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white/80 hover:text-white transition-all"
+                  className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

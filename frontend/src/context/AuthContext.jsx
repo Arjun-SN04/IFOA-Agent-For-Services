@@ -71,6 +71,15 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
+  // NEW: update profile name only (no password required)
+  const updateProfile = async (firstName, lastName) => {
+    const res = await API.put('/auth/update-profile', { firstName, lastName })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
   const linkRegistration = async (registrationId, registrationModel) => {
     const res = await API.put('/auth/link-registration', { registrationId, registrationModel })
     setToken(res.data.token)
@@ -80,7 +89,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, setSession, updateCredentials, linkRegistration }}>
+    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, setSession, updateCredentials, updateProfile, linkRegistration }}>
       {children}
     </AuthContext.Provider>
   )

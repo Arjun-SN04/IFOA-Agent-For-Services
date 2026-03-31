@@ -67,6 +67,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
 
         // Address
         addressLine1: data.addressLine1,
+        addressLine2: data.addressLine2 || '',
         city: data.city,
         state: data.state,
         postalCode: data.postalCode,
@@ -148,6 +149,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
             <SectionHeader title="Company Information" />
             <Row label="Company" value={data.airlineName} />
             <Row label="Address" value={data.addressLine1} />
+            {data.addressLine2 && <Row label="Address Line 1" value={data.addressLine2} />}
             <Row label="City" value={data.city} />
             <Row label="State" value={data.state} />
             <Row label="Postal Code" value={data.postalCode} />

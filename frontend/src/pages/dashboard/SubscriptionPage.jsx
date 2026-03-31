@@ -19,9 +19,28 @@ function PlanBadge({ plan }) {
 }
 
 function PayBadge({ status }) {
-  const map = { paid: 'bg-emerald-50 border-emerald-200 text-emerald-700', pending: 'bg-amber-50 border-amber-200 text-amber-600', failed: 'bg-red-50 border-red-200 text-red-700', Active: 'bg-emerald-50 border-emerald-200 text-emerald-700', Pending: 'bg-amber-50 border-amber-200 text-amber-600', Inactive: 'bg-slate-100 border-slate-200 text-slate-500' }
-  const dot = { paid: 'bg-emerald-500', pending: 'bg-amber-400', failed: 'bg-red-500', Active: 'bg-emerald-500', Pending: 'bg-amber-400', Inactive: 'bg-slate-400' }
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}><span className={`w-1.5 h-1.5 rounded-full ${dot[status] || 'bg-slate-400'}`} />{status || 'Pending'}</span>
+  const map = {
+    paid: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    pending: 'bg-blue-50 border-blue-200 text-blue-700',
+    failed: 'bg-red-50 border-red-200 text-red-700',
+    Active: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    Pending: 'bg-blue-50 border-blue-200 text-blue-700',
+    Inactive: 'bg-slate-100 border-slate-200 text-slate-500'
+  }
+  const dot = {
+    paid: 'bg-emerald-500',
+    pending: 'bg-blue-500',
+    failed: 'bg-red-500',
+    Active: 'bg-emerald-500',
+    Pending: 'bg-blue-500',
+    Inactive: 'bg-slate-400'
+  }
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || 'bg-slate-400'}`} />
+      {status || 'Pending'}
+    </span>
+  )
 }
 
 function Row({ label, value }) {
@@ -42,7 +61,6 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true)
   const [showPayModal, setShowPayModal] = useState(false)
 
-  // Derive the registrationId and model to pass to the payment modal
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
     (user?.role === 'airline' ? 'Airlines' : 'Individual')
@@ -57,7 +75,6 @@ export default function SubscriptionPage() {
 
     const fetchAndLink = async (data) => {
       setSub(data)
-      // If we found via email fallback and have no registrationId linked yet, link it now
       if (!user.registrationId && data?._id) {
         try {
           await linkRegistration(data._id, isAirline ? 'Airlines' : 'Individual')
@@ -67,14 +84,12 @@ export default function SubscriptionPage() {
 
     const load = async () => {
       try {
-        // Primary: fetch by registrationId if linked
         if (user.registrationId) {
           const url = isAirline ? `/airlines/${user.registrationId}` : `/individuals/${user.registrationId}`
           const r = await API.get(url, { headers })
           setSub(r.data.data)
           return
         }
-        // Fallback: look up by the user's email
         if (user.email) {
           const url = isAirline
             ? `/airlines/by-email?email=${encodeURIComponent(user.email)}`
@@ -105,7 +120,10 @@ export default function SubscriptionPage() {
 
         {loading ? (
           <div className="flex items-center gap-3 py-16 justify-center">
-            <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+            <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+              <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+            </svg>
             <span className="text-slate-400 text-sm">Loading subscription…</span>
           </div>
         ) : !sub ? (
@@ -115,8 +133,10 @@ export default function SubscriptionPage() {
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Plan</p>
               </div>
               <div className="px-6 py-8 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
+                  </svg>
                 </div>
                 <p className="text-slate-700 font-bold mb-1">No active subscription</p>
                 <p className="text-slate-400 text-sm mb-5">Register to activate your FAA compliance service.</p>
@@ -138,18 +158,18 @@ export default function SubscriptionPage() {
           </>
         ) : (
           <div className="space-y-5">
-            {/* Pay Now CTA — shown only when pending */}
+            {/* ── Pay Now CTA — BLUE instead of amber ── */}
             {isPending && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-amber-900">Payment pending</p>
-                    <p className="text-xs text-amber-700 leading-relaxed">Complete your payment to activate your FAA Agent for Service subscription.</p>
+                    <p className="text-sm font-bold text-blue-900">Payment pending</p>
+                    <p className="text-xs text-blue-700 leading-relaxed">Complete your payment to activate your FAA Agent for Service subscription.</p>
                   </div>
                 </div>
                 <button
@@ -170,7 +190,7 @@ export default function SubscriptionPage() {
                 ? 'bg-gradient-to-r from-red-700 to-red-600'
                 : (sub.paymentStatus === 'failed' || sub.status === 'Inactive')
                   ? 'bg-gradient-to-r from-slate-700 to-slate-600'
-                  : 'bg-gradient-to-r from-amber-600 to-amber-500'
+                  : 'bg-gradient-to-r from-blue-700 to-blue-600'
             }`}>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-2">
@@ -244,6 +264,21 @@ export default function SubscriptionPage() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showPayModal && sub && (
+          <PaymentModal
+            sub={sub}
+            registrationId={regId}
+            registrationModel={regModel}
+            onClose={() => setShowPayModal(false)}
+            onSuccess={(updated) => {
+              setSub(updated)
+              setShowPayModal(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   )
 }

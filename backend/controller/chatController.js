@@ -31,17 +31,31 @@ IFOA (International Federation of Operational Airmen) Agent for Service is an FA
 - This is a legal FAA requirement — not optional.
 
 == INDIVIDUAL SUBSCRIPTION PLANS ==
-1) 1 Year Subscription Plan — $69.00 USD
-   - Valid for exactly 12 months from subscription date
-   - Renewal required each year
+1) TURBOPROP PLAN — 1 Year Subscription — $69.00 USD/year
+   - Dedicated U.S. Mailing Address
+   - FAA Compliance Guaranteed
+   - Real-Time Notification
+   - Document Scanning & Forwarding
+   - Yearly Payment | Unlimited Certificates
+   - Valid for exactly 12 months; renewal required each year
 
-2) Multiple Years Subscription Plan — $55.00 USD per year
-   - Choose 2, 3, 4, or 5 years upfront
-   - Total cost: 2 yrs=$110, 3 yrs=$165, 4 yrs=$220, 5 yrs=$275
+2) JET PLAN — Up to 5 Years Subscription — $55.00 USD/year
+   - 20% Discount Yearly vs Turboprop Plan
+   - All the same features as Turboprop
+   - One Payment for the Period
+   - Choose 2–5 years upfront: 2 yrs=$110, 3 yrs=$165, 4 yrs=$220, 5 yrs=$275
 
-3) Unlimited Plan — $299.00 USD (one-time payment)
-   - Never expires — lifetime registration
-   - No renewals ever needed
+3) VIP PLAN ⭐ BEST VALUE — Unlimited/Lifetime Subscription — $299.00 USD ONE-TIME
+   - The MOST ECONOMIC flat rate — pay once, covered forever
+   - All the same features as Turboprop/Jet
+   - One Time Lifetime Payment — no renewals EVER
+   - After just 5 years it costs less than the yearly plan
+   - STRONGLY RECOMMENDED for long-term certificate holders
+
+4) AIRLINES PLAN — For Operators with 3+ FAA Certificate Holders — Tailored Price
+   - Volume Discount, Credit Card or Wire Payment
+   - All standard features included
+   - See Airline/Operator section below for pricing tiers
 
 == AIRLINE / OPERATOR SUBSCRIPTION PLANS ==
 1 Year Plan (per certificate/year):
@@ -95,7 +109,7 @@ IFOA USA Corp is a trusted, reliable, and highly professional U.S. Agent for Ser
 - End responses with a brief encouraging note where natural (e.g. "You're all set!", "Great choice — IFOA has you covered!", "You're in good hands with IFOA!")`;
 
 exports.chat = async (req, res) => {
-  const { messages } = req.body;
+  const { messages, systemContext } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array is required' });
@@ -106,8 +120,13 @@ exports.chat = async (req, res) => {
     return res.status(500).json({ error: 'Groq API key not configured on server' });
   }
 
+  // Merge any extra plan/context info sent from the frontend into the system prompt
+  const finalSystemPrompt = systemContext
+    ? `${SYSTEM_PROMPT}\n\n== CURRENT PLAN DETAILS (authoritative) ==\n${systemContext}`
+    : SYSTEM_PROMPT;
+
   const groqMessages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: finalSystemPrompt },
     ...messages.map(m => ({ role: m.role, content: m.content })),
   ];
 

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import Footer from '../layout/footer'
 
 const STEPS = [
   {
@@ -18,6 +19,7 @@ const STEPS = [
 
 export default function SuccessPage({ name }) {
   return (
+    <>
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fbff_0%,#eef5ff_100%)] px-4 py-14">
       <div className="pointer-events-none absolute left-0 top-20 h-72 w-72 rounded-full bg-blue-100/60 blur-3xl" />
       <div className="pointer-events-none absolute right-0 top-16 h-80 w-80 rounded-full bg-sky-100/70 blur-3xl" />
@@ -100,5 +102,7 @@ export default function SuccessPage({ name }) {
         </div>
       </motion.div>
     </div>
+    <Footer />
+  </>
   )
 }

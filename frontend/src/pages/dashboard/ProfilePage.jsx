@@ -32,8 +32,8 @@ function StatusBadge({ status }) {
   const map = {
     paid:    'bg-emerald-50 border-emerald-200 text-emerald-700',
     Active:  'bg-emerald-50 border-emerald-200 text-emerald-700',
-    pending: 'bg-amber-50 border-amber-200 text-amber-700',
-    Pending: 'bg-amber-50 border-amber-200 text-amber-700',
+    pending: 'bg-blue-50 border-blue-200 text-blue-700',
+    Pending: 'bg-blue-50 border-blue-200 text-blue-700',
     failed:  'bg-red-50 border-red-200 text-red-700',
     Inactive:'bg-slate-100 border-slate-200 text-slate-600',
   }
@@ -41,7 +41,7 @@ function StatusBadge({ status }) {
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${
         (status === 'paid' || status === 'Active') ? 'bg-emerald-500' :
-        (status === 'pending' || status === 'Pending') ? 'bg-amber-500' :
+        (status === 'pending' || status === 'Pending') ? 'bg-blue-500' :
         status === 'failed' ? 'bg-red-500' : 'bg-slate-400'
       }`} />
       {status}
@@ -49,10 +49,102 @@ function StatusBadge({ status }) {
   )
 }
 
+// ── Inline edit name modal ───────────────────────────────────────────────────
+function EditNameModal({ user, onClose, onSave }) {
+  const [firstName, setFirstName] = useState(user?.firstName || '')
+  const [lastName, setLastName]   = useState(user?.lastName || '')
+  const [saving, setSaving]       = useState(false)
+  const [err, setErr]             = useState('')
+
+  const handleSave = async () => {
+    if (!firstName.trim() && !lastName.trim()) {
+      setErr('Please enter at least a first name or last name.')
+      return
+    }
+    setSaving(true)
+    setErr('')
+    try {
+      await onSave(firstName.trim(), lastName.trim())
+      onClose()
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to update name.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-slate-50">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">Edit Profile</p>
+            <h3 className="text-lg font-black text-slate-900">Change Your Name</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {err && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">First Name</label>
+            <input
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300"
+              value={firstName}
+              onChange={e => setFirstName(e.target.value)}
+              placeholder="Enter first name"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Last Name</label>
+            <input
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300"
+              value={lastName}
+              onChange={e => setLastName(e.target.value)}
+              placeholder="Enter last name"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
+          >
+            {saving && (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+              </svg>
+            )}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ProfilePage() {
-  const { user, token } = useAuth()
+  const { user, token, updateProfile } = useAuth()
   const [sub, setSub] = useState(null)
   const [subLoading, setSubLoading] = useState(true)
+  const [editNameOpen, setEditNameOpen] = useState(false)
 
   const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'
@@ -72,7 +164,6 @@ export default function ProfilePage() {
           setSub(r.data.data)
           return
         }
-        // Fallback: look up by email
         if (user.email) {
           const url = isAirline
             ? `/airlines/by-email?email=${encodeURIComponent(user.email)}`
@@ -96,33 +187,64 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout>
+      {editNameOpen && (
+        <EditNameModal
+          user={user}
+          onClose={() => setEditNameOpen(false)}
+          onSave={updateProfile}
+        />
+      )}
+
       <div className="max-w-3xl mx-auto">
         {/* Page header */}
         <div className="mb-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Account</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
           <h1 className="text-2xl font-black text-slate-900">My Profile</h1>
           <p className="text-slate-500 text-sm mt-1">Your account information and active subscription plan.</p>
         </div>
 
-        {/* Avatar card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6 flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-red-600 text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md shadow-red-600/30">
+        {/* ── Avatar card — LIGHT THEME ── */}
+        <div
+          className="rounded-2xl border border-blue-100 p-6 mb-6 flex items-center gap-5 relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)' }}
+        >
+          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20"
+            style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
+          {/* Avatar circle */}
+          <div className="w-16 h-16 rounded-2xl text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md relative z-10"
+            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 16px rgba(37,99,235,0.35)' }}>
             {initials}
           </div>
-          <div>
+          <div className="relative z-10 flex-1 min-w-0">
             <h2 className="text-xl font-black text-slate-900">{fullName}</h2>
             <p className="text-slate-500 text-sm">{user?.email}</p>
-            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-600 capitalize">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-700 capitalize">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               {user?.role}
             </span>
           </div>
+          {/* Edit name button */}
+          <button
+            onClick={() => setEditNameOpen(true)}
+            className="relative z-10 flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-white transition-all shadow-sm"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+            </svg>
+            Edit Name
+          </button>
         </div>
 
         {/* Account Details */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Details</p>
+            <button
+              onClick={() => setEditNameOpen(true)}
+              className="text-xs text-blue-600 font-semibold hover:underline"
+            >
+              Edit Name →
+            </button>
           </div>
           <div className="px-6 py-2">
             <InfoRow label="First Name" value={user?.firstName} />
@@ -142,7 +264,7 @@ export default function ProfilePage() {
 
           {subLoading ? (
             <div className="px-6 py-10 flex items-center justify-center">
-              <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
                 <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
               </svg>
@@ -150,8 +272,8 @@ export default function ProfilePage() {
             </div>
           ) : !sub ? (
             <div className="px-6 py-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
                 </svg>
               </div>
@@ -159,7 +281,8 @@ export default function ProfilePage() {
               <p className="text-slate-500 text-sm mb-4">Register to activate your FAA compliance service.</p>
               <Link
                 to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
-                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
+                className="inline-flex items-center gap-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
+                style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
               >
                 Register Now
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -170,14 +293,14 @@ export default function ProfilePage() {
           ) : user?.role === 'airline' ? (
             /* ── AIRLINE SUBSCRIPTION DETAILS ── */
             <div className="px-6 py-4">
-            <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
-            (sub.paymentStatus === 'paid' || sub.status === 'Active')
-            ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-100'
-            : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100'
-            }`}>
+              <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
+                (sub.paymentStatus === 'paid' || sub.status === 'Active')
+                  ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100'
+                  : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-100'
+              }`}>
                 <div>
                   <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-red-500' : 'text-amber-600'
+                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-emerald-600' : 'text-blue-600'
                   }`}>
                     {(sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'Active Plan' : 'Pending Plan'}
                   </p>
@@ -234,14 +357,14 @@ export default function ProfilePage() {
           ) : (
             /* ── INDIVIDUAL SUBSCRIPTION DETAILS ── */
             <div className="px-6 py-4">
-            <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
-            (sub.paymentStatus === 'paid' || sub.status === 'Active')
-            ? 'bg-gradient-to-r from-red-50 to-rose-50 border-red-100'
-            : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-100'
-            }`}>
+              <div className={`rounded-xl p-4 mb-4 flex items-center justify-between border ${
+                (sub.paymentStatus === 'paid' || sub.status === 'Active')
+                  ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100'
+                  : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-100'
+              }`}>
                 <div>
                   <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-red-500' : 'text-amber-600'
+                    (sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'text-emerald-600' : 'text-blue-600'
                   }`}>
                     {(sub.paymentStatus === 'paid' || sub.status === 'Active') ? 'Active Plan' : 'Pending Plan'}
                   </p>
@@ -275,8 +398,8 @@ export default function ProfilePage() {
 
         {/* Quick link to documents */}
         <Link to="/dashboard/documents"
-          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-red-200 hover:shadow-md transition-all flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" />
             </svg>

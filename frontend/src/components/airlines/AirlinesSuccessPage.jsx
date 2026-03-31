@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import Footer from '../layout/footer'
 
 const STEPS = [
   { icon: '📧', title: 'Check your email', desc: 'A PayPal invoice will be sent to the address you provided.' },
@@ -9,6 +10,7 @@ const STEPS = [
 
 export default function AirlinesSuccessPage({ airlineName }) {
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex items-center justify-center py-16 px-4">
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -99,5 +101,7 @@ export default function AirlinesSuccessPage({ airlineName }) {
         </p>
       </motion.div>
     </div>
+    <Footer />
+    </>
   )
 }

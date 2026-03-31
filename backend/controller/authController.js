@@ -64,7 +64,6 @@ exports.getMe = async (req, res) => {
 };
 
 // POST /api/auth/seed-admin-signup
-// Accessible only by manually typing the URL. Creates an admin account.
 exports.seedAdminSignup = async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
@@ -98,7 +97,6 @@ exports.seedAdminSignup = async (req, res) => {
 };
 
 // POST /api/auth/seed-admin-login
-// Accessible only by manually typing the URL. Logs in admin accounts only.
 exports.seedAdminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -125,7 +123,6 @@ exports.seedAdminLogin = async (req, res) => {
 };
 
 // PUT /api/auth/update-credentials  (protected)
-// Body: { currentPassword, newEmail?, newPassword? }
 exports.updateCredentials = async (req, res) => {
   try {
     const { currentPassword, newEmail, newPassword } = req.body;
@@ -150,12 +147,11 @@ exports.updateCredentials = async (req, res) => {
     if (newPassword) {
       if (newPassword.length < 8)
         return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-      user.password = newPassword; // pre-save hook will hash it
+      user.password = newPassword;
     }
 
     await user.save();
 
-    // Issue a fresh token with potentially new email
     const token = signToken(user);
     res.json({
       message: 'Credentials updated successfully.',
@@ -168,9 +164,35 @@ exports.updateCredentials = async (req, res) => {
   }
 };
 
+// PUT /api/auth/update-profile  (protected)
+// Body: { firstName, lastName }
+exports.updateProfile = async (req, res) => {
+  try {
+    const { firstName, lastName } = req.body;
+    if (!firstName && !lastName)
+      return res.status(400).json({ message: 'Provide at least a first name or last name to update.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    if (firstName !== undefined) user.firstName = firstName.trim();
+    if (lastName !== undefined) user.lastName = lastName.trim();
+
+    await user.save();
+
+    const token = signToken(user);
+    res.json({
+      message: 'Profile updated successfully.',
+      token,
+      user: { id: user._id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName, registrationId: user.registrationId },
+    });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
 // PUT /api/auth/link-registration  (protected)
-// Called after a user submits the registration form to link the record to their account
-// Body: { registrationId, registrationModel }
 exports.linkRegistration = async (req, res) => {
   try {
     const { registrationId, registrationModel } = req.body;
