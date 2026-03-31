@@ -38,15 +38,12 @@ exports.createAirlinesSubscription = async (req, res) => {
 // ── Read All ─────────────────────────────────────────────────────────────────
 exports.getAllAirlinesSubscriptions = async (req, res) => {
   try {
-    // Fetch from both collections (Airlines = new, AirlinesSubscription = legacy)
     const [newDocs, legacyDocs] = await Promise.all([
       Airlines.find().sort({ createdAt: -1 }),
       AirlinesSubscription.find().sort({ createdAt: -1 }),
     ]);
-    // Merge and normalise legacy docs to Airlines shape
     const legacyNorm = legacyDocs.map((d) => {
       const obj = d.toObject();
-      // Legacy model uses contactFirstName/contactLastName
       if (!obj.firstName && obj.contactFirstName) obj.firstName = obj.contactFirstName;
       if (!obj.lastName  && obj.contactLastName)  obj.lastName  = obj.contactLastName;
       if (!obj.email     && obj.contactEmail)      obj.email     = obj.contactEmail;
@@ -62,12 +59,11 @@ exports.getAllAirlinesSubscriptions = async (req, res) => {
   }
 };
 
-// ── Read One by Email (fallback when registrationId not linked) ─────────────
+// ── Read One by Email ─────────────────────────────────────────────────────────
 exports.getAirlinesSubscriptionByEmail = async (req, res) => {
   try {
     const email = req.query.email || req.params.email;
     if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-    // Search both collections, return most recent match
     const [newDoc, legacyDoc] = await Promise.all([
       Airlines.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 }),
       AirlinesSubscription.findOne({ contactEmail: email.toLowerCase() }).sort({ createdAt: -1 }),
@@ -80,10 +76,9 @@ exports.getAirlinesSubscriptionByEmail = async (req, res) => {
   }
 };
 
-// ── Read One ─────────────────────────────────────────────────────────────────
+// ── Read One ──────────────────────────────────────────────────────────────────
 exports.getAirlinesSubscriptionById = async (req, res) => {
   try {
-    // Search both Airlines (new) and AirlinesSubscription (legacy) by ID
     let doc = await Airlines.findById(req.params.id);
     if (!doc) doc = await AirlinesSubscription.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
@@ -93,12 +88,11 @@ exports.getAirlinesSubscriptionById = async (req, res) => {
   }
 };
 
-// ── Update ───────────────────────────────────────────────────────────────────
+// ── Update ────────────────────────────────────────────────────────────────────
 exports.updateAirlinesSubscription = async (req, res) => {
   try {
     let doc = await Airlines.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: false });
     if (!doc) {
-      // Try legacy collection
       doc = await AirlinesSubscription.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: false });
     }
     if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
@@ -108,7 +102,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
   }
 };
 
-// ── Delete ───────────────────────────────────────────────────────────────────
+// ── Delete ────────────────────────────────────────────────────────────────────
 exports.deleteAirlinesSubscription = async (req, res) => {
   try {
     let doc = await Airlines.findByIdAndDelete(req.params.id);
@@ -122,13 +116,14 @@ exports.deleteAirlinesSubscription = async (req, res) => {
   }
 };
 
-// ── Export Excel — matches reference: Agent_for_Serv_ Airlines ───────────────
+// ── Export Excel ──────────────────────────────────────────────────────────────
 exports.exportAirlinesExcel = async (req, res) => {
   try {
     const [newDocs, legacyDocs] = await Promise.all([
       Airlines.find().sort({ createdAt: -1 }),
       AirlinesSubscription.find().sort({ createdAt: -1 }),
     ]);
+
     const normalise = (arr, isLegacy) => arr.map((d) => {
       const o = d.toObject();
       if (isLegacy) {
@@ -139,6 +134,7 @@ exports.exportAirlinesExcel = async (req, res) => {
       }
       return o;
     });
+
     const docs = [
       ...normalise(newDocs, false),
       ...normalise(legacyDocs, true),
@@ -147,173 +143,253 @@ exports.exportAirlinesExcel = async (req, res) => {
     const fmt = (date) => date ? new Date(date).toLocaleDateString('en-US') : '';
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Agent_for_Serv_ Airlines');
+    const sheet    = workbook.addWorksheet('Agent_for_Serv_ Airlines');
 
-    // ── Column widths (no .columns assignment with headers — we build rows manually) ──
-    const COL_WIDTHS = [12, 26, 20, 20, 26, 14, 14, 14, 30, 20, 16, 14, 12, 24, 18, 28, 34, 26, 22, 22, 24, 28, 18, 12, 12];
-    COL_WIDTHS.forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
-
-    // ── Shared styles ──
-    const headerFont  = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 };
-    const headerFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
-    const centerAlign = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    const subFill     = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6E4F7' } };
-    const subFont     = { bold: true, name: 'Arial', size: 10, color: { argb: 'FF1F3864' } };
-
-    // ── ROW 1: Main header — columns A–Y ──
-    // Matches reference exactly: merged groups for "Team Members" section
-    const ROW1_LABELS = [
-      'Status',              // A1
-      'Airlines',            // B1
-      'Subscription Date',   // C1
-      'Expiration Date',     // D1
-      'Subscription Plan',   // E1
-      '1 Year Plan',         // F1
-      'Unlimited Plan',      // G1
-      'Team Members',        // H1
-      'Address Line 1',      // I1
-      'Address Line 2',      // J1
-      'City',                // K1
-      'Zip/Postal Code',     // L1
-      'Country',             // M1
-      'Point of Contact',    // N1
-      'Phone',               // O1
-      'Email',               // P1
-      'Primary Certificate', // Q1
-      // R1–V1: "Team Members" group header spanning 5 cols
-      'Team Members',        // R1 (will be merged R1:V1)
-      '', '', '', '',        // S1, T1, U1, V1 — merged into R1
-      'Total Service Fees',  // W1
-      'Invoice ',            // X1
-      'TOTAL',               // Y1
-    ];
-
-    const row1 = sheet.getRow(1);
-    ROW1_LABELS.forEach((label, i) => {
-      const cell = row1.getCell(i + 1);
-      cell.value     = label;
-      cell.font      = headerFont;
-      cell.fill      = headerFill;
-      cell.alignment = centerAlign;
+    // ── Column widths (matched to reference Excel) ────────────────────────────
+    const COL_WIDTHS = {
+      1: 13.9,  // A  Status
+      2: 33.4,  // B  Airlines
+      3: 16.2,  // C  Subscription Date
+      4: 16.2,  // D  Expiration Date
+      5: 29.3,  // E  Subscription Plan
+      6: 17.7,  // F  1 Year Plan
+      7: 14.5,  // G  Unlimited Plan
+      8: 14.5,  // H  Team Members
+      9: 36.0,  // I  Address Line 1
+      10: 21.5, // J  Address Line 2
+      11: 14.9, // K  City
+      12: 23.4, // L  Zip/Postal Code
+      13: 15.5, // M  Country
+      14: 27.3, // N  Point of Contact
+      15: 15.4, // O  Phone
+      16: 28.5, // P  Email
+      17: 28.2, // Q  Primary Certificate
+      18: 20.0, // R  Name
+      19: 19.0, // S  FAA USAS Confirmation
+      20: 18.9, // T  FAA Certificate Number
+      21: 29.7, // U  IACRA Tracking Number (FTN)
+      22: 29.4, // V  Holder Email
+      23: 16.1, // W  Total Service Fees
+      24: 17.5, // X  Invoice
+      25: 16.0, // Y  TOTAL
+    };
+    Object.entries(COL_WIDTHS).forEach(([col, w]) => {
+      sheet.getColumn(Number(col)).width = w;
     });
-    row1.height = 30;
 
-    // Merge R1:V1 for "Team Members" group header
+    // ── Shared styles ─────────────────────────────────────────────────────────
+    const CENTER    = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    const hdrFont   = { bold: true,  name: 'Arial', size: 10 };
+    const dataFont  = { bold: false, name: 'Arial', size: 10 };
+    const boldFont  = { bold: true,  name: 'Arial', size: 10 };
+    const greenBold = { bold: true,  name: 'Arial', size: 10, color: { argb: 'FF00B050' } };
+
+    const thin = () => ({
+      top:    { style: 'thin' },
+      bottom: { style: 'thin' },
+      left:   { style: 'thin' },
+      right:  { style: 'thin' },
+    });
+
+    const thickBottom = () => ({
+      top:    { style: 'thin' },
+      bottom: { style: 'medium' },
+      left:   { style: 'thin' },
+      right:  { style: 'thin' },
+    });
+
+    // ── ROW 1: Main headers ───────────────────────────────────────────────────
+    // A-Q get individual labels; R-V merged as "Team Members"; W-Y get labels
+    // Merge R1:V1 BEFORE writing values
     sheet.mergeCells('R1:V1');
 
-    // ── ROW 2: Sub-header — only columns Q–V get labels (rest blank) ──
-    // Matches reference: Q2=Primary Certificate (blank continuation), R2=Name, S2=FAA USAS Confirmation,
-    // T2=FAA Certificate Number, U2=IACRA Tracking Number (FTN), V2=Email
-    const row2 = sheet.getRow(2);
+    const r1 = sheet.getRow(1);
+    r1.height = 22.8;
 
-    // Style all cells A2–Y2 with sub-header fill
+    const ROW1_LABELS = [
+      'Status', 'Airlines', 'Subscription Date', 'Expiration Date',
+      'Subscription Plan', '1 Year Plan', 'Unlimited Plan', 'Team Members',
+      'Address Line 1', 'Address Line 2', 'City', 'Zip/Postal Code',
+      'Country', 'Point of Contact', 'Phone', 'Email', 'Primary Certificate',
+    ];
+
+    // Cols A-Q (1-17)
+    ROW1_LABELS.forEach((label, i) => {
+      const cell     = r1.getCell(i + 1);
+      cell.value     = label;
+      cell.font      = hdrFont;
+      cell.alignment = CENTER;
+      cell.border    = thin();
+    });
+
+    // R1 (col 18) = merged "Team Members" label
+    const tmCell     = r1.getCell(18);
+    tmCell.value     = 'Team Members';
+    tmCell.font      = hdrFont;
+    tmCell.alignment = CENTER;
+    tmCell.border    = thin();
+
+    // Cols W-Y (23-25)
+    [['Total Service Fees', 23], ['Invoice', 24], ['TOTAL', 25]].forEach(([label, col]) => {
+      const cell     = r1.getCell(col);
+      cell.value     = label;
+      cell.font      = hdrFont;
+      cell.alignment = CENTER;
+      cell.border    = thin();
+    });
+
+    // ── ROW 2: Sub-headers (cert holder breakdown) ────────────────────────────
+    const r2 = sheet.getRow(2);
+    r2.height = 23.4;
+
+    const ROW2_MAP = {
+      18: 'Name',
+      19: 'FAA USAS Confirmation',
+      20: 'FAA Certificate Number',
+      21: 'IACRA Tracking Number (FTN)',
+      22: 'Email',
+    };
+
     for (let c = 1; c <= 25; c++) {
-      const cell = row2.getCell(c);
-      cell.fill      = subFill;
-      cell.font      = subFont;
-      cell.alignment = centerAlign;
+      const cell     = r2.getCell(c);
+      cell.value     = ROW2_MAP[c] || '';
+      cell.font      = hdrFont;
+      cell.alignment = CENTER;
+      cell.border    = thin();
     }
 
-    // Only these columns get text in row 2 (others stay blank with fill)
-    const row2Labels = {
-      18: 'Name',                         // R2
-      19: 'FAA USAS Confirmation',        // S2
-      20: 'FAA Certificate Number',       // T2
-      21: 'IACRA Tracking Number (FTN)', // U2
-      22: 'Email',                        // V2
-    };
-    Object.entries(row2Labels).forEach(([col, label]) => {
-      const cell = row2.getCell(Number(col));
-      cell.value = label;
-    });
-    row2.height = 22;
-
-    // ── Data rows ──
-    const dataFont      = { name: 'Arial', size: 10 };
-    const dataCenterAlign = { vertical: 'middle', horizontal: 'center', wrapText: false };
+    // ── Data rows ─────────────────────────────────────────────────────────────
+    let currentRow = 3;
 
     docs.forEach((d) => {
       const isUnlimited = d.subscriptionPlan === 'Unlimited Plan';
       const isOneYear   = d.subscriptionPlan === '1 Year Subscription Plan';
       const holders     = d.certificateHolders || [];
       const ppc         = d.pricePerCertificate || d.pricePerCert || 0;
-      const total       = isUnlimited ? ppc : ppc * (parseInt(d.holderCountValue) || holders.length || 1);
+      const total       = isUnlimited ? ppc : ppc * (holders.length || 1);
       const contactName = [d.firstName, d.lastName].filter(Boolean).join(' ');
+      const rowCount    = Math.max(holders.length, 1);
+      const startRow    = currentRow;
+      const endRow      = currentRow + rowCount - 1;
 
-      // Build base values for first-row-of-airline columns (A–Q, W–Y)
-      const base = (idx) => [
-        idx === 0 ? (d.status || '')                                                          : '', // A
-        idx === 0 ? (d.airlineName || '')                                                     : '', // B
-        idx === 0 ? fmt(d.subscriptionDate || d.createdAt)                                   : '', // C
-        idx === 0 ? (d.expirationDate ? fmt(d.expirationDate) : (isUnlimited ? 'Never' : '')): '', // D
-        idx === 0 ? (d.subscriptionPlan || '')                                                : '', // E
-        idx === 0 && isOneYear   ? `$${ppc}.00`                                              : '', // F
-        idx === 0 && isUnlimited ? `$${ppc}.00`                                              : '', // G
-        idx === 0 ? (d.holderCountValue || String(holders.length))                           : '', // H
-        idx === 0 ? (d.addressLine1 || '')                                                   : '', // I
-        idx === 0 ? (d.addressLine2 || '')                                                   : '', // J
-        idx === 0 ? (d.city || '')                                                           : '', // K
-        idx === 0 ? (d.postalCode || '')                                                     : '', // L
-        idx === 0 ? (d.country || '')                                                        : '', // M
-        idx === 0 ? contactName                                                              : '', // N
-        idx === 0 ? (d.phone ? `+${d.phone}` : '')                                          : '', // O
-        idx === 0 ? (d.email || '')                                                          : '', // P
-      ];
+      const holderList = holders.length > 0 ? holders : [null];
 
-      // Tail columns W–Y (indices 22–24)
-      const tail = (idx) => [
-        idx === 0 ? (d.totalServiceFees || total || '') : '', // W
-        idx === 0 ? (d.invoiceStatus || d.paymentStatus || '') : '', // X
-        idx === 0 ? (total || '') : '', // Y
-      ];
+      holderList.forEach((h, idx) => {
+        const r  = sheet.getRow(currentRow);
+        r.height = idx === 0 ? 14.4 : 12.9;
 
-      if (holders.length === 0) {
-        const rowData = [
-          ...base(0),
-          '',  // Q — Primary Certificate (no holder)
-          '',  // R — Name
-          '',  // S — FAA USAS Confirmation
-          '',  // T — FAA Certificate Number
-          '',  // U — IACRA FTN
-          '',  // V — Email
-          ...tail(0),
-        ];
-        const r = sheet.addRow(rowData);
-        r.font = dataFont;
-        r.eachCell(cell => { cell.alignment = dataCenterAlign; });
-      } else {
-        holders.forEach((h, idx) => {
-          const rowData = [
-            ...base(idx),
-            h.certificateType || '',                                    // Q
-            h.fullName || '',                                           // R
-            h.certificateStatus === 'EXISTING' ? 'Y' : 'N',           // S
-            h.faaCertificateNumber || '',                               // T
-            h.iacraFtnNumber || '',                                     // U
-            h.email || '',                                              // V
-            ...tail(idx),
+        // ── Company cols A-P (1-16): write on first row, blank on subsequent ──
+        if (idx === 0) {
+          const compData = [
+            d.status       || '',
+            d.airlineName  || '',
+            d.subscriptionDate ? fmt(d.subscriptionDate) : fmt(d.createdAt),
+            d.expirationDate   ? fmt(d.expirationDate)   : (isUnlimited ? 'Never' : ''),
+            d.subscriptionPlan || '',
+            isOneYear   ? `$${ppc}` : '',
+            isUnlimited ? `$${ppc}` : '',
+            d.holderCountValue || String(holders.length) || '',
+            d.addressLine1 || '',
+            d.addressLine2 || '',
+            d.city         || '',
+            d.postalCode   || '',
+            d.country      || '',
+            contactName,
+            d.phone ? `+${d.phone}` : '',
+            d.email || '',
           ];
-          const r = sheet.addRow(rowData);
-          r.font = dataFont;
-          r.eachCell(cell => { cell.alignment = dataCenterAlign; });
+          compData.forEach((val, i) => {
+            const cell     = r.getCell(i + 1);
+            cell.value     = val;
+            cell.font      = i === 1 ? boldFont : dataFont; // airline name bold
+            cell.alignment = CENTER;
+            cell.border    = thin();
+          });
+
+          // Totals W, X, Y
+          const wCell     = r.getCell(23);
+          wCell.value     = total || '';
+          wCell.font      = dataFont;
+          wCell.alignment = CENTER;
+          wCell.border    = thin();
+
+          const xCell     = r.getCell(24);
+          xCell.value     = d.invoiceStatus || d.paymentStatus || '';
+          xCell.font      = dataFont;
+          xCell.alignment = CENTER;
+          xCell.border    = thin();
+
+          const yCell     = r.getCell(25);
+          yCell.value     = total || '';
+          yCell.font      = greenBold;
+          yCell.alignment = CENTER;
+          yCell.border    = thin();
+
+        } else {
+          // Non-first holder rows: empty company cols with borders
+          for (let c = 1; c <= 16; c++) {
+            const cell     = r.getCell(c);
+            cell.value     = '';
+            cell.font      = dataFont;
+            cell.alignment = CENTER;
+            cell.border    = thin();
+          }
+          [23, 24, 25].forEach(c => {
+            const cell     = r.getCell(c);
+            cell.value     = '';
+            cell.font      = dataFont;
+            cell.alignment = CENTER;
+            cell.border    = thin();
+          });
+        }
+
+        // ── Cert holder cols Q-V (17-22) ──────────────────────────────────────
+        if (h) {
+          const hData = [
+            h.certificateType                          || '', // Q=17
+            h.fullName                                 || '', // R=18
+            h.certificateStatus === 'EXISTING' ? 'Y' : 'N', // S=19
+            h.faaCertificateNumber                     || '', // T=20
+            h.iacraFtnNumber                           || '', // U=21
+            h.email                                    || '', // V=22
+          ];
+          hData.forEach((val, i) => {
+            const cell     = r.getCell(17 + i);
+            cell.value     = val;
+            cell.font      = dataFont;
+            cell.alignment = CENTER;
+            cell.border    = thin();
+          });
+        } else {
+          for (let c = 17; c <= 22; c++) {
+            const cell     = r.getCell(c);
+            cell.value     = '';
+            cell.font      = dataFont;
+            cell.alignment = CENTER;
+            cell.border    = thin();
+          }
+        }
+
+        currentRow++;
+      });
+
+      // ── Merge company cols vertically across all holder rows ─────────────────
+      if (rowCount > 1) {
+        // Cols to merge: A-Q (1-17) and W-Y (23-25)
+        [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,23,24,25].forEach(c => {
+          try { sheet.mergeCells(startRow, c, endRow, c); } catch (_) {}
         });
       }
-    });
 
-    // ── Thin borders on header rows ──
-    [1, 2].forEach(rowNum => {
-      const row = sheet.getRow(rowNum);
+      // ── Thick bottom border after last holder row (airline separator) ─────────
+      const lastRow = sheet.getRow(endRow);
       for (let c = 1; c <= 25; c++) {
-        row.getCell(c).border = {
-          top:    { style: 'thin', color: { argb: 'FF1F3864' } },
-          bottom: { style: 'thin', color: { argb: 'FF1F3864' } },
-          left:   { style: 'thin', color: { argb: 'FF1F3864' } },
-          right:  { style: 'thin', color: { argb: 'FF1F3864' } },
-        };
+        const cell  = lastRow.getCell(c);
+        cell.border = thickBottom();
       }
     });
 
-    // ── Freeze top 2 rows ──
+    // ── Freeze rows 1+2 so both header rows stay visible while scrolling ───────
     sheet.views = [{ state: 'frozen', ySplit: 2 }];
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

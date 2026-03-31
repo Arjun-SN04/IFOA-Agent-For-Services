@@ -130,6 +130,18 @@ function IndividualViewModal({ record, onClose, onEdit }) {
                 <ViewField label="Cert Type" value={record.primaryCertificate} />
                 <ViewField label="FAA Cert #" value={record.faaCertificateNumber} />
                 <ViewField label="IACRA / FTN" value={record.iacraTrackingNumber} />
+                {record.hasSecondaryCertificate && <>
+                  <ViewField label="Secondary Cert Type" value={record.secondaryCertificate} />
+                  <ViewField label="Secondary FAA #" value={record.secondaryFaaCertificateNumber} />
+                  <ViewField label="Secondary IACRA FTN" value={record.secondaryIacraTrackingNumber} />
+                </>}
+              </div>
+            </div>
+            <div className="border-t border-slate-100 pt-5"><SectionHead label="Payment & Invoice" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <ViewField label="Payment Email" value={record.paymentEmail} />
+                <ViewField label="Invoice Number" value={record.invoiceNumber} />
+                <ViewField label="Address Line 2" value={record.addressLine2} />
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Record Info" />
@@ -217,6 +229,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
                         <ViewField label="Status" value={h.certificateStatus} />
                         <ViewField label="FAA Cert #" value={h.faaCertificateNumber} />
                         <ViewField label="IACRA FTN #" value={h.iacraFtnNumber} />
+                        <ViewField label="Email" value={h.email} />
                         {h.hasSecondaryCertificate && <>
                           <ViewField label="Secondary Cert Type" value={h.secondaryCertificateType} />
                           <ViewField label="Secondary FAA #" value={h.secondaryFaaCertificateNumber} />
@@ -289,10 +302,12 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Email"><input className={inputCls} type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} /></Field>
                 <Field label="Phone"><input className={inputCls} value={form.phone || ''} onChange={e => set('phone', e.target.value)} /></Field>
                 <div className="sm:col-span-2"><Field label="Address Line 1"><input className={inputCls} value={form.addressLine1 || ''} onChange={e => set('addressLine1', e.target.value)} /></Field></div>
+                <div className="sm:col-span-2"><Field label="Address Line 2"><input className={inputCls} placeholder="Apt, suite, unit, etc." value={form.addressLine2 || ''} onChange={e => set('addressLine2', e.target.value)} /></Field></div>
                 <Field label="City"><input className={inputCls} value={form.city || ''} onChange={e => set('city', e.target.value)} /></Field>
                 <Field label="State / Province"><input className={inputCls} value={form.state || ''} onChange={e => set('state', e.target.value)} /></Field>
                 <Field label="Postal Code"><input className={inputCls} value={form.postalCode || ''} onChange={e => set('postalCode', e.target.value)} /></Field>
                 <Field label="Country"><input className={inputCls} value={form.country || ''} onChange={e => set('country', e.target.value)} /></Field>
+                <div className="sm:col-span-2"><Field label="Payment Email (PayPal)"><input className={inputCls} type="email" placeholder="paypal@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
             <div><SectionHead label="FAA Certificate" />
@@ -301,6 +316,29 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Certificate Type"><select className={selectCls} value={form.primaryCertificate || ''} onChange={e => set('primaryCertificate', e.target.value)}><option value="">— Select —</option><option value="Part 61 - Pilot">Part 61 - Pilot</option><option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option><option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option></select></Field>
                 <Field label="FAA Certificate #"><input className={inputCls} value={form.faaCertificateNumber || ''} onChange={e => set('faaCertificateNumber', e.target.value)} /></Field>
                 <Field label="IACRA / FTN"><input className={inputCls} value={form.iacraTrackingNumber || ''} onChange={e => set('iacraTrackingNumber', e.target.value)} /></Field>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2 cursor-pointer mb-3">
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${form.hasSecondaryCertificate ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}
+                      onClick={() => set('hasSecondaryCertificate', !form.hasSecondaryCertificate)}>
+                      {form.hasSecondaryCertificate && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <span className="text-xs font-semibold text-slate-700">Has secondary certificate</span>
+                  </label>
+                  {form.hasSecondaryCertificate && (
+                    <div className="grid sm:grid-cols-2 gap-3 ml-2 pl-4 border-l-2 border-red-200">
+                      <Field label="Secondary Cert Type">
+                        <select className={selectCls} value={form.secondaryCertificate || ''} onChange={e => set('secondaryCertificate', e.target.value)}>
+                          <option value="">— Select —</option>
+                          <option value="Part 61 - Pilot">Part 61 - Pilot</option>
+                          <option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option>
+                          <option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option>
+                        </select>
+                      </Field>
+                      <Field label="Secondary FAA Cert #"><input className={inputCls} value={form.secondaryFaaCertificateNumber || ''} onChange={e => set('secondaryFaaCertificateNumber', e.target.value)} /></Field>
+                      <Field label="Secondary IACRA FTN #"><input className={inputCls} value={form.secondaryIacraTrackingNumber || ''} onChange={e => set('secondaryIacraTrackingNumber', e.target.value)} /></Field>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div><SectionHead label="Payment & Invoice" />
@@ -362,6 +400,8 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
                 <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0,10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
                 <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0,10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
+                <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
+                <Field label="Exact Holder Count"><input className={inputCls} type="number" min="1" value={form.holderCountValue || ''} onChange={e => set('holderCountValue', e.target.value)} /></Field>
                 <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.pricePerCertificate ?? form.pricePerCert ?? ''} onChange={e => set('pricePerCertificate', parseFloat(e.target.value))} /></Field>
                 <Field label="Total Fees (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.totalServiceFees ?? form.totalAmount ?? ''} onChange={e => set('totalServiceFees', parseFloat(e.target.value))} /></Field>
               </div>
@@ -417,6 +457,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                         </Field>
                         <Field label="FAA Certificate #"><input className={inputCls} value={h.faaCertificateNumber || ''} onChange={e => setHolder(idx, 'faaCertificateNumber', e.target.value)} /></Field>
                         <Field label="IACRA FTN #"><input className={inputCls} value={h.iacraFtnNumber || ''} onChange={e => setHolder(idx, 'iacraFtnNumber', e.target.value)} /></Field>
+                        <div className="sm:col-span-2"><Field label="Email"><input className={inputCls} type="email" placeholder="holder@example.com" value={h.email || ''} onChange={e => setHolder(idx, 'email', e.target.value)} /></Field></div>
                         <div className="sm:col-span-2">
                           <label className="flex items-center gap-2 cursor-pointer mb-3">
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${h.hasSecondaryCertificate ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}
@@ -615,7 +656,14 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                 <td className="px-4 py-4">
                   <p className="text-slate-600 text-xs truncate w-20">{r.country || '—'}</p>
                 </td>
-                <td className="px-4 py-4"><Badge value={r.subscriptionPlan} type="plan" /></td>
+                <td className="px-4 py-4">
+                  <span className="text-xs font-medium text-slate-700 leading-snug">
+                    {r.subscriptionPlan?.includes('Unlimited') ? 'Unlimited'
+                      : r.subscriptionPlan?.includes('Multiple') ? 'Multiple Yrs'
+                      : r.subscriptionPlan?.includes('1 Year') ? '1 Year'
+                      : r.subscriptionPlan || '—'}
+                  </span>
+                </td>
                 <td className="px-4 py-4">
                   <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">{r.certificateHolders?.length || 0}</span>
                 </td>

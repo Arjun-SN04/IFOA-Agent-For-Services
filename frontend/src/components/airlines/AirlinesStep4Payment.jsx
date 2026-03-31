@@ -59,19 +59,6 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, s
         </div>
       )}
 
-      {/* Saved notification */}
-      <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <div>
-          <p className="font-semibold">Your registration has been saved</p>
-          <p className="text-green-600 mt-0.5">
-            Your airline data was securely saved when you agreed to the terms in the previous step.
-          </p>
-        </div>
-      </div>
-
       {/* Order Summary */}
       <div>
         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Order Summary</h3>

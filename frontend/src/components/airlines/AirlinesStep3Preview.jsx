@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { createAirlinesSubscription } from '../../services/api'
 
 function SectionHeader({ title }) {
   return (
@@ -37,78 +36,11 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
     : (data.pricePerCertificate || 0) * actualCount
 
   const [termsError, setTermsError] = useState(false)
-  const [savingData, setSavingData] = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const [dataSaved, setDataSaved] = useState(false)
 
-  const handleAgreementChange = async () => {
-    if (data.agreedToTerms) return // already saved
-
-    setSavingData(true)
-    setSaveError('')
-    try {
-      const payload = {
-        // Plan
-        subscriptionPlan: data.subscriptionPlan,
-        pricePerCertificate: data.pricePerCertificate,
-        holderCount: data.holderCount,
-        holderCountValue: data.holderCountValue,
-
-        // Company / airline
-        airlineName: data.airlineName,
-
-        // Contact — use exact model field names
-        firstName: data.firstName,
-        lastName: data.lastName,
-        middleName: data.middleName || '',
-        dateOfBirth: data.dateOfBirth || null,
-        email: data.email,
-        phone: data.phone,
-
-        // Address
-        addressLine1: data.addressLine1,
-        addressLine2: data.addressLine2 || '',
-        city: data.city,
-        state: data.state,
-        postalCode: data.postalCode,
-        country: data.country,
-
-        // Certificate holders — map frontend field names to model field names
-        certificateHolders: holders.map((h) => ({
-          fullName: h.fullName,
-          dateOfBirth: h.dateOfBirth,
-          certificateType: h.certificateType,
-          certificateStatus: h.certificateStatus || 'NEW',
-          faaCertificateNumber: h.faaCertificateNumber || '',
-          iacraFtnNumber: h.iacraFtnNumber || '',
-          hasSecondaryCertificate: h.hasSecondaryCertificate || false,
-          secondaryCertificateType: h.secondaryCertificateType || '',
-          secondaryFaaCertificateNumber: h.secondaryFaaCertificateNumber || '',
-          secondaryIacraFtnNumber: h.secondaryIacraFtnNumber || '',
-        })),
-
-        // Payment
-        paymentEmail: data.paymentEmail || '',
-        paymentStatus: 'pending',
-        agreedToTerms: true,
-      }
-
-      const response = await createAirlinesSubscription(payload)
-      const savedRecordId = response?.data?.data?._id
-      if (savedRecordId && onSaved) {
-        onSaved(savedRecordId)
-      }
-      setDataSaved(true)
-      update({ agreedToTerms: true })
-      setTermsError(false)
-    } catch (err) {
-      const errorMsg =
-        err?.response?.data?.message || 'Failed to save data. Please try again.'
-      setSaveError(errorMsg)
-      update({ agreedToTerms: false })
-    } finally {
-      setSavingData(false)
-    }
+  const handleAgreementChange = () => {
+    if (data.agreedToTerms) return
+    update({ agreedToTerms: true })
+    setTermsError(false)
   }
 
   const handleNext = () => {
@@ -221,26 +153,6 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
           Terms and Conditions <span className="text-red-400">*</span>
         </p>
 
-        {saveError && (
-          <div className="mb-3 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
-            <span className="text-lg flex-shrink-0">&#9888;&#65039;</span>
-            <div>
-              <p className="font-semibold">Failed to save your data</p>
-              <p>{saveError}</p>
-            </div>
-          </div>
-        )}
-
-        {dataSaved && (
-          <div className="mb-3 flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-            <span className="text-lg flex-shrink-0">&#10003;</span>
-            <div>
-              <p className="font-semibold">Data saved successfully</p>
-              <p>Your registration has been saved. Proceed to enter your payment email.</p>
-            </div>
-          </div>
-        )}
-
         <label
           className={
             'flex items-start gap-3 cursor-pointer p-4 rounded-xl border transition-all duration-150 ' +
@@ -253,22 +165,16 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
               type="checkbox"
               checked={data.agreedToTerms || false}
               onChange={handleAgreementChange}
-              disabled={savingData || data.agreedToTerms}
+              disabled={data.agreedToTerms}
               className="sr-only"
             />
             <div
               className={
                 'w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ' +
-                (data.agreedToTerms ? 'bg-blue-600 border-blue-600 ' : 'bg-white border-gray-300 ') +
-                (savingData ? 'opacity-60' : '')
+                (data.agreedToTerms ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300')
               }
             >
-              {savingData ? (
-                <svg className="w-3 h-3 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                  <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-              ) : data.agreedToTerms ? (
+              {data.agreedToTerms ? (
                 <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
@@ -293,8 +199,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
       <div className="flex justify-between pt-6 border-t border-gray-100">
         <button
           onClick={onBack}
-          disabled={savingData}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl transition-all"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0 5-5m-5 5h12" />
@@ -303,8 +208,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
         </button>
         <button
           onClick={handleNext}
-          disabled={savingData}
-          className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm"
         >
           Next
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

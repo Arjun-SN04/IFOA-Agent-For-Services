@@ -7,6 +7,7 @@ const EMPTY_HOLDER = {
   certificateStatus: 'EXISTING',
   faaCertificateNumber: '',
   iacraFtnNumber: '',
+  email: '',
   hasSecondaryCertificate: false,
   secondaryCertificateType: '',
   secondaryFaaCertificateNumber: '',
@@ -239,6 +240,21 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                     className={inputCls(i, 'iacraFtnNumber')} />
                   {errors[i]?.iacraFtnNumber && <p className="text-red-500 text-xs">{errors[i].iacraFtnNumber}</p>}
                 </div>
+              </div>
+
+              {/* Row 4: Email */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  placeholder="team.member@example.com"
+                  value={h.email || ''}
+                  onChange={e => onChange(i, 'email', e.target.value)}
+                  className={inputCls(i, 'email')}
+                />
+                {errors[i]?.email && <p className="text-red-500 text-xs">{errors[i].email}</p>}
               </div>
 
               {/* Secondary Certificate toggle */}

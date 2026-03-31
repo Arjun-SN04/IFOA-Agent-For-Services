@@ -11,6 +11,7 @@ const CertificateHolderSchema = new mongoose.Schema({
   certificateStatus:            { type: String, enum: ['NEW', 'EXISTING'], required: true },
   faaCertificateNumber:         { type: String, default: '' },
   iacraFtnNumber:               { type: String, required: true },
+  email:                        { type: String, default: '' },
   hasSecondaryCertificate:      { type: Boolean, default: false },
   secondaryCertificateType:     { type: String, default: '' },
   secondaryFaaCertificateNumber:{ type: String, default: '' },

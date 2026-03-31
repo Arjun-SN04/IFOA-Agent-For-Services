@@ -348,8 +348,14 @@ export default function ChatBot() {
   const { pathname } = useLocation()
   const [heroVisible, setHeroVisible] = useState(true)
 
-  // Never show chatbot on login / signup pages
-  const isAuthPage = pathname === '/login' || pathname === '/signup'
+  // Never show chatbot on auth pages, admin login, or any dashboard/profile/subscription page
+  const isAuthPage =
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/seed-admin-login' ||
+    pathname === '/seed-admin-signup' ||
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/admin')
 
   useEffect(() => {
     // Reset: assume hero is visible on every navigation (safe default)
