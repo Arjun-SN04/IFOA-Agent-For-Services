@@ -113,20 +113,18 @@ export default function UserDashboard() {
               <h1 className="text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
               <p className="text-slate-500 text-sm mt-1">Here's an overview of your IFOA USA account.</p>
             </div>
-            <Link
-              to={
-                sub
-                  ? '/dashboard/subscription'
-                  : user?.role === 'airline' ? '/airlines/register' : '/individual/register'
-              }
-              className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
-            >
-              {sub ? '📋 View Subscription' : user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </Link>
+            {!subLoading && !sub && (
+              <Link
+                to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
+                className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all shadow-lg"
+                style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
+              >
+                {user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </Link>
+            )}
           </div>
         </motion.div>
 
