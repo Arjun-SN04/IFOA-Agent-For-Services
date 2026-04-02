@@ -6,7 +6,8 @@ import axios from 'axios'
 import InvoiceModal from '../../components/payment/InvoiceModal'
 import { buildInvoice } from '../../components/payment/PaymentModal'
 
-const API = axios.create({ baseURL: 'http://localhost:5000/api' })
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = axios.create({ baseURL: BASE_URL })
 
 function InfoRow({ label, value }) {
   return (
@@ -221,67 +222,65 @@ export default function ProfilePage() {
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
 
+    const mergeAndSort = (...groups) => {
+      const seen = new Set()
+      return groups
+        .flat()
+        .filter(Boolean)
+        .filter((item) => {
+          const key = item?._id?.toString()
+          if (!key || seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    }
+
+    const fetchByIds = async (basePath) => {
+      const ids = [...(user.subscriptionIds || [])]
+      if (user.registrationId) {
+        const regId = user.registrationId?.toString()
+        if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
+      }
+      if (ids.length === 0) return []
+
+      const fetched = await Promise.allSettled(
+        ids.map(id => API.get(`${basePath}/${id}`, { headers }))
+      )
+      return fetched
+        .filter(r => r.status === 'fulfilled' && r.value?.data?.data)
+        .map(r => r.value.data.data)
+    }
+
     const load = async () => {
       try {
         if (isAirline) {
-          // Fetch ALL airline subscriptions for this account
-          if (user.registrationId) {
-            const r = await API.get(`/airlines/${user.registrationId}`, { headers })
-            const linked = r.data.data
-            setSub(linked)
-            if (user.email) {
-              try {
-                const r2 = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-                const all = r2.data.all || (r2.data.data ? [r2.data.data] : [])
-                const ids = new Set(all.map(s => s._id?.toString()))
-                const merged = [...all]
-                if (linked && !ids.has(linked._id?.toString())) merged.unshift(linked)
-                setSubs(merged)
-              } catch {
-                setSubs(linked ? [linked] : [])
-              }
-            } else {
-              setSubs(linked ? [linked] : [])
-            }
-          } else if (user.email) {
-            const r = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-            const all = r.data.all || (r.data.data ? [r.data.data] : [])
-            setSubs(all)
-            setSub(all[0] || null)
+          const idSubs = await fetchByIds('/airlines')
+          let emailSubs = []
+          if (user.email) {
+            try {
+              const r = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+              emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
+            } catch {}
           }
+          const merged = mergeAndSort(idSubs, emailSubs)
+          setSubs(merged)
+          setSub(merged[0] || null)
           return
         }
 
-        // Individual: fetch ALL subscriptions
-        if (user.registrationId) {
-          const r = await API.get(`/individuals/${user.registrationId}`, { headers })
-          const linked = r.data.data
-          setSub(linked)
-          if (user.email) {
-            try {
-              const r2 = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-              const all = r2.data.all || (r2.data.data ? [r2.data.data] : [])
-              const ids = new Set(all.map(s => s._id?.toString()))
-              const merged = [...all]
-              if (linked && !ids.has(linked._id?.toString())) merged.unshift(linked)
-              setSubs(merged)
-            } catch {
-              setSubs(linked ? [linked] : [])
-            }
-          } else {
-            setSubs(linked ? [linked] : [])
-          }
-          return
-        }
+        // Individual: fetch from stored IDs first, then merge email matches.
+        const idSubs = await fetchByIds('/individuals')
+        let emailSubs = []
         if (user.email) {
-          const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-          const all = r.data.all || (r.data.data ? [r.data.data] : [])
-          setSubs(all)
-          setSub(all[0] || null)
-          return
+          try {
+            const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+            emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
+          } catch {}
         }
-        setSubs([])
-        setSub(null)
+        const merged = mergeAndSort(idSubs, emailSubs)
+        setSubs(merged)
+        setSub(merged[0] || null)
       } catch {
         setSubs([])
         setSub(null)
@@ -335,7 +334,7 @@ export default function ProfilePage() {
           <div className="relative z-10 flex-1 min-w-0">
             <h2 className="text-xl font-black text-slate-900">{fullName}</h2>
             <p className="text-slate-500 text-sm">{user?.email}</p>
-            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-700 capitalize">
+            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               {user?.role}
             </span>
@@ -465,7 +464,7 @@ export default function ProfilePage() {
             <div className="px-6 py-4 space-y-6">
               {subs.map((s, idx) => {
                 const isAirline = user?.role === 'airline'
-                const active = s.paymentStatus === 'paid' || s.status === 'Active'
+                const active = s.isPaid === true || s.paymentStatus === 'paid' || s.status === 'Active'
                 return (
                   <div key={s._id || idx}>
                     {subs.length > 1 && (

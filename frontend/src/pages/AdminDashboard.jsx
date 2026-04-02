@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import DashboardLayout from '../components/layout/DashboardLayout'
@@ -27,36 +27,25 @@ const inputCls =
 const selectCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300'
 
-/**
- * Badge — renders a coloured pill.
- * type = 'status'  : Active | Pending | Inactive
- * type = 'payment' : paid | pending | failed  (reads record.isPaid when available)
- * type = 'plan'    : subscription plan label
- * type = 'isPaid'  : explicit boolean true/false badge
- */
 function Badge({ value, type = 'payment', isPaid }) {
   let cls = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
   let dot = 'w-1.5 h-1.5 rounded-full flex-shrink-0 '
   let label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'
 
   if (type === 'status') {
-    // Status is only visually Active when isPaid is confirmed true
     const trulyActive = value === 'Active' && isPaid !== false
     if (trulyActive)              { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
     else if (value === 'Pending') { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400' }
     else                          { cls += 'bg-slate-100 border-slate-200 text-slate-500'; dot += 'bg-slate-400' }
-    // Override label when status says Active but isPaid is false
     if (value === 'Active' && isPaid === false) label = 'Pending'
   } else if (type === 'plan') {
     if (value?.includes('Unlimited'))     { cls += 'bg-red-50 border-red-200 text-red-700'; dot += 'bg-red-500' }
     else if (value?.includes('Multiple')) { cls += 'bg-slate-100 border-slate-200 text-slate-700'; dot += 'bg-slate-500' }
     else                                  { cls += 'bg-slate-50 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
   } else if (type === 'isPaid') {
-    // Explicit isPaid boolean badge
     if (isPaid === true) { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500'; label = 'Paid' }
     else                 { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400'; label = 'Unpaid' }
   } else {
-    // payment type: paid is only valid when isPaid === true in DB
     const confirmedPaid = value === 'paid' && isPaid !== false
     if (confirmedPaid)           { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
     else if (value === 'failed') { cls += 'bg-red-50 border-red-200 text-red-600'; dot += 'bg-red-500' }
@@ -610,7 +599,6 @@ function EmptyState({ message = 'No records found' }) {
   )
 }
 
-// ─── Shared action buttons for a record row ────────────────────────────────────
 function RowActions({ onView, onEdit, onDelete, isDeleting }) {
   return (
     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
@@ -632,6 +620,7 @@ function RowActions({ onView, onEdit, onDelete, isDeleting }) {
 }
 
 // ─── Grouped Individuals Table ─────────────────────────────────────────────────
+// Groups by email — same collapse behaviour as Airlines table
 function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
   const [expanded, setExpanded] = useState({})
 
@@ -678,9 +667,9 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
               const initials = ((primary.firstName?.[0] || '') + (primary.lastName?.[0] || '')).toUpperCase() || 'I'
 
               return (
-                <>
+                <React.Fragment key={key}>
                   {/* ── Primary row ── */}
-                  <tr key={primary._id}
+                  <tr
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
                     <td className="px-4 py-4">
@@ -727,7 +716,7 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                     </td>
                   </tr>
 
-                  {/* ── Collapsed sub-rows ── */}
+                  {/* ── Collapsed sub-rows (each additional subscription) ── */}
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr key={sub._id + '-sub'}
                       className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
@@ -741,12 +730,16 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
                             <p className="text-xs font-semibold text-slate-700 truncate max-w-[110px]">
-                              {[primary.firstName, primary.lastName].filter(Boolean).join(' ') || '—'}
+                              {[sub.firstName, sub.lastName].filter(Boolean).join(' ') || '—'}
                             </p>
+                            <p className="text-[10px] text-slate-400 truncate max-w-[110px]">{sub.primaryCertificate || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p></td>
+                      <td className="px-4 py-3">
+                        <p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p>
+                        <p className="text-slate-400 text-[11px] mt-0.5">{sub.phone || '—'}</p>
+                      </td>
                       <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
@@ -763,7 +756,7 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                       </td>
                     </tr>
                   ))}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>
@@ -773,7 +766,7 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
   )
 }
 
-// ─── Grouped Airlines Table — NO horizontal scroll, same structure as Individuals ──
+// ─── Grouped Airlines Table ────────────────────────────────────────────────────
 function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
   const [expanded, setExpanded] = useState({})
 
@@ -821,9 +814,9 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                 [primary.contactFirstName, primary.contactLastName].filter(Boolean).join(' ') || ''
 
               return (
-                <>
+                <React.Fragment key={key}>
                   {/* ── Primary row ── */}
-                  <tr key={primary._id}
+                  <tr
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
                     <td className="px-4 py-4">
@@ -876,7 +869,7 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                     </td>
                   </tr>
 
-                  {/* ── Sub-rows (collapsed) — same structure, no scroll ── */}
+                  {/* ── Sub-rows (collapsed) ── */}
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr key={sub._id + '-sub'}
                       className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
@@ -919,7 +912,7 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                       </td>
                     </tr>
                   ))}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>
@@ -932,7 +925,6 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
 function OverviewPanel({ individuals, airlines }) {
   const indTotal   = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
   const airTotal   = airlines.reduce((s, r) => s + (Number(r.totalAmount) || Number(r.totalServiceFees) || 0), 0)
-  // Use isPaid as the source of truth; fall back to paymentStatus for legacy records
   const indPaid    = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const airPaid    = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const allHolders = airlines.reduce((s, r) => s + (r.certificateHolders?.length || 0), 0)

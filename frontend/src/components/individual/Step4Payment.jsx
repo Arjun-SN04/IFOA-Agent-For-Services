@@ -4,6 +4,53 @@ import { downloadInvoicePDF } from '../payment/InvoiceModal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
+// ─── Pay Later Success Overlay ─────────────────────────────────────────────────
+// Shows animated green tick, then calls onDone after a short delay
+function PayLaterSuccessOverlay({ name, onDone }) {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const t1 = setTimeout(() => setShow(true), 60)
+    const t2 = setTimeout(() => onDone(), 2800)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [onDone])
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-slate-900/70 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div className={`flex flex-col items-center justify-center text-center transition-all duration-500 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          {/* Animated green circle + tick */}
+          <div className="relative mb-6">
+            <div
+              className="w-28 h-28 rounded-full bg-emerald-500 flex items-center justify-center shadow-2xl shadow-emerald-500/40"
+              style={{ animation: show ? 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)' : 'none' }}
+            >
+              <svg
+                className="w-14 h-14 text-white"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.8}
+                style={{ strokeDasharray: 40, strokeDashoffset: show ? 0 : 40, transition: 'stroke-dashoffset 0.45s ease 0.25s' }}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-400 opacity-0"
+              style={{ animation: show ? 'ripple 1s ease-out 0.3s forwards' : 'none' }} />
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-300 opacity-0"
+              style={{ animation: show ? 'ripple 1s ease-out 0.55s forwards' : 'none' }} />
+          </div>
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-400 mb-2">Registration Submitted</p>
+          <h3 className="text-3xl font-black text-white mb-2">All done{name ? `, ${name}` : ''}!</h3>
+          <p className="text-sm text-white/60 max-w-xs leading-relaxed">Your registration is submitted. Our team will send an invoice to your email shortly.</p>
+          <style>{`
+            @keyframes popIn { 0%{transform:scale(0.4);opacity:0} 100%{transform:scale(1);opacity:1} }
+            @keyframes ripple { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.7);opacity:0} }
+          `}</style>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Invoice Download Popup ────────────────────────────────────────────────────
 function InvoiceDownloadPopup({ invoiceData, onClose }) {
   const [downloading, setDownloading] = useState(false)
@@ -15,9 +62,6 @@ function InvoiceDownloadPopup({ invoiceData, onClose }) {
     try {
       if (invoiceData && typeof downloadInvoicePDF === 'function') {
         await downloadInvoicePDF(invoiceData)
-      } else {
-        // Fallback: alert user invoice will be emailed
-        alert('Your invoice will be sent to your registered email address.')
       }
     } catch (err) {
       console.error('Invoice download failed:', err)
@@ -141,7 +185,7 @@ function PaymentResult({ success, amount, onContinue, onRetry }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
           </svg>
-          Continue
+          Download Invoice
         </button>
 
         <style>{`
@@ -179,16 +223,14 @@ function PaymentResult({ success, amount, onContinue, onRetry }) {
 }
 
 // ─── Stripe Card Modal ─────────────────────────────────────────────────────────
-function StripeCardModal({ total, registrationId, registrationModel, onClose, onPaid }) {
+function StripeCardModal({ total, registrationId, registrationModel, invoiceData, onClose, onPaid }) {
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry]         = useState('')
   const [cvc, setCvc]               = useState('')
   const [name, setName]             = useState('')
   const [paying, setPaying]         = useState(false)
   const [cardErr, setCardErr]       = useState('')
-  // null | 'success' | 'failed'
   const [payResult, setPayResult]   = useState(null)
-  // show invoice popup after success+continue
   const [showInvoicePopup, setShowInvoicePopup] = useState(false)
 
   const formatCard   = (v) => v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim()
@@ -219,12 +261,12 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
     }
   }
 
-  // When user clicks "Continue" on success screen → show invoice popup
+  // "Download Invoice" button on success screen → show invoice popup
   const handleContinue = () => {
     setShowInvoicePopup(true)
   }
 
-  // When invoice popup is closed → trigger actual onPaid to finish
+  // Invoice popup closed → finish and navigate away
   const handleInvoicePopupClose = () => {
     setShowInvoicePopup(false)
     onPaid()
@@ -232,10 +274,10 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
 
   return (
     <>
-      {/* Invoice Download Popup (shown after payment success + Continue) */}
+      {/* Invoice Download Popup (shown after payment success + Download Invoice click) */}
       {showInvoicePopup && (
         <InvoiceDownloadPopup
-          invoiceData={null}
+          invoiceData={invoiceData}
           onClose={handleInvoicePopupClose}
         />
       )}
@@ -262,7 +304,6 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
           {/* ── Normal card form ── */}
           {!payResult && (<>
 
-          {/* ── Clean Header (no Stripe dev panel) ── */}
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -276,17 +317,15 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
                 <p className="text-white font-black text-base leading-tight">{total}</p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition"
-            >
+            <button onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          {/* ── Card preview ── */}
+          {/* Card preview */}
           <div className="mx-5 mt-4 mb-1 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 p-4 shadow-lg">
             <div className="flex justify-between items-start mb-3">
               <div className="w-7 h-5 rounded bg-amber-400/90" />
@@ -304,7 +343,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
             </div>
           </div>
 
-          {/* ── Form fields ── */}
+          {/* Form fields */}
           <div className="px-5 pt-3 pb-3 space-y-3.5">
             {cardErr && (
               <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-semibold text-red-700">
@@ -364,7 +403,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
             </div>
           </div>
 
-          {/* ── Footer actions ── */}
+          {/* Footer actions */}
           <div className="border-t border-slate-100 px-5 py-3.5 bg-slate-50/60 flex gap-2.5">
             <button onClick={onClose} disabled={paying}
               className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
@@ -401,9 +440,31 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
   const [errors, setErrors]               = useState({})
   const [showCardModal, setShowCardModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
+  const [showPayLaterSuccess, setShowPayLaterSuccess] = useState(false)
 
   const paymentMethod = data.paymentMethod || 'stripe'
   const totalLabel    = data.price != null ? `$${Number(data.price).toFixed(2)} USD` : ''
+
+  // Build invoice data from current form data for the PDF
+  const buildInvoiceData = () => ({
+    name:                [data.firstName, data.lastName].filter(Boolean).join(' '),
+    email:               data.paymentEmail || data.email || '',
+    phone:               data.phone || '',
+    address:             [data.addressLine1, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(', '),
+    isAirline:           false,
+    subscriptionPlan:    data.subscriptionPlan || '',
+    paidAt:              new Date(),
+    expirationDate:      null,
+    primaryCertificate:  data.primaryCertificate || '',
+    faaCertificateNumber: data.faaCertificateNumber || '',
+    iacraTrackingNumber: data.iacraTrackingNumber || '',
+    holderCount:         0,
+    pricePerCert:        0,
+    amount:              data.price || 0,
+    currency:            'USD',
+    invoiceNumber:       `INV-${Date.now()}`,
+    paymentId:           registrationId || '',
+  })
 
   const validate = () => {
     const nextErrors = {}
@@ -433,12 +494,27 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
     await onMarkPaidAndFinish(registrationId || data._id)
   }
 
-  const handlePayLater = () => {
-    if (!isBlocked && validate()) onSubmit({ paymentStatus: 'pending' })
+  const handlePayLater = async () => {
+    if (isBlocked || !validate()) return
+    // Show green tick overlay first, then onSubmit will navigate to SuccessPage
+    setShowPayLaterSuccess(true)
+  }
+
+  const handlePayLaterDone = async () => {
+    setShowPayLaterSuccess(false)
+    await onSubmit({ paymentStatus: 'pending' })
   }
 
   return (
     <div className="space-y-6">
+
+      {/* Pay Later success overlay */}
+      {showPayLaterSuccess && (
+        <PayLaterSuccessOverlay
+          name={data.firstName}
+          onDone={handlePayLaterDone}
+        />
+      )}
 
       {/* Stripe card modal */}
       {showCardModal && (
@@ -446,6 +522,7 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
           total={totalLabel}
           registrationId={registrationId || data._id}
           registrationModel="Individual"
+          invoiceData={buildInvoiceData()}
           onClose={() => setShowCardModal(false)}
           onPaid={handleCardPaid}
         />

@@ -4,6 +4,51 @@ import { downloadInvoicePDF } from '../payment/InvoiceModal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
+// ─── Pay Later Success Overlay ─────────────────────────────────────────────────
+function PayLaterSuccessOverlay({ name, onDone }) {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const t1 = setTimeout(() => setShow(true), 60)
+    const t2 = setTimeout(() => onDone(), 2800)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [onDone])
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-slate-900/70 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div className={`flex flex-col items-center justify-center text-center transition-all duration-500 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="relative mb-6">
+            <div
+              className="w-28 h-28 rounded-full bg-emerald-500 flex items-center justify-center shadow-2xl shadow-emerald-500/40"
+              style={{ animation: show ? 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)' : 'none' }}
+            >
+              <svg
+                className="w-14 h-14 text-white"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.8}
+                style={{ strokeDasharray: 40, strokeDashoffset: show ? 0 : 40, transition: 'stroke-dashoffset 0.45s ease 0.25s' }}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-400 opacity-0"
+              style={{ animation: show ? 'ripple 1s ease-out 0.3s forwards' : 'none' }} />
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-300 opacity-0"
+              style={{ animation: show ? 'ripple 1s ease-out 0.55s forwards' : 'none' }} />
+          </div>
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-400 mb-2">Registration Submitted</p>
+          <h3 className="text-3xl font-black text-white mb-2">All done{name ? `, ${name}` : ''}!</h3>
+          <p className="text-sm text-white/60 max-w-xs leading-relaxed">Your registration is submitted. Our team will send an invoice to your email shortly.</p>
+          <style>{`
+            @keyframes popIn { 0%{transform:scale(0.4);opacity:0} 100%{transform:scale(1);opacity:1} }
+            @keyframes ripple { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.7);opacity:0} }
+          `}</style>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Invoice Download Popup ────────────────────────────────────────────────────
 function InvoiceDownloadPopup({ invoiceData, onClose }) {
   const [downloading, setDownloading] = useState(false)
@@ -15,8 +60,6 @@ function InvoiceDownloadPopup({ invoiceData, onClose }) {
     try {
       if (invoiceData && typeof downloadInvoicePDF === 'function') {
         await downloadInvoicePDF(invoiceData)
-      } else {
-        alert('Your invoice will be sent to your registered email address.')
       }
     } catch (err) {
       console.error('Invoice download failed:', err)
@@ -35,7 +78,6 @@ function InvoiceDownloadPopup({ invoiceData, onClose }) {
             show ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'
           }`}
         >
-          {/* Header */}
           <div className="border-b border-slate-100 bg-emerald-50 px-6 py-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
@@ -54,7 +96,6 @@ function InvoiceDownloadPopup({ invoiceData, onClose }) {
             </button>
           </div>
 
-          {/* Body */}
           <div className="px-6 py-6 text-center">
             <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -65,7 +106,6 @@ function InvoiceDownloadPopup({ invoiceData, onClose }) {
             <p className="text-sm text-slate-600 leading-relaxed mb-6">
               Your payment was processed successfully. Download your official PDF invoice for your records.
             </p>
-
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleDownload}
@@ -137,7 +177,7 @@ function PaymentResult({ success, amount, onContinue, onRetry }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
           </svg>
-          Continue
+          Download Invoice
         </button>
 
         <style>{`
@@ -174,7 +214,7 @@ function PaymentResult({ success, amount, onContinue, onRetry }) {
 }
 
 // ─── Stripe Card Modal ─────────────────────────────────────────────────────────
-function StripeCardModal({ total, registrationId, registrationModel, onClose, onPaid }) {
+function StripeCardModal({ total, registrationId, registrationModel, invoiceData, onClose, onPaid }) {
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry]         = useState('')
   const [cvc, setCvc]               = useState('')
@@ -225,7 +265,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
     <>
       {showInvoicePopup && (
         <InvoiceDownloadPopup
-          invoiceData={null}
+          invoiceData={invoiceData}
           onClose={handleInvoicePopupClose}
         />
       )}
@@ -248,7 +288,6 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
 
           {!payResult && (<>
 
-          {/* ── Clean Header (no Stripe dev panel) ── */}
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -270,7 +309,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
             </button>
           </div>
 
-          {/* ── Card preview ── */}
+          {/* Card preview */}
           <div className="mx-5 mt-4 mb-1 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 p-4 shadow-lg">
             <div className="flex justify-between items-start mb-3">
               <div className="w-7 h-5 rounded bg-amber-400/90" />
@@ -288,7 +327,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
             </div>
           </div>
 
-          {/* ── Form fields ── */}
+          {/* Form fields */}
           <div className="px-5 pt-3 pb-3 space-y-3.5">
             {cardErr && (
               <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-semibold text-red-700">
@@ -348,7 +387,7 @@ function StripeCardModal({ total, registrationId, registrationModel, onClose, on
             </div>
           </div>
 
-          {/* ── Footer actions ── */}
+          {/* Footer actions */}
           <div className="border-t border-slate-100 px-5 py-3.5 bg-slate-50/60 flex gap-2.5">
             <button onClick={onClose} disabled={paying}
               className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
@@ -385,6 +424,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const [errors, setErrors]               = useState({})
   const [showCardModal, setShowCardModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
+  const [showPayLaterSuccess, setShowPayLaterSuccess] = useState(false)
 
   const holders = data.certificateHolders || []
   const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
@@ -394,6 +434,25 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const totalLabel = '$' + total + ' USD'
 
   const paymentMethod = data.paymentMethod || 'stripe'
+
+  // Build invoice data from current form data for the PDF
+  const buildInvoiceData = () => ({
+    name:             data.airlineName || [data.firstName, data.lastName].filter(Boolean).join(' '),
+    email:            data.paymentEmail || data.email || '',
+    phone:            data.phone ? ('+' + data.phone) : '',
+    address:          [data.addressLine1, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(', '),
+    isAirline:        true,
+    airlineName:      data.airlineName || '',
+    subscriptionPlan: data.subscriptionPlan || '',
+    paidAt:           new Date(),
+    expirationDate:   null,
+    holderCount:      selectedCount,
+    pricePerCert,
+    amount:           total,
+    currency:         'USD',
+    invoiceNumber:    `INV-${Date.now()}`,
+    paymentId:        registrationId || '',
+  })
 
   const validate = () => {
     const e = {}
@@ -429,6 +488,16 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
     await onMarkPaidAndFinish(registrationId || data._id)
   }
 
+  const handlePayLater = async () => {
+    if (isBlocked || !validate()) return
+    setShowPayLaterSuccess(true)
+  }
+
+  const handlePayLaterDone = async () => {
+    setShowPayLaterSuccess(false)
+    await onSubmit({ paymentStatus: 'pending' })
+  }
+
   const lineItems = [
     { label: 'Company',      value: data.airlineName },
     { label: 'Contact',      value: [data.firstName, data.lastName].filter(Boolean).join(' ') },
@@ -446,11 +515,20 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   return (
     <div className="space-y-7">
 
+      {/* Pay Later success overlay */}
+      {showPayLaterSuccess && (
+        <PayLaterSuccessOverlay
+          name={data.airlineName || data.firstName}
+          onDone={handlePayLaterDone}
+        />
+      )}
+
       {showCardModal && (
         <StripeCardModal
           total={totalLabel}
           registrationId={registrationId || data._id}
           registrationModel="Airlines"
+          invoiceData={buildInvoiceData()}
           onClose={() => setShowCardModal(false)}
           onPaid={handleCardPaid}
         />
@@ -608,7 +686,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
           onClick={() => {
             if (isBlocked) return
             if (paymentMethod === 'stripe') { handleStripeClick() }
-            else { if (validate()) onSubmit({ paymentStatus: 'pending' }) }
+            else { handlePayLater() }
           }}
           disabled={submitting || isBlocked}
           title={isBlocked ? 'You need an Airlines account to submit this form' : undefined}

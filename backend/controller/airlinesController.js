@@ -16,7 +16,10 @@ function resolvePricePerCertificate(body) {
 // ── Create ──────────────────────────────────────────────────────────────────
 exports.createAirlinesSubscription = async (req, res) => {
   try {
-    const body = req.body;
+    const body = { ...req.body };
+    // Normalize email fields to lowercase so lookups always match
+    if (body.email)        body.email        = body.email.toLowerCase().trim();
+    if (body.contactEmail) body.contactEmail = body.contactEmail.toLowerCase().trim();
 
     // Always resolve price server-side to prevent tampering
     body.pricePerCertificate = resolvePricePerCertificate(body);
@@ -30,12 +33,12 @@ exports.createAirlinesSubscription = async (req, res) => {
       ? parseInt(body.holderCountValue)
       : holdersFilled;
 
-    // Compute totalAmount = price × committedCount (what they owe in full)
+    // Compute totalAmount = price x committedCount (what they owe in full)
     body.totalAmount = isUnlimited
       ? body.pricePerCertificate
       : body.pricePerCertificate * body.committedCount;
 
-    // amountPaid = price × holders actually submitted now (partial if fewer)
+    // amountPaid = price x holders actually submitted now (partial if fewer)
     body.amountPaid = isUnlimited
       ? body.pricePerCertificate
       : body.pricePerCertificate * holdersFilled;
@@ -134,9 +137,14 @@ exports.getAirlinesSubscriptionByEmail = async (req, res) => {
   try {
     const email = req.query.email || req.params.email;
     if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+    // Case-insensitive regex match — handles old records stored in mixed case
+    const safeEmail = email.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const emailRegex = new RegExp('^' + safeEmail + '$', 'i');
+
     const [newDocs, legacyDocs] = await Promise.all([
-      Airlines.find({ email: email.toLowerCase() }).sort({ createdAt: -1 }),
-      AirlinesSubscription.find({ contactEmail: email.toLowerCase() }).sort({ createdAt: -1 }),
+      Airlines.find({ email: emailRegex }).sort({ createdAt: -1 }),
+      AirlinesSubscription.find({ contactEmail: emailRegex }).sort({ createdAt: -1 }),
     ]);
     // Merge both collections, newest first
     const all = [
@@ -274,8 +282,6 @@ exports.exportAirlinesExcel = async (req, res) => {
     });
 
     // ── ROW 1: Main headers ───────────────────────────────────────────────────
-    // A-Q get individual labels; R-V merged as "Team Members"; W-Y get labels
-    // Merge R1:V1 BEFORE writing values
     sheet.mergeCells('R1:V1');
 
     const r1 = sheet.getRow(1);
@@ -288,7 +294,6 @@ exports.exportAirlinesExcel = async (req, res) => {
       'Country', 'Point of Contact', 'Phone', 'Email', 'Primary Certificate',
     ];
 
-    // Cols A-Q (1-17)
     ROW1_LABELS.forEach((label, i) => {
       const cell     = r1.getCell(i + 1);
       cell.value     = label;
@@ -297,14 +302,12 @@ exports.exportAirlinesExcel = async (req, res) => {
       cell.border    = thin();
     });
 
-    // R1 (col 18) = merged "Team Members" label
     const tmCell     = r1.getCell(18);
     tmCell.value     = 'Team Members';
     tmCell.font      = hdrFont;
     tmCell.alignment = CENTER;
     tmCell.border    = thin();
 
-    // Cols W-Y (23-25)
     [['Total Service Fees', 23], ['Invoice', 24], ['TOTAL', 25]].forEach(([label, col]) => {
       const cell     = r1.getCell(col);
       cell.value     = label;
@@ -313,7 +316,7 @@ exports.exportAirlinesExcel = async (req, res) => {
       cell.border    = thin();
     });
 
-    // ── ROW 2: Sub-headers (cert holder breakdown) ────────────────────────────
+    // ── ROW 2: Sub-headers ────────────────────────────────────────────────────
     const r2 = sheet.getRow(2);
     r2.height = 23.4;
 
@@ -353,7 +356,6 @@ exports.exportAirlinesExcel = async (req, res) => {
         const r  = sheet.getRow(currentRow);
         r.height = idx === 0 ? 14.4 : 12.9;
 
-        // ── Company cols A-P (1-16): write on first row, blank on subsequent ──
         if (idx === 0) {
           const compData = [
             d.status       || '',
@@ -376,12 +378,11 @@ exports.exportAirlinesExcel = async (req, res) => {
           compData.forEach((val, i) => {
             const cell     = r.getCell(i + 1);
             cell.value     = val;
-            cell.font      = i === 1 ? boldFont : dataFont; // airline name bold
+            cell.font      = i === 1 ? boldFont : dataFont;
             cell.alignment = CENTER;
             cell.border    = thin();
           });
 
-          // Totals W, X, Y
           const wCell     = r.getCell(23);
           wCell.value     = total || '';
           wCell.font      = dataFont;
@@ -401,7 +402,6 @@ exports.exportAirlinesExcel = async (req, res) => {
           yCell.border    = thin();
 
         } else {
-          // Non-first holder rows: empty company cols with borders
           for (let c = 1; c <= 16; c++) {
             const cell     = r.getCell(c);
             cell.value     = '';
@@ -418,15 +418,14 @@ exports.exportAirlinesExcel = async (req, res) => {
           });
         }
 
-        // ── Cert holder cols Q-V (17-22) ──────────────────────────────────────
         if (h) {
           const hData = [
-            h.certificateType                          || '', // Q=17
-            h.fullName                                 || '', // R=18
-            h.certificateStatus === 'EXISTING' ? 'Y' : 'N', // S=19
-            h.faaCertificateNumber                     || '', // T=20
-            h.iacraFtnNumber                           || '', // U=21
-            h.email                                    || '', // V=22
+            h.certificateType                          || '',
+            h.fullName                                 || '',
+            h.certificateStatus === 'EXISTING' ? 'Y' : 'N',
+            h.faaCertificateNumber                     || '',
+            h.iacraFtnNumber                           || '',
+            h.email                                    || '',
           ];
           hData.forEach((val, i) => {
             const cell     = r.getCell(17 + i);
@@ -448,15 +447,12 @@ exports.exportAirlinesExcel = async (req, res) => {
         currentRow++;
       });
 
-      // ── Merge company cols vertically across all holder rows ─────────────────
       if (rowCount > 1) {
-        // Cols to merge: A-Q (1-17) and W-Y (23-25)
         [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,23,24,25].forEach(c => {
           try { sheet.mergeCells(startRow, c, endRow, c); } catch (_) {}
         });
       }
 
-      // ── Thick bottom border after last holder row (airline separator) ─────────
       const lastRow = sheet.getRow(endRow);
       for (let c = 1; c <= 25; c++) {
         const cell  = lastRow.getCell(c);
@@ -464,7 +460,6 @@ exports.exportAirlinesExcel = async (req, res) => {
       }
     });
 
-    // ── Freeze rows 1+2 so both header rows stay visible while scrolling ───────
     sheet.views = [{ state: 'frozen', ySplit: 2 }];
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -491,6 +486,7 @@ function computeAirlinesExpirationDate(subscriptionPlan, fromDate) {
 }
 
 // Mark airlines subscription as paid immediately after frontend Stripe payment
+// Called as a fallback if the main /payments/confirm route fails
 exports.markAirlinesPaid = async (req, res) => {
   try {
     const now = new Date();
@@ -498,14 +494,21 @@ exports.markAirlinesPaid = async (req, res) => {
     if (!doc) doc = await AirlinesSubscription.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
 
+    // Idempotent: skip if already marked paid — avoid overwriting valid invoice numbers
+    if (doc.isPaid || doc.paymentStatus === 'paid') {
+      return res.json({ success: true, data: doc, alreadyPaid: true });
+    }
+
     const expirationDate = computeAirlinesExpirationDate(doc.subscriptionPlan, now);
 
     const update = {
       paymentStatus:    'paid',
+      isPaid:           true,
       status:           'Active',
       subscriptionDate: now,
       invoiceStatus:    'Paid',
-      invoiceNumber:    `INV-${Date.now()}`,
+      // Preserve existing invoiceNumber if already set by /payments/confirm
+      invoiceNumber:    doc.invoiceNumber || `INV-${Date.now()}`,
     };
 
     // Only write expirationDate when the plan has one (null = Unlimited)

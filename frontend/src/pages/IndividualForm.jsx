@@ -238,7 +238,8 @@ function AuthModal({ onClose }) {
 }
 
 export default function IndividualForm() {
-  const { user, linkRegistration } = useAuth()
+  // ── FIX: also pull addSubscription so we can link subsequent registrations ──
+  const { user, linkRegistration, addSubscription } = useAuth()
   const isBlocked = user?.role === 'airline'
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState(INIT)
@@ -275,6 +276,13 @@ export default function IndividualForm() {
    *
    * Mode B — { paymentStatus: 'pending' }  (Pay-later)
    *   Creates the record and navigates to SuccessPage.
+   *
+   * FIX: Always link the new registration to the user account.
+   *   - If the user has no primary registrationId yet → linkRegistration() sets it.
+   *   - If the user already has a primary registrationId → addSubscription() pushes
+   *     the new ID into subscriptionIds so SubscriptionPage can find it.
+   *   Previously this only linked when !user.registrationId, causing any second+
+   *   registration to be invisible in the dashboard.
    */
   const handleSubmit = async (opts = {}) => {
     if (!user) { setShowAuthModal(true); return null }
@@ -284,8 +292,17 @@ export default function IndividualForm() {
       const res = await createIndividual({ ...formData, paymentStatus: opts.paymentStatus || 'pending' })
       const newId = res?.data?.data?._id
 
-      if (user && newId && !user.registrationId) {
-        try { await linkRegistration(newId, 'Individual') } catch (_) {}
+      if (user && newId) {
+        try {
+          if (!user.registrationId) {
+            // First registration — set as the primary linked ID
+            await linkRegistration(newId, 'Individual')
+          } else {
+            // User already has a primary registration — add to subscriptionIds array
+            // so SubscriptionPage can fetch and display this one too
+            await addSubscription(newId)
+          }
+        } catch (_) {}
       }
 
       if (opts.returnId) {

@@ -59,19 +59,22 @@ export default function UserDashboard() {
 
     const load = async () => {
       try {
+        const endpointById = isAirline ? '/airlines' : '/individuals'
+        const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
+
         if (user.registrationId) {
-          const url = isAirline
-            ? `/airlines/${user.registrationId}`
-            : `/individuals/${user.registrationId}`
-          const r = await API.get(url, { headers })
-          setSub(r.data.data)
-          return
+          try {
+            const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
+            if (r.data?.data) {
+              setSub(r.data.data)
+              return
+            }
+          } catch {
+            // Fall through to email lookup for stale/unlinked registration IDs.
+          }
         }
         if (user.email) {
-          const url = isAirline
-            ? `/airlines/by-email?email=${encodeURIComponent(user.email)}`
-            : `/individuals/by-email?email=${encodeURIComponent(user.email)}`
-          const r = await API.get(url, { headers })
+          const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
           setSub(r.data.data)
           return
         }

@@ -125,27 +125,47 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
       if (stripeErr) throw new Error(stripeErr.message)
 
       if (paymentIntent?.status === 'succeeded') {
-        // 3. Call our backend /confirm endpoint
         const token = localStorage.getItem('ifoa_token') || ''
-        const confirmRes = await fetch(`${BASE_URL}/payments/confirm`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            paymentIntentId:   paymentIntent.id,
-            registrationId,
-            registrationModel,
-            userAgent:         navigator.userAgent,
-          }),
-        })
-        const confirmJson = await confirmRes.json()
-        if (!confirmJson.success) {
-          console.warn('[PaymentModal] Backend confirm failed:', confirmJson.message)
+
+        // 3. Call primary /payments/confirm endpoint — creates Payment record & marks subscription Active
+        let confirmJson = { success: false }
+        try {
+          const confirmRes = await fetch(`${BASE_URL}/payments/confirm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              paymentIntentId:   paymentIntent.id,
+              registrationId,
+              registrationModel,
+              userAgent:         navigator.userAgent,
+            }),
+          })
+          confirmJson = await confirmRes.json()
+        } catch (networkErr) {
+          console.warn('[PaymentModal] /payments/confirm network error:', networkErr.message)
         }
 
-        // 4. Build invoice
+        // 4. Fallback: if the primary confirm failed, directly mark the registration paid
+        //    This guarantees the user's profile shows Active even if the Payment record write failed
+        if (!confirmJson.success) {
+          console.warn('[PaymentModal] Primary confirm failed, running fallback mark-paid:', confirmJson.message)
+          try {
+            const markPaidUrl = registrationModel === 'Individual'
+              ? `${BASE_URL}/individuals/${registrationId}/mark-paid`
+              : `${BASE_URL}/airlines/${registrationId}/mark-paid`
+            await fetch(markPaidUrl, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          } catch (fallbackErr) {
+            console.warn('[PaymentModal] Fallback mark-paid also failed:', fallbackErr.message)
+          }
+        }
+
+        // 5. Build invoice from server Payment doc if available, otherwise build locally
         const inv = confirmJson.payment
           ? serverPaymentToInvoice(confirmJson.payment)
           : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date())

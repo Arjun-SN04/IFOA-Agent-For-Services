@@ -320,6 +320,36 @@ export default function SubscriptionPage() {
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
 
+    const mergeAndSort = (...groups) => {
+      const seen = new Set()
+      return groups
+        .flat()
+        .filter(Boolean)
+        .filter((item) => {
+          const key = item?._id?.toString()
+          if (!key || seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    }
+
+    const fetchByIds = async (basePath) => {
+      const ids = [...(user.subscriptionIds || [])]
+      if (user.registrationId) {
+        const regId = user.registrationId?.toString()
+        if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
+      }
+      if (ids.length === 0) return []
+
+      const fetched = await Promise.allSettled(
+        ids.map(id => API.get(`${basePath}/${id}`, { headers }))
+      )
+      return fetched
+        .filter(r => r.status === 'fulfilled' && r.value?.data?.data)
+        .map(r => r.value.data.data)
+    }
+
     const load = async () => {
       try {
         if (isAirline) {
@@ -375,42 +405,23 @@ export default function SubscriptionPage() {
           return
         }
 
-        // Individual: fetch ALL subscriptions for this email
-        if (user.registrationId) {
-          // Fetch the linked one first, then fetch all by email to get extras
-          const r = await API.get(`/individuals/${user.registrationId}`, { headers })
-          const linked = r.data.data
-          setSub(linked)
-          // Also fetch all by email
-          if (user.email) {
-            try {
-              const r2 = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-              const all = r2.data.all || (r2.data.data ? [r2.data.data] : [])
-              // Ensure the linked one is included and deduplicate
-              const ids = new Set(all.map(s => s._id?.toString()))
-              const merged = [...all]
-              if (linked && !ids.has(linked._id?.toString())) merged.unshift(linked)
-              setSubs(merged)
-            } catch {
-              setSubs(linked ? [linked] : [])
-            }
-          } else {
-            setSubs(linked ? [linked] : [])
-          }
-          return
-        }
+        // Individual: fetch all subscriptions via stored IDs + email fallback.
+        const idSubs = await fetchByIds('/individuals')
+        let emailSubs = []
         if (user.email) {
-          const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-          const all = r.data.all || (r.data.data ? [r.data.data] : [])
-          setSubs(all)
-          setSub(all[0] || null)
-          if (!user.registrationId && all[0]?._id) {
-            try { await linkRegistration(all[0]._id, 'Individual') } catch (_) {}
-          }
-          return
+          try {
+            const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+            emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
+          } catch {}
         }
-        setSubs([])
-        setSub(null)
+
+        const merged = mergeAndSort(idSubs, emailSubs)
+        setSubs(merged)
+        setSub(merged[0] || null)
+
+        if (!user.registrationId && merged[0]?._id) {
+          try { await linkRegistration(merged[0]._id, 'Individual') } catch (_) {}
+        }
       } catch {
         setSubs([])
         setSub(null)
@@ -510,13 +521,29 @@ export default function SubscriptionPage() {
             amount={Math.round((sub?.price || sub?.totalAmount || sub?.totalServiceFees || 0) * 100)}
             subscriptionData={sub}
             onClose={() => { setShowPayModal(false); setPayTarget(null) }}
-            onSuccess={(inv) => {
-              const updated = { ...sub, paymentStatus: 'paid', status: 'Active' }
+            onSuccess={async (inv) => {
+              // Optimistic update — show Active immediately
+              const updated = { ...sub, paymentStatus: 'paid', status: 'Active', isPaid: true }
               setSubs(prev => prev.map(s => s._id === updated._id ? updated : s))
               setSub(updated)
               setShowPayModal(false)
               setPayTarget(null)
               if (inv) setViewInvoice(inv)
+              // Re-fetch authoritative data from server so profile & subscription pages
+              // both reflect the real DB state when the user navigates around
+              try {
+                const headers = { Authorization: `Bearer ${token}` }
+                const isAirline = user?.role === 'airline'
+                const endpoint = isAirline
+                  ? `${BASE_URL}/airlines/${updated._id}`
+                  : `${BASE_URL}/individuals/${updated._id}`
+                const r = await API.get(endpoint, { headers })
+                const fresh = r.data.data
+                if (fresh) {
+                  setSubs(prev => prev.map(s => s._id === fresh._id ? fresh : s))
+                  setSub(fresh)
+                }
+              } catch (_) { /* non-critical — optimistic state is already set */ }
             }}
           />
         )}

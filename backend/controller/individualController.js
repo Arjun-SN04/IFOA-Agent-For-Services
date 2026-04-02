@@ -4,7 +4,10 @@ const ExcelJS = require('exceljs');
 // Create new individual submission
 exports.createIndividual = async (req, res) => {
   try {
-    const individual = new Individual(req.body);
+    const body = { ...req.body };
+    // Normalize email to lowercase so lookups always match regardless of case
+    if (body.email) body.email = body.email.toLowerCase().trim();
+    const individual = new Individual(body);
     await individual.save();
     res.status(201).json({ success: true, data: individual });
   } catch (err) {
@@ -28,7 +31,12 @@ exports.getIndividualByEmail = async (req, res) => {
   try {
     const email = req.query.email || req.params.email;
     if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-    const individuals = await Individual.find({ email: email.toLowerCase() }).sort({ createdAt: -1 });
+
+    // Use case-insensitive regex to match emails stored in any case (old records may be mixed-case)
+    const safeEmail = email.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const emailRegex = new RegExp('^' + safeEmail + '$', 'i');
+    const individuals = await Individual.find({ email: emailRegex }).sort({ createdAt: -1 });
+
     if (!individuals || individuals.length === 0)
       return res.status(404).json({ success: false, message: 'Not found' });
     // data = array; data[0] = most recent (kept for backward compat with single-record consumers)
@@ -72,18 +80,26 @@ exports.deleteIndividual = async (req, res) => {
 };
 
 // Mark individual subscription as paid immediately after frontend Stripe payment
+// This is called as a fallback if the main /payments/confirm route fails
 exports.markIndividualPaid = async (req, res) => {
   try {
     const now = new Date();
     const individual = await Individual.findById(req.params.id);
     if (!individual) return res.status(404).json({ success: false, message: 'Not found' });
 
+    // Idempotent: skip if already paid — avoid overwriting valid invoice numbers
+    if (individual.isPaid || individual.paymentStatus === 'paid') {
+      return res.json({ success: true, data: individual, alreadyPaid: true });
+    }
+
     const update = {
       paymentStatus: 'paid',
+      isPaid: true,
       status: 'Active',
       subscriptionDate: now,
       invoiceStatus: 'Paid',
-      invoiceNumber: `INV-${Date.now()}`,
+      // Preserve existing invoiceNumber if already set by /payments/confirm
+      invoiceNumber: individual.invoiceNumber || `INV-${Date.now()}`,
     };
 
     if (individual.subscriptionPlan === '1 Year Subscription Plan') {
