@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import axios from 'axios'
 
-const API = axios.create({ baseURL: 'http://localhost:5000/api' })
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const API = axios.create({ baseURL: BASE_URL })
 
 function StatCard({ label, value, icon, accent = 'red', sub }) {
   const configs = {
@@ -59,38 +60,37 @@ export default function UserDashboard() {
 
     const load = async () => {
       try {
-        const endpointById = isAirline ? '/airlines' : '/individuals'
+        const endpointById    = isAirline ? '/airlines'          : '/individuals'
         const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
 
+        // 1. Try primary registrationId first (fastest path)
         if (user.registrationId) {
           try {
             const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
-            if (r.data?.data) {
-              setSub(r.data.data)
-              return
-            }
+            if (r.data?.data) { setSub(r.data.data); return }
           } catch {
-            // Fall through to email lookup for stale/unlinked registration IDs.
+            // Fall through to email lookup for stale/unlinked registration IDs
           }
         }
+
+        // 2. Email fallback — always retrieves the most-recent subscription
         if (user.email) {
           const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
-          setSub(r.data.data)
-          return
+          if (r.data?.data) { setSub(r.data.data); return }
         }
       } catch { /* no sub yet */ }
       finally { setSubLoading(false) }
     }
     load()
-  }, [user])
+  }, [user, token])
 
   const getSubStatus = () => {
     if (subLoading) return { label: 'Loading…', accent: 'sky', sub: 'Checking subscription' }
     if (!sub) return { label: 'No Plan', accent: 'blue', sub: 'Register to activate' }
-    const paid = sub.paymentStatus === 'paid' || sub.status === 'Active'
+    const paid   = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
     const failed = sub.paymentStatus === 'failed' || sub.status === 'Inactive'
-    if (paid)   return { label: 'Active', accent: 'emerald', sub: sub.subscriptionPlan }
-    if (failed) return { label: 'Inactive', accent: 'red', sub: sub.subscriptionPlan }
+    if (paid)   return { label: 'Active',   accent: 'emerald', sub: sub.subscriptionPlan }
+    if (failed) return { label: 'Inactive', accent: 'red',     sub: sub.subscriptionPlan }
     return { label: 'Pending', accent: 'blue', sub: sub.subscriptionPlan }
   }
   const subStatus = getSubStatus()
@@ -99,7 +99,7 @@ export default function UserDashboard() {
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
 
-        {/* ── Welcome banner — LIGHT THEME ── */}
+        {/* ── Welcome banner ── */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -107,7 +107,6 @@ export default function UserDashboard() {
           className="relative rounded-2xl overflow-hidden border border-blue-100"
           style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 45%, #e0f2fe 100%)' }}
         >
-          {/* Decorative blue glow */}
           <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-30"
             style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
           <div className="relative z-10 px-7 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -156,7 +155,7 @@ export default function UserDashboard() {
             label="Plan"
             value={sub ? sub.subscriptionPlan?.split(' ')[0] + (sub.subscriptionPlan?.includes('Unlimited') ? ' Unlimited' : ' Year') : 'None'}
             accent={sub ? 'sky' : 'blue'}
-            sub={sub ? `${sub.price ?? sub.totalAmount ?? 0}` : 'No plan selected'}
+            sub={sub ? `$${sub.price ?? sub.totalAmount ?? 0}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
         </motion.div>
@@ -226,7 +225,7 @@ export default function UserDashboard() {
           </div>
         </motion.div>
 
-        {/* ── Info notice — only shown if not yet registered ── */}
+        {/* ── No subscription notice ── */}
         {!subLoading && !sub && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -242,56 +241,60 @@ export default function UserDashboard() {
             <div>
               <p className="text-sm font-bold text-blue-900 mb-1">Complete your FAA registration</p>
               <p className="text-xs text-blue-700 leading-relaxed">
-                Submit your FAA certificate details to activate your U.S. Agent for Service. This is required to receive and manage your FAA correspondence.
+                Submit your FAA certificate details to activate your U.S. Agent for Service.
               </p>
             </div>
           </motion.div>
         )}
 
-        {/* ── Subscription summary — shown when registered ── */}
+        {/* ── Subscription summary ── */}
         {!subLoading && sub && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.22 }}
             className={`rounded-2xl border p-5 flex items-start gap-4 ${
-              sub.paymentStatus === 'paid' || sub.status === 'Active'
+              sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                 ? 'border-emerald-100 bg-emerald-50'
                 : 'border-blue-200 bg-blue-50'
             }`}
           >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'bg-emerald-100' : 'bg-blue-100'
+              sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+                ? 'bg-emerald-100' : 'bg-blue-100'
             }`}>
               <svg className={`w-5 h-5 ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-600' : 'text-blue-600'
+                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+                  ? 'text-emerald-600' : 'text-blue-600'
               }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {sub.paymentStatus === 'paid' || sub.status === 'Active'
+                {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   : <><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></>}
               </svg>
             </div>
             <div className="flex-1">
               <p className={`text-sm font-bold mb-1 ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-900' : 'text-blue-900'
+                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+                  ? 'text-emerald-900' : 'text-blue-900'
               }`}>
-                {sub.paymentStatus === 'paid' || sub.status === 'Active'
+                {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'Your subscription is active'
                   : 'Payment pending — your plan is awaiting confirmation'}
               </p>
               <p className={`text-xs leading-relaxed ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active' ? 'text-emerald-700' : 'text-blue-700'
+                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+                  ? 'text-emerald-700' : 'text-blue-700'
               }`}>
                 Plan: <strong>{sub.subscriptionPlan}</strong>.
-                {sub.paymentStatus !== 'paid' && sub.status !== 'Active'
-                  ? ' Our team will process your invoice and update your status shortly.'
-                  : ' Your U.S. Agent for Service is active and ready to receive FAA correspondence.'}
+                {sub.isPaid !== true && sub.paymentStatus !== 'paid' && sub.status !== 'Active'
+                  ? ' Complete payment to activate your subscription.'
+                  : ' Your U.S. Agent for Service is active and ready.'}
               </p>
             </div>
             <Link
               to="/dashboard/subscription"
               className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                sub.paymentStatus === 'paid' || sub.status === 'Active'
+                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-100'
                   : 'border-blue-200 text-blue-700 hover:bg-blue-100'
               }`}
@@ -300,7 +303,6 @@ export default function UserDashboard() {
             </Link>
           </motion.div>
         )}
-
       </div>
     </DashboardLayout>
   )

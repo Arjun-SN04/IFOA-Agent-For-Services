@@ -2,16 +2,17 @@
  * paymentController.js
  *
  * Handles all Stripe payment flows:
- *   POST /api/payments/create-intent   — create PaymentIntent, return clientSecret
- *   POST /api/payments/confirm         — called by frontend after Stripe succeeds;
- *                                        creates Payment record, marks subscription active
- *   POST /api/payments/webhook         — Stripe webhook (backup/authoritative confirm)
- *   GET  /api/payments/by-registration/:id — fetch all Payment docs for a subscription
- *   GET  /api/payments/:id             — fetch single Payment doc
+ *   POST /api/payments/create-intent        — create PaymentIntent, return clientSecret
+ *   POST /api/payments/confirm              — called by frontend after Stripe succeeds;
+ *                                             creates Payment record, marks subscription active
+ *   POST /api/payments/webhook              — Stripe webhook (backup/authoritative confirm)
+ *   GET  /api/payments/by-registration/:id  — fetch all Payment docs for a subscription
+ *   GET  /api/payments/:id                  — fetch single Payment doc
+ *   GET  /api/payments                      — admin: paginated list of all payments
  */
 
-const Stripe   = require('stripe');
-const stripe   = new Stripe(process.env.STRIPE_SECRET_KEY);
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const Payment              = require('../models/Payment');
 const Individual           = require('../models/Individual');
@@ -20,26 +21,45 @@ const AirlinesSubscription = require('../models/AirlinesSubscription');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Resolve a registration record from any of the three models */
+/**
+ * Resolve a registration record from the correct model.
+ * registrationModel is ALWAYS supplied by our own code (never user input for the
+ * actual DB lookup), so we trust it here.  We do a final existence check and
+ * return null if the document was not found so callers handle it gracefully.
+ */
 async function findRegistration(registrationId, registrationModel) {
-  if (registrationModel === 'Individual') {
-    return { doc: await Individual.findById(registrationId), Model: Individual };
+  try {
+    if (registrationModel === 'Individual') {
+      const doc = await Individual.findById(registrationId);
+      return { doc: doc || null, Model: Individual };
+    }
+    if (registrationModel === 'Airlines') {
+      const doc = await Airlines.findById(registrationId);
+      if (doc) return { doc, Model: Airlines };
+      // Fall back to legacy AirlinesSubscription collection in case of old record
+      const legacy = await AirlinesSubscription.findById(registrationId);
+      return { doc: legacy || null, Model: legacy ? AirlinesSubscription : null };
+    }
+    if (registrationModel === 'AirlinesSubscription') {
+      const doc = await AirlinesSubscription.findById(registrationId);
+      return { doc: doc || null, Model: AirlinesSubscription };
+    }
+    return { doc: null, Model: null };
+  } catch {
+    return { doc: null, Model: null };
   }
-  let doc = await Airlines.findById(registrationId);
-  if (doc) return { doc, Model: Airlines };
-  doc = await AirlinesSubscription.findById(registrationId);
-  return { doc, Model: doc ? AirlinesSubscription : null };
 }
 
 /** Compute subscription expiry based on plan and start date */
-function computeExpiry(subscriptionPlan, fromDate) {
+function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
   const d = new Date(fromDate);
   if (subscriptionPlan === '1 Year Subscription Plan') {
     d.setFullYear(d.getFullYear() + 1);
     return d;
   }
   if (subscriptionPlan === 'Multiple Years Subscription Plan') {
-    d.setFullYear(d.getFullYear() + 3);
+    const years = (multiYearCount && multiYearCount > 1) ? multiYearCount : 3;
+    d.setFullYear(d.getFullYear() + years);
     return d;
   }
   return null; // Unlimited Plan — no expiry
@@ -48,25 +68,29 @@ function computeExpiry(subscriptionPlan, fromDate) {
 /** Build the complete invoice snapshot from a registration document */
 function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
   const isAirline = registrationModel !== 'Individual';
-  const expirationDate = computeExpiry(rec.subscriptionPlan, paidAt);
+  const expirationDate = computeExpiry(rec.subscriptionPlan, paidAt, rec.multiYearCount);
 
   return {
     name: isAirline
-      ? rec.airlineName || [rec.firstName, rec.lastName].filter(Boolean).join(' ') || [rec.contactFirstName, rec.contactLastName].filter(Boolean).join(' ')
+      ? (rec.airlineName ||
+         [rec.firstName, rec.lastName].filter(Boolean).join(' ') ||
+         [rec.contactFirstName, rec.contactLastName].filter(Boolean).join(' ') ||
+         '')
       : [rec.firstName, rec.lastName].filter(Boolean).join(' '),
     email:   rec.email || rec.contactEmail || rec.paymentEmail || '',
     phone:   rec.phone || rec.contactPhone || '',
-    address: [rec.addressLine1, rec.city, rec.state, rec.postalCode, rec.country].filter(Boolean).join(', '),
+    address: [rec.addressLine1, rec.city, rec.state, rec.postalCode, rec.country]
+               .filter(Boolean).join(', '),
     isAirline,
     airlineName: rec.airlineName || '',
 
     subscriptionPlan: rec.subscriptionPlan || '',
     subscriptionDate: paidAt,
-    expirationDate:   expirationDate,
+    expirationDate:   expirationDate || null,
 
-    primaryCertificate:   rec.primaryCertificate || '',
-    faaCertificateNumber: rec.faaCertificateNumber || '',
-    iacraTrackingNumber:  rec.iacraTrackingNumber || '',
+    primaryCertificate:   rec.primaryCertificate   || '',
+    faaCertificateNumber: rec.faaCertificateNumber  || '',
+    iacraTrackingNumber:  rec.iacraTrackingNumber   || '',
 
     holderCount:  rec.certificateHolders?.length || rec.committedCount || 0,
     pricePerCert: rec.pricePerCertificate || rec.pricePerCert || 0,
@@ -77,13 +101,16 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
   };
 }
 
-/** Apply paid status to the registration document — called by both confirm & webhook */
+/**
+ * Apply paid status to the registration document.
+ * Called by both /confirm and webhook to keep them in sync.
+ */
 async function applyPaymentToRegistration(registrationId, registrationModel, paymentDoc) {
   const { doc, Model } = await findRegistration(registrationId, registrationModel);
   if (!doc || !Model) return null;
 
   const now = paymentDoc.paidAt || new Date();
-  const expirationDate = computeExpiry(doc.subscriptionPlan, now);
+  const expirationDate = computeExpiry(doc.subscriptionPlan, now, doc.multiYearCount);
 
   const update = {
     paymentStatus:         'paid',
@@ -97,14 +124,13 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   };
   if (expirationDate) update.expirationDate = expirationDate;
 
-  // For Airlines, also update amountPaid
+  // For Airlines, also track the total amount paid
   if (registrationModel !== 'Individual') {
-    update.amountPaid = doc.totalAmount || doc.amountDollars || 0;
+    update.amountPaid = doc.totalAmount || 0;
   }
 
-  return Model.findByIdAndUpdate(registrationId, update, { new: true });
+  return Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
 }
-
 
 // ─── POST /api/payments/create-intent ────────────────────────────────────────
 exports.createPaymentIntent = async (req, res) => {
@@ -112,15 +138,26 @@ exports.createPaymentIntent = async (req, res) => {
     const { registrationId, registrationModel } = req.body;
 
     if (!registrationId || !registrationModel)
-      return res.status(400).json({ success: false, message: 'registrationId and registrationModel are required.' });
+      return res.status(400).json({
+        success: false,
+        message: 'registrationId and registrationModel are required.',
+      });
+
+    // Validate registrationModel value
+    const VALID_MODELS = ['Individual', 'Airlines', 'AirlinesSubscription'];
+    if (!VALID_MODELS.includes(registrationModel))
+      return res.status(400).json({ success: false, message: 'Invalid registrationModel.' });
 
     const { doc } = await findRegistration(registrationId, registrationModel);
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
-    // Block if already paid (check both isPaid and paymentStatus)
+    // Block if already paid
     if (doc.isPaid || doc.paymentStatus === 'paid')
-      return res.status(400).json({ success: false, message: 'This subscription is already paid.' });
+      return res.status(400).json({
+        success: false,
+        message: 'This subscription is already paid.',
+      });
 
     const amountDollars = doc.price || doc.totalAmount || doc.totalServiceFees || 0;
     const amountCents   = Math.round(amountDollars * 100);
@@ -131,7 +168,7 @@ exports.createPaymentIntent = async (req, res) => {
       amount:   amountCents,
       currency: 'usd',
       automatic_payment_methods: { enabled: true },
-      description: `Subscription payment — ${registrationModel} ${registrationId}`,
+      description: `Subscription — ${registrationModel} ${registrationId}`,
       metadata: {
         registrationId:    String(registrationId),
         registrationModel,
@@ -153,8 +190,6 @@ exports.createPaymentIntent = async (req, res) => {
 
 
 // ─── POST /api/payments/confirm ───────────────────────────────────────────────
-// Called by the frontend immediately after stripe.confirmPayment() succeeds.
-// This is the PRIMARY path for recording payments (webhook is the backup).
 exports.confirmPayment = async (req, res) => {
   try {
     const {
@@ -166,9 +201,12 @@ exports.confirmPayment = async (req, res) => {
     } = req.body;
 
     if (!paymentIntentId || !registrationId || !registrationModel)
-      return res.status(400).json({ success: false, message: 'paymentIntentId, registrationId, and registrationModel are required.' });
+      return res.status(400).json({
+        success: false,
+        message: 'paymentIntentId, registrationId, and registrationModel are required.',
+      });
 
-    // ── Idempotency: if Payment record already exists, return it ──────────────
+    // ── Idempotency: if Payment record already exists and is paid, return it ──
     const existing = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
     if (existing && existing.isPaid) {
       return res.json({ success: true, payment: existing, alreadyRecorded: true });
@@ -179,7 +217,10 @@ exports.confirmPayment = async (req, res) => {
     try {
       pi = await stripe.paymentIntents.retrieve(paymentIntentId);
     } catch (stripeErr) {
-      return res.status(400).json({ success: false, message: `Stripe error: ${stripeErr.message}` });
+      return res.status(400).json({
+        success: false,
+        message: `Stripe error: ${stripeErr.message}`,
+      });
     }
 
     if (pi.status !== 'succeeded') {
@@ -194,23 +235,22 @@ exports.confirmPayment = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
-    const now          = new Date();
-    const invoiceNum   = doc.invoiceNumber || `INV-${Date.now()}`;
-    const amountCents  = pi.amount_received || pi.amount;
+    const now           = new Date();
+    const invoiceNum    = doc.invoiceNumber || `INV-${Date.now()}`;
+    const amountCents   = pi.amount_received || pi.amount;
     const amountDollars = amountCents / 100;
 
-    // ── Extract card/payment method details ────────────────────────────────────
+    // ── Extract card/payment method details from charge ───────────────────────
     let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
     try {
-      // Retrieve the charge for card details
       if (pi.latest_charge) {
-        const charge = await stripe.charges.retrieve(pi.latest_charge);
-        stripeChargeId    = charge.id || '';
-        stripeCustomerId  = charge.customer || '';
+        const charge   = await stripe.charges.retrieve(pi.latest_charge);
+        stripeChargeId   = charge.id    || '';
+        stripeCustomerId = typeof charge.customer === 'string' ? charge.customer : '';
         const pm = charge.payment_method_details;
         if (pm?.type === 'card') {
-          last4             = pm.card?.last4 || '';
-          cardBrand         = pm.card?.brand || '';
+          last4             = pm.card?.last4  || '';
+          cardBrand         = pm.card?.brand  || '';
           paymentMethodType = 'card';
         } else {
           paymentMethodType = pm?.type || '';
@@ -223,7 +263,7 @@ exports.confirmPayment = async (req, res) => {
     // ── Build the invoice snapshot ────────────────────────────────────────────
     const invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
 
-    // ── Create (or update) the Payment document ───────────────────────────────
+    // ── Create or update the Payment document ─────────────────────────────────
     const paymentData = {
       stripePaymentIntentId: paymentIntentId,
       stripeChargeId,
@@ -231,25 +271,24 @@ exports.confirmPayment = async (req, res) => {
       paymentMethodType,
       last4,
       cardBrand,
-      status:              'succeeded',
-      isPaid:              true,
-      paidAt:              now,
+      status:           'succeeded',
+      isPaid:           true,
+      paidAt:           now,
       amountCents,
       amountDollars,
-      currency:            pi.currency || 'usd',
+      currency:         pi.currency || 'usd',
       registrationId,
       registrationModel,
-      invoiceNumber:       invoiceNum,
+      invoiceNumber:    invoiceNum,
       invoiceSnapshot,
-      description:         pi.description || '',
-      ipAddress:           ipAddress || req.ip || '',
-      userAgent:           userAgent || req.headers['user-agent'] || '',
-      confirmedVia:        'frontend',
+      description:      pi.description || '',
+      ipAddress:        ipAddress || req.ip || '',
+      userAgent:        userAgent || req.headers['user-agent'] || '',
+      confirmedVia:     'frontend',
     };
 
     let paymentDoc;
     if (existing) {
-      // Already exists but wasn't paid — update it
       Object.assign(existing, paymentData);
       paymentDoc = await existing.save();
     } else {
@@ -262,8 +301,8 @@ exports.confirmPayment = async (req, res) => {
     console.log(`[confirmPayment] Payment ${paymentDoc._id} confirmed for ${registrationModel} ${registrationId}`);
 
     res.json({
-      success:     true,
-      payment:     paymentDoc,
+      success:      true,
+      payment:      paymentDoc,
       registration: updatedReg,
     });
   } catch (err) {
@@ -274,7 +313,6 @@ exports.confirmPayment = async (req, res) => {
 
 
 // ─── POST /api/payments/webhook ───────────────────────────────────────────────
-// Stripe webhook — authoritative backup confirm. Raw body required (set in server.js).
 exports.stripeWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -293,7 +331,7 @@ exports.stripeWebhook = async (req, res) => {
   // ── payment_intent.succeeded ──────────────────────────────────────────────
   if (event.type === 'payment_intent.succeeded') {
     const pi = event.data.object;
-    const { registrationId, registrationModel } = pi.metadata;
+    const { registrationId, registrationModel } = pi.metadata || {};
 
     if (!registrationId || !registrationModel) {
       console.warn('[stripeWebhook] Missing metadata on PaymentIntent:', pi.id);
@@ -311,7 +349,7 @@ exports.stripeWebhook = async (req, res) => {
       const { doc } = await findRegistration(registrationId, registrationModel);
       if (!doc) {
         console.error(`[stripeWebhook] Registration not found: ${registrationModel} ${registrationId}`);
-        return res.json({ received: true }); // Acknowledge to prevent Stripe retries
+        return res.json({ received: true }); // Ack to prevent Stripe retries
       }
 
       const now           = new Date();
@@ -319,13 +357,12 @@ exports.stripeWebhook = async (req, res) => {
       const amountCents   = pi.amount_received || pi.amount;
       const amountDollars = amountCents / 100;
 
-      // Card details from charge
       let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
       try {
         if (pi.latest_charge) {
-          const charge      = await stripe.charges.retrieve(pi.latest_charge);
-          stripeChargeId    = charge.id || '';
-          stripeCustomerId  = charge.customer || '';
+          const charge     = await stripe.charges.retrieve(pi.latest_charge);
+          stripeChargeId   = charge.id    || '';
+          stripeCustomerId = typeof charge.customer === 'string' ? charge.customer : '';
           const pm = charge.payment_method_details;
           if (pm?.type === 'card') {
             last4             = pm.card?.last4 || '';
@@ -346,18 +383,18 @@ exports.stripeWebhook = async (req, res) => {
         paymentMethodType,
         last4,
         cardBrand,
-        status:          'succeeded',
-        isPaid:          true,
-        paidAt:          now,
+        status:         'succeeded',
+        isPaid:         true,
+        paidAt:         now,
         amountCents,
         amountDollars,
-        currency:        pi.currency || 'usd',
+        currency:       pi.currency || 'usd',
         registrationId,
         registrationModel,
-        invoiceNumber:   invoiceNum,
+        invoiceNumber:  invoiceNum,
         invoiceSnapshot,
-        description:     pi.description || '',
-        confirmedVia:    'webhook',
+        description:    pi.description || '',
+        confirmedVia:   'webhook',
       };
 
       let paymentDoc;
@@ -372,38 +409,54 @@ exports.stripeWebhook = async (req, res) => {
       console.log(`[stripeWebhook] Payment ${paymentDoc._id} recorded for ${registrationModel} ${registrationId}`);
     } catch (err) {
       console.error('[stripeWebhook] Processing error:', err.message);
-      // Return 200 anyway — we log the error; Stripe would retry on non-200
+      // Always return 200 — log errors, don't trigger Stripe retries
     }
   }
 
-  // ── payment_intent.payment_failed ────────────────────────────────────────
+  // ── payment_intent.payment_failed ─────────────────────────────────────────
   if (event.type === 'payment_intent.payment_failed') {
     const pi = event.data.object;
     const { registrationId, registrationModel } = pi.metadata || {};
+
     if (registrationId && registrationModel) {
       try {
-        // Mark as failed in registration doc (but don't touch isPaid)
         const { doc, Model } = await findRegistration(registrationId, registrationModel);
-        if (doc && !doc.isPaid) {
-          await Model.findByIdAndUpdate(registrationId, { paymentStatus: 'failed', status: 'Inactive' });
+        if (doc && !doc.isPaid && Model) {
+          await Model.findByIdAndUpdate(
+            registrationId,
+            { $set: { paymentStatus: 'failed', status: 'Inactive' } },
+          );
         }
         // Upsert a failed Payment record for audit trail
         await Payment.findOneAndUpdate(
           { stripePaymentIntentId: pi.id },
           {
-            stripePaymentIntentId: pi.id,
-            status:           'failed',
-            isPaid:           false,
-            amountCents:      pi.amount,
-            amountDollars:    pi.amount / 100,
-            currency:         pi.currency || 'usd',
-            registrationId,
-            registrationModel,
-            invoiceNumber:    `INV-FAILED-${Date.now()}`,
-            invoiceSnapshot:  {},
-            confirmedVia:     'webhook',
+            $setOnInsert: {
+              stripePaymentIntentId: pi.id,
+              amountCents:           pi.amount,
+              amountDollars:         pi.amount / 100,
+              currency:              pi.currency || 'usd',
+              registrationId,
+              registrationModel,
+              // invoiceSnapshot must satisfy the schema — supply empty but valid object
+              invoiceSnapshot: {
+                name: '', email: '', phone: '', address: '',
+                isAirline: registrationModel !== 'Individual',
+                airlineName: '', subscriptionPlan: '',
+                subscriptionDate: null, expirationDate: null,
+                primaryCertificate: '', faaCertificateNumber: '', iacraTrackingNumber: '',
+                holderCount: 0, pricePerCert: 0,
+                subtotal: 0, tax: 0, totalPaid: 0,
+              },
+              invoiceNumber: `INV-FAILED-${Date.now()}`,
+            },
+            $set: {
+              status:      'failed',
+              isPaid:      false,
+              confirmedVia:'webhook',
+            },
           },
-          { upsert: true, new: true }
+          { upsert: true, new: true, setDefaultsOnInsert: true },
         );
       } catch (err) {
         console.error('[stripeWebhook] Failed payment update error:', err.message);
@@ -416,7 +469,6 @@ exports.stripeWebhook = async (req, res) => {
 
 
 // ─── GET /api/payments/by-registration/:id ────────────────────────────────────
-// Returns all Payment records for a given registration — used by admin & user dashboards
 exports.getPaymentsByRegistration = async (req, res) => {
   try {
     const payments = await Payment.find({ registrationId: req.params.id })
@@ -449,13 +501,21 @@ exports.getAllPayments = async (req, res) => {
     if (status) filter.status = status;
     if (model)  filter.registrationModel = model;
 
-    const payments = await Payment.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    const [payments, total] = await Promise.all([
+      Payment.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((Number(page) - 1) * Number(limit))
+        .limit(Number(limit)),
+      Payment.countDocuments(filter),
+    ]);
 
-    const total = await Payment.countDocuments(filter);
-    res.json({ success: true, data: payments, total, page: Number(page), limit: Number(limit) });
+    res.json({
+      success: true,
+      data:    payments,
+      total,
+      page:    Number(page),
+      limit:   Number(limit),
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -14,15 +14,17 @@ const {
 // Public
 router.post('/', createIndividual);
 
-// Email lookup (must be before /:id to avoid conflict)
+// ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
+router.get('/export/excel', exportToExcel);
+
+// Email lookup
 router.get('/by-email', getIndividualByEmail);
 
 // Mark as paid immediately after Stripe payment completes on the frontend
 router.patch('/:id/mark-paid', markIndividualPaid);
 
-// Admin
+// Admin CRUD
 router.get('/', getAllIndividuals);
-router.get('/export/excel', exportToExcel);
 router.get('/:id', getIndividualById);
 router.put('/:id', updateIndividual);
 router.delete('/:id', deleteIndividual);

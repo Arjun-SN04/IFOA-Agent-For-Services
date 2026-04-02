@@ -27,7 +27,7 @@ const IndividualSchema = new mongoose.Schema({
   country: { type: String },
 
   phone: { type: String, required: true },
-  email: { type: String, required: true },
+  email: { type: String, required: true, lowercase: true, trim: true },
 
   // Step 2 - Certificates
   primaryAirmanCertificate: {
@@ -40,12 +40,16 @@ const IndividualSchema = new mongoose.Schema({
     enum: ['Part 65 - Aircraft Dispatcher', 'Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor'],
     required: true,
   },
-  faaCertificateNumber: { type: String }, // FAA Certificate Number from Excel
+  faaCertificateNumber: { type: String },
   iacraTrackingNumber: { type: String },
   hasSecondaryCertificate: { type: Boolean, default: false },
   secondaryCertificate: { type: String },
   secondaryFaaCertificateNumber: { type: String },
   secondaryIacraTrackingNumber: { type: String },
+
+  // Multi-year count — used when plan is "Multiple Years Subscription Plan"
+  // Default 3; admin can override to any integer > 1.
+  multiYearCount: { type: Number, default: 3 },
 
   // Payment & Invoice
   paymentEmail: { type: String },
@@ -54,9 +58,9 @@ const IndividualSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
-  isPaid:        { type: Boolean, default: false, index: true },  // true only after Payment record confirmed
-  paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }, // link to Payment doc
-  invoiceStatus: { type: String }, // "Paid", "Pending", etc. from Excel
+  isPaid:        { type: Boolean, default: false, index: true },
+  paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
+  invoiceStatus: { type: String },
   invoiceNumber: { type: String },
   stripePaymentIntentId: { type: String, default: '' },
 
