@@ -23,14 +23,16 @@ exports.getAllIndividuals = async (req, res) => {
 };
 
 // Get individual by email (used as fallback when registrationId not linked yet)
+// Returns ALL subscriptions for this email so the UI can show them all
 exports.getIndividualByEmail = async (req, res) => {
   try {
     const email = req.query.email || req.params.email;
     if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-    // Return the most recent submission for this email
-    const individual = await Individual.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 });
-    if (!individual) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, data: individual });
+    const individuals = await Individual.find({ email: email.toLowerCase() }).sort({ createdAt: -1 });
+    if (!individuals || individuals.length === 0)
+      return res.status(404).json({ success: false, message: 'Not found' });
+    // data = array; data[0] = most recent (kept for backward compat with single-record consumers)
+    res.json({ success: true, data: individuals[0], all: individuals });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -64,6 +66,40 @@ exports.deleteIndividual = async (req, res) => {
     const individual = await Individual.findByIdAndDelete(req.params.id);
     if (!individual) return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, message: 'Deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Mark individual subscription as paid immediately after frontend Stripe payment
+exports.markIndividualPaid = async (req, res) => {
+  try {
+    const now = new Date();
+    const individual = await Individual.findById(req.params.id);
+    if (!individual) return res.status(404).json({ success: false, message: 'Not found' });
+
+    const update = {
+      paymentStatus: 'paid',
+      status: 'Active',
+      subscriptionDate: now,
+      invoiceStatus: 'Paid',
+      invoiceNumber: `INV-${Date.now()}`,
+    };
+
+    if (individual.subscriptionPlan === '1 Year Subscription Plan') {
+      const exp = new Date(now);
+      exp.setFullYear(exp.getFullYear() + 1);
+      update.expirationDate = exp;
+    } else if (individual.subscriptionPlan === 'Multiple Years Subscription Plan') {
+      const years = individual.multiYearCount || 3;
+      const exp = new Date(now);
+      exp.setFullYear(exp.getFullYear() + years);
+      update.expirationDate = exp;
+    }
+    // Unlimited Plan — no expiry
+
+    const updated = await Individual.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

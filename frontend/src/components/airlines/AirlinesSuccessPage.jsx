@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Footer from '../layout/footer'
@@ -9,6 +10,7 @@ const STEPS = [
 ]
 
 export default function AirlinesSuccessPage({ airlineName }) {
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [])
   return (
     <>
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-gray-100 flex items-center justify-center py-16 px-4">

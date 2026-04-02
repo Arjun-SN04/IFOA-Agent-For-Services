@@ -21,15 +21,85 @@ exports.createAirlinesSubscription = async (req, res) => {
     // Always resolve price server-side to prevent tampering
     body.pricePerCertificate = resolvePricePerCertificate(body);
 
-    // Compute totalAmount
     const isUnlimited = body.subscriptionPlan === 'Unlimited Plan';
+    const holdersFilled = body.certificateHolders?.length || 0;
+
+    // committedCount = exact number the airline declared in Step 1
+    // Fall back to holders actually filled if not provided
+    body.committedCount = body.holderCountValue
+      ? parseInt(body.holderCountValue)
+      : holdersFilled;
+
+    // Compute totalAmount = price × committedCount (what they owe in full)
     body.totalAmount = isUnlimited
       ? body.pricePerCertificate
-      : body.pricePerCertificate * (body.certificateHolders?.length || 1);
+      : body.pricePerCertificate * body.committedCount;
+
+    // amountPaid = price × holders actually submitted now (partial if fewer)
+    body.amountPaid = isUnlimited
+      ? body.pricePerCertificate
+      : body.pricePerCertificate * holdersFilled;
 
     const doc = new Airlines(body);
     await doc.save();
     res.status(201).json({ success: true, data: doc });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Add Holders (partial submission top-up) ───────────────────────────────────
+// Airline submitted fewer holders than committedCount initially.
+// This endpoint appends new holders and returns the extra amount due.
+exports.addHoldersToSubscription = async (req, res) => {
+  try {
+    const doc = await Airlines.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Subscription not found' });
+
+    const { newHolders } = req.body; // array of CertificateHolder objects
+    if (!Array.isArray(newHolders) || newHolders.length === 0) {
+      return res.status(400).json({ success: false, message: 'newHolders array is required' });
+    }
+
+    const isUnlimited = doc.subscriptionPlan === 'Unlimited Plan';
+    const currentCount = doc.certificateHolders.length;
+    const committedCount = doc.committedCount || currentCount;
+    const remainingSlots = committedCount - currentCount;
+
+    if (isUnlimited) {
+      return res.status(400).json({ success: false, message: 'Unlimited plan — no per-holder billing applies' });
+    }
+
+    if (remainingSlots <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: `No remaining slots. Committed count: ${committedCount}, current holders: ${currentCount}`,
+      });
+    }
+
+    // Only allow up to remaining slots
+    const toAdd = newHolders.slice(0, remainingSlots);
+    const extraAmount = doc.pricePerCertificate * toAdd.length;
+
+    // Append holders
+    doc.certificateHolders.push(...toAdd);
+
+    // Update amountPaid to reflect new additions billed
+    doc.amountPaid = (doc.amountPaid || 0) + extraAmount;
+
+    // If all slots now filled, mark as pending payment for remainder if not already paid
+    // totalAmount stays unchanged (it was set on creation)
+    await doc.save();
+
+    res.json({
+      success: true,
+      data: doc,
+      addedCount: toAdd.length,
+      extraAmountDue: extraAmount,
+      totalHolders: doc.certificateHolders.length,
+      committedCount: doc.committedCount,
+      remainingSlots: committedCount - doc.certificateHolders.length,
+    });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -59,18 +129,23 @@ exports.getAllAirlinesSubscriptions = async (req, res) => {
   }
 };
 
-// ── Read One by Email ─────────────────────────────────────────────────────────
+// ── Read All by Email (returns every subscription for this airline account) ───
 exports.getAirlinesSubscriptionByEmail = async (req, res) => {
   try {
     const email = req.query.email || req.params.email;
     if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
-    const [newDoc, legacyDoc] = await Promise.all([
-      Airlines.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 }),
-      AirlinesSubscription.findOne({ contactEmail: email.toLowerCase() }).sort({ createdAt: -1 }),
+    const [newDocs, legacyDocs] = await Promise.all([
+      Airlines.find({ email: email.toLowerCase() }).sort({ createdAt: -1 }),
+      AirlinesSubscription.find({ contactEmail: email.toLowerCase() }).sort({ createdAt: -1 }),
     ]);
-    const doc = newDoc || legacyDoc;
-    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, data: doc });
+    // Merge both collections, newest first
+    const all = [
+      ...newDocs.map(d => ({ ...d.toObject(), _source: 'primary' })),
+      ...legacyDocs.map(d => ({ ...d.toObject(), _source: 'legacy' })),
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (all.length === 0) return res.status(404).json({ success: false, message: 'Not found' });
+    // data = most recent (backward compat); all = full list
+    res.json({ success: true, data: all[0], all });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -396,6 +471,52 @@ exports.exportAirlinesExcel = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=Export_Airlines_${Date.now()}.xlsx`);
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Compute expiration date based on subscription plan ───────────────────────
+function computeAirlinesExpirationDate(subscriptionPlan, fromDate) {
+  const d = new Date(fromDate);
+  if (subscriptionPlan === '1 Year Subscription Plan') {
+    d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  if (subscriptionPlan === 'Multiple Years Subscription Plan') {
+    d.setFullYear(d.getFullYear() + 3);
+    return d;
+  }
+  return null; // Unlimited Plan — no expiry
+}
+
+// Mark airlines subscription as paid immediately after frontend Stripe payment
+exports.markAirlinesPaid = async (req, res) => {
+  try {
+    const now = new Date();
+    let doc = await Airlines.findById(req.params.id);
+    if (!doc) doc = await AirlinesSubscription.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+
+    const expirationDate = computeAirlinesExpirationDate(doc.subscriptionPlan, now);
+
+    const update = {
+      paymentStatus:    'paid',
+      status:           'Active',
+      subscriptionDate: now,
+      invoiceStatus:    'Paid',
+      invoiceNumber:    `INV-${Date.now()}`,
+    };
+
+    // Only write expirationDate when the plan has one (null = Unlimited)
+    if (expirationDate !== null) {
+      update.expirationDate = expirationDate;
+    }
+
+    let updated = await Airlines.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!updated) updated = await AirlinesSubscription.findByIdAndUpdate(req.params.id, update, { new: true });
+
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

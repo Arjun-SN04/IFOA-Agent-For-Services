@@ -107,6 +107,16 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) nextErrors.email = 'Enter a valid email address.'
 
     setErrors(nextErrors)
+
+    // Scroll to first invalid field
+    const firstKey = Object.keys(nextErrors)[0]
+    if (firstKey) {
+      setTimeout(() => {
+        const el = document.getElementById(`field-${firstKey}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+    }
+
     return Object.keys(nextErrors).length === 0
   }
 
@@ -205,6 +215,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="First Name" required error={errors.firstName}>
             <input
+              id="field-firstName"
               type="text"
               placeholder="First name"
               value={data.firstName}
@@ -215,6 +226,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
 
           <Field label="Last Name" required error={errors.lastName}>
             <input
+              id="field-lastName"
               type="text"
               placeholder="Last name"
               value={data.lastName}
@@ -235,6 +247,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
 
           <Field label="Date of Birth" required error={errors.dateOfBirth}>
             <input
+              id="field-dateOfBirth"
               type="date"
               value={data.dateOfBirth}
               onChange={(e) => update({ dateOfBirth: e.target.value })}
@@ -314,23 +327,26 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Phone Number" required error={errors.phone}>
-            <PhoneInput
-              country={phoneCountry}
-              value={data.phone}
-              onChange={(phone, countryData) => {
-                update({ phone })
-                if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
-              }}
-              inputClass={errors.phone ? 'error-field' : ''}
-              enableSearch
-              searchPlaceholder="Search country..."
-              preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
-              dropdownStyle={{ bottom: '100%', top: 'auto' }}
-            />
+            <div id="field-phone">
+              <PhoneInput
+                country={phoneCountry}
+                value={data.phone}
+                onChange={(phone, countryData) => {
+                  update({ phone })
+                  if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                }}
+                inputClass={errors.phone ? 'error-field' : ''}
+                enableSearch
+                searchPlaceholder="Search country..."
+                preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                dropdownStyle={{ bottom: '100%', top: 'auto' }}
+              />
+            </div>
           </Field>
 
           <Field label="Email Address" required error={errors.email}>
             <input
+              id="field-email"
               type="email"
               placeholder="name@example.com"
               value={data.email}

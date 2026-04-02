@@ -67,6 +67,13 @@ const AirlinesSchema = new mongoose.Schema({
   // Certificate holders (array)
   certificateHolders: { type: [CertificateHolderSchema], default: [] },
 
+  // committedCount = exact number selected in Step 1 (holderCountValue)
+  // This is the "slots" the airline committed to and will be billed for
+  committedCount: { type: Number, default: 0 },
+
+  // amountPaid tracks cumulative payments made so far
+  amountPaid: { type: Number, default: 0 },
+
   // Payment
   paymentEmail: { type: String, default: '' },
   paymentStatus: {
@@ -74,19 +81,28 @@ const AirlinesSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  isPaid:        { type: Boolean, default: false, index: true },  // true only after Payment record confirmed
+  paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }, // link to Payment doc
   invoiceStatus: { type: String },
   invoiceNumber: { type: String },
+  stripePaymentIntentId: { type: String, default: '' },
 
   agreedToTerms: { type: Boolean, required: true },
   submittedAt:   { type: Date, default: Date.now },
 }, { timestamps: true });
 
-// Auto-compute totalAmount before save
+// Auto-compute totalAmount before save.
+// Uses committedCount (the declared seat count) NOT current holders length,
+// so partial submissions don't shrink the invoice.
 AirlinesSchema.pre('save', function (next) {
   const isUnlimited = this.subscriptionPlan === 'Unlimited Plan';
-  this.totalAmount = isUnlimited
-    ? this.pricePerCertificate
-    : this.pricePerCertificate * (this.certificateHolders?.length || 1);
+  if (isUnlimited) {
+    this.totalAmount = this.pricePerCertificate;
+  } else {
+    // committedCount set by controller on create; fall back to actual holders
+    const count = this.committedCount || this.certificateHolders?.length || 1;
+    this.totalAmount = this.pricePerCertificate * count;
+  }
   next();
 });
 

@@ -45,8 +45,8 @@ export function AuthProvider({ children }) {
     return res.data.user
   }
 
-  const signup = async (email, password, role, firstName, lastName) => {
-    const res = await API.post('/auth/signup', { email, password, role, firstName, lastName })
+  const signup = async (email, password, role, firstName, lastName, airlineName) => {
+    const res = await API.post('/auth/signup', { email, password, role, firstName, lastName, airlineName })
     setToken(res.data.token)
     setUser(res.data.user)
     return res.data.user
@@ -88,8 +88,27 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
+  // Adds a new subscription ID to the user's subscriptionIds array.
+  // Does NOT overwrite the primary registrationId — safe to call on every new form submit.
+  const addSubscription = async (subscriptionId) => {
+    const res = await API.put('/auth/add-subscription', { subscriptionId })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
+  // Updates the airline name stored on the user account (airline role only).
+  const updateAirlineName = async (airlineName) => {
+    const res = await API.put('/auth/update-airline-name', { airlineName })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, setSession, updateCredentials, updateProfile, linkRegistration }}>
+    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, setSession, updateCredentials, updateProfile, linkRegistration, addSubscription, updateAirlineName }}>
       {children}
     </AuthContext.Provider>
   )

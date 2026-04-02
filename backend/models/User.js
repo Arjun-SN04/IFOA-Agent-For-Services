@@ -7,9 +7,13 @@ const UserSchema = new mongoose.Schema({
   role: { type: String, enum: ['admin', 'airline', 'individual'], required: true },
   firstName: { type: String },
   lastName: { type: String },
-  // Reference to their registration record (for airline/individual)
+  // Airline name — only used when role === 'airline'. Pre-fills & locks the form.
+  airlineName: { type: String, default: '' },
+  // Reference to their primary registration record (for airline/individual)
   registrationId: { type: mongoose.Schema.Types.ObjectId, refPath: 'registrationModel' },
   registrationModel: { type: String, enum: ['Individual', 'AirlinesSubscription', 'Airlines'] },
+  // All subscription IDs ever created by this account (airlines can have multiple)
+  subscriptionIds: [{ type: mongoose.Schema.Types.ObjectId }],
 }, { timestamps: true });
 
 // Hash password before save

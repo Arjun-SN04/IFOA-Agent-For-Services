@@ -11,6 +11,9 @@ import Step4Payment from '../components/individual/Step4Payment'
 import SuccessPage from '../components/individual/SuccessPage'
 import { createIndividual } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import axios from 'axios'
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 const STEPS = [
   { label: 'Personal Info', detail: 'Choose your plan and enter your contact details.' },
@@ -135,7 +138,6 @@ const fadeUp = {
   show: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.55, ease: 'easeOut' } }),
 }
 
-// ── Wrong-role banner: shown at the top of the form when an airline user visits the individual form ──
 function WrongRoleBanner() {
   return (
     <div className="rounded-t-3xl border-b border-blue-200 bg-blue-50 px-7 py-5">
@@ -237,7 +239,6 @@ function AuthModal({ onClose }) {
 
 export default function IndividualForm() {
   const { user, linkRegistration } = useAuth()
-  // Block airline users from filling the individual form
   const isBlocked = user?.role === 'airline'
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState(INIT)
@@ -259,37 +260,69 @@ export default function IndividualForm() {
     }, 50)
   }
 
-  // Require auth before advancing beyond step 2
   const requireAuth = () => {
     if (isBlocked) return false
     if (!user) { setShowAuthModal(true); return false }
     return true
   }
 
-  const handleSubmit = async () => {
-    if (!user) { setShowAuthModal(true); return }
+  /**
+   * handleSubmit — called by Step4Payment in two modes:
+   *
+   * Mode A — { returnId: true }  (Stripe flow, step 1 of 2)
+   *   Creates the record as "pending", links to user, returns the new _id.
+   *   Does NOT navigate — the card modal will open next.
+   *
+   * Mode B — { paymentStatus: 'pending' }  (Pay-later)
+   *   Creates the record and navigates to SuccessPage.
+   */
+  const handleSubmit = async (opts = {}) => {
+    if (!user) { setShowAuthModal(true); return null }
     setSubmitting(true)
     setError('')
     try {
-      const res = await createIndividual({ ...formData, paymentStatus: 'pending' })
-      if (user && res?.data?.data?._id) {
-        try {
-          await linkRegistration(res.data.data._id, 'Individual')
-        } catch (_) {
-          // Non-fatal
-        }
+      const res = await createIndividual({ ...formData, paymentStatus: opts.paymentStatus || 'pending' })
+      const newId = res?.data?.data?._id
+
+      if (user && newId && !user.registrationId) {
+        try { await linkRegistration(newId, 'Individual') } catch (_) {}
       }
+
+      if (opts.returnId) {
+        // Stripe path: return ID so Step4Payment can open the card modal
+        return newId
+      }
+
+      // Pay-later path: go to success
       setSubmitted(true)
+      return null
     } catch (e) {
       setError(e?.response?.data?.message || 'Submission failed. Please try again.')
+      return null
     } finally {
       setSubmitting(false)
     }
   }
 
+  /**
+   * handleMarkPaidAndFinish — called by Step4Payment after card payment succeeds.
+   * PATCHes the existing record to paid status, then shows the SuccessPage.
+   */
+  const handleMarkPaidAndFinish = async (registrationId) => {
+    try {
+      await axios.patch(
+        `${BASE_URL}/individuals/${registrationId}/mark-paid`,
+        {},
+        { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } }
+      )
+    } catch (_) {
+      // Non-fatal: Stripe webhook will also update the record
+    }
+    setSubmitted(true)
+  }
+
   if (submitted) return <><Navbar /><SuccessPage name={formData.firstName} /></>
 
-  // Step 1 → 2 is free; auth required from step 2 → 3 onwards
   const handleNextToStep2 = () => { if (isBlocked) return; goToStep(2) }
   const handleNextToStep3 = () => { if (!requireAuth()) return; goToStep(3) }
   const handleNextToStep4 = () => { if (!requireAuth()) return; goToStep(4) }
@@ -306,25 +339,12 @@ export default function IndividualForm() {
 
       {/* ═══ HERO ═══ */}
       <section data-hero className="relative h-[75vh] min-h-[480px] flex items-center justify-center overflow-hidden">
-        <img
-          src={cockpitImg}
-          alt="Aviation cockpit"
-          className="absolute inset-0 w-full h-full object-cover object-center"
-        />
+        <img src={cockpitImg} alt="Aviation cockpit" className="absolute inset-0 w-full h-full object-cover object-center" />
         <div className="absolute inset-0 bg-black/55" />
         <div className="relative z-10 text-center px-6 max-w-3xl mx-auto">
-          <motion.p variants={fadeUp} initial="hidden" animate="show" custom={0}
-            className="text-white/70 text-xs font-bold uppercase tracking-[0.3em] mb-4">
-            U.S. AGENT FOR SERVICE
-          </motion.p>
-          <motion.h1 variants={fadeUp} initial="hidden" animate="show" custom={1}
-            className="text-5xl sm:text-6xl lg:text-7xl font-black text-white leading-[1.05] tracking-tight mb-5">
-            Registration Form
-          </motion.h1>
-          <motion.p variants={fadeUp} initial="hidden" animate="show" custom={2}
-            className="text-white/80 text-base sm:text-lg">
-            You focus on flying and flight planning, let us handle the rest!
-          </motion.p>
+          <motion.p variants={fadeUp} initial="hidden" animate="show" custom={0} className="text-white/70 text-xs font-bold uppercase tracking-[0.3em] mb-4">U.S. AGENT FOR SERVICE</motion.p>
+          <motion.h1 variants={fadeUp} initial="hidden" animate="show" custom={1} className="text-5xl sm:text-6xl lg:text-7xl font-black text-white leading-[1.05] tracking-tight mb-5">Registration Form</motion.h1>
+          <motion.p variants={fadeUp} initial="hidden" animate="show" custom={2} className="text-white/80 text-base sm:text-lg">You focus on flying and flight planning, let us handle the rest!</motion.p>
         </div>
       </section>
 
@@ -346,64 +366,39 @@ export default function IndividualForm() {
       {/* ═══ VIDEO + FAA PORTALS SECTION ═══ */}
       <section className="bg-gray-50 py-16 px-6 border-b border-gray-100">
         <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="text-center mb-12">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center mb-12">
             <p className="text-red-600 text-xs font-black uppercase tracking-widest mb-2">Get Started — Step by Step</p>
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">
-              We Stand Out as Your Agent for Service
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">We Stand Out as Your Agent for Service</h2>
             <p className="text-gray-500 text-sm mt-3 max-w-xl mx-auto leading-relaxed">
               Whether you are a <strong className="text-gray-700">Part 61 Pilot, Flight or Ground Instructor</strong> or a{' '}
               <strong className="text-gray-700">Part 65 Aircraft Dispatcher</strong> living outside the U.S., we simplify your FAA compliance.
-              You focus on flying — let us handle the rest.
             </p>
           </motion.div>
-
           <div className="grid lg:grid-cols-2 gap-8 items-center mb-14">
-            <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }}
-              className="relative rounded-2xl overflow-hidden shadow-2xl shadow-red-900/20 aspect-video border border-gray-200">
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1"
-                title="IFOA USA Agent for Service Registration"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+            <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }} className="relative rounded-2xl overflow-hidden shadow-2xl shadow-red-900/20 aspect-video border border-gray-200">
+              <iframe className="absolute inset-0 w-full h-full" src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1" title="IFOA USA Agent for Service Registration" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
             </motion.div>
-
-            <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.1 }}
-              className="flex flex-col gap-5">
+            <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.1 }} className="flex flex-col gap-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                  </svg>
+                  <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
                 </div>
                 <h3 className="text-xl font-black text-gray-900">Watch Our Video First</h3>
               </div>
-              <p className="text-gray-600 leading-relaxed">
-                Make sure to watch our short YouTube video — it walks you through the key steps to stay compliant with the FAA's Agent for Service requirement.
-              </p>
-              <p className="text-gray-600 leading-relaxed">
-                It only takes a few minutes and will help you get everything right from the start. Think of it as your step-by-step guide to avoid confusion and save time later.
-              </p>
+              <p className="text-gray-600 leading-relaxed">Make sure to watch our short YouTube video — it walks you through the key steps to stay compliant with the FAA's Agent for Service requirement.</p>
               <div className="flex flex-wrap gap-3">
-                <a href="https://www.youtube.com/watch?v=cfjy4wI7ZY4" target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-200">
+                <a href="https://www.youtube.com/watch?v=cfjy4wI7ZY4" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-200">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
                   Watch on YouTube
                 </a>
-                <button onClick={scrollToForm}
-                  className="inline-flex items-center gap-2 border border-red-200 text-red-700 font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-red-50 transition-all">
+                <button onClick={scrollToForm} className="inline-flex items-center gap-2 border border-red-200 text-red-700 font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-red-50 transition-all">
                   Skip to Form
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 13l-7 7-7-7M12 5v14" /></svg>
                 </button>
               </div>
             </motion.div>
           </div>
-
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="mb-4">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-4">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-lg bg-gray-900 text-white text-sm font-black flex items-center justify-center">1</div>
               <h3 className="text-xl font-black text-gray-900">Register on these TWO FAA Web Portals</h3>
@@ -412,49 +407,25 @@ export default function IndividualForm() {
               <div className="rounded-2xl bg-white border border-gray-200 p-7 flex flex-col gap-4">
                 <div>
                   <p className="text-gray-900 font-black text-lg mb-3">FAA IACRA</p>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                    Retrieve your FTN Number on the FAA IACRA website as a:
-                  </p>
+                  <p className="text-gray-600 text-sm leading-relaxed mb-4">Retrieve your FTN Number on the FAA IACRA website as a:</p>
                   <ul className="space-y-1.5 mb-5">
-                    <li className="flex items-center gap-2 text-sm text-gray-600">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-                      <strong className="text-gray-900">NEW</strong>&nbsp;certificate, or
-                    </li>
-                    <li className="flex items-center gap-2 text-sm text-gray-600">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-                      <strong className="text-gray-900">EXISTING</strong>&nbsp;certificate
-                    </li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600"><span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" /><strong className="text-gray-900">NEW</strong>&nbsp;certificate, or</li>
+                    <li className="flex items-center gap-2 text-sm text-gray-600"><span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" /><strong className="text-gray-900">EXISTING</strong>&nbsp;certificate</li>
                   </ul>
                 </div>
-                <a href="https://iacra.faa.gov/IACRA/Default.aspx" target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-500 transition-colors mt-auto">
-                  Access to FAA IACRA Portal →
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                </a>
+                <a href="https://iacra.faa.gov/IACRA/Default.aspx" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-500 transition-colors mt-auto">Access to FAA IACRA Portal → <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>
               </div>
-
               <div className="rounded-2xl bg-white border border-gray-200 p-7 flex flex-col gap-4">
                 <div>
                   <p className="text-gray-900 font-black text-lg mb-3">FAA USAS</p>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                    Register IFOA as your official U.S. Agent for Service with the FAA.
-                  </p>
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    The FAA's appointment portal (USAS) has been available since{' '}
-                    <strong className="text-gray-900">April 2, 2025</strong>.
-                  </p>
+                  <p className="text-gray-600 text-sm leading-relaxed mb-4">Register IFOA as your official U.S. Agent for Service with the FAA.</p>
+                  <p className="text-sm text-gray-600 leading-relaxed">The FAA's appointment portal (USAS) has been available since <strong className="text-gray-900">April 2, 2025</strong>.</p>
                 </div>
-                <a href="https://usas.faa.gov/signin" target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-500 transition-colors mt-auto">
-                  Access to FAA USAS Portal →
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                </a>
+                <a href="https://usas.faa.gov/signin" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-bold text-red-600 hover:text-red-500 transition-colors mt-auto">Access to FAA USAS Portal → <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg></a>
               </div>
             </div>
           </motion.div>
-
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="mt-8">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }} className="mt-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-lg bg-gray-900 text-white text-sm font-black flex items-center justify-center">2</div>
               <h3 className="text-xl font-black text-gray-900">Get Your Agent for Service Information</h3>
@@ -464,10 +435,7 @@ export default function IndividualForm() {
                 {SERVICE_CONTACT.map((row) => (
                   <div key={row.label} className="flex items-center px-6 py-4 gap-4">
                     <span className="w-20 shrink-0 text-xs font-bold uppercase tracking-widest text-gray-400">{row.label}</span>
-                    {row.href
-                      ? <a href={row.href} className="text-sm font-semibold text-red-600 hover:underline">{row.value}</a>
-                      : <span className="text-sm text-gray-800 font-medium">{row.value}</span>
-                    }
+                    {row.href ? <a href={row.href} className="text-sm font-semibold text-red-600 hover:underline">{row.value}</a> : <span className="text-sm text-gray-800 font-medium">{row.value}</span>}
                   </div>
                 ))}
               </div>
@@ -479,20 +447,13 @@ export default function IndividualForm() {
       {/* ═══ WHY CHOOSE US ═══ */}
       <section className="bg-white py-16 px-6">
         <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="mb-10">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-10">
             <p className="text-red-600 text-xs font-black uppercase tracking-widest mb-2">Why IFOA USA</p>
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">
-              The Trusted Choice for<br />International Aviators
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">The Trusted Choice for<br />International Aviators</h2>
           </motion.div>
-
           <div className="grid sm:grid-cols-3 gap-6">
             {WHY_CARDS.map((card, i) => (
-              <motion.div key={card.title}
-                initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ delay: i * 0.12, duration: 0.5 }}
-                className="group rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+              <motion.div key={card.title} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.12, duration: 0.5 }} className="group rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                 <div className="relative h-44 overflow-hidden">
                   <CardImage srcs={card.srcs} gradient={card.gradient} emoji={card.emoji} alt={card.title} className="w-full h-full group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
@@ -511,16 +472,8 @@ export default function IndividualForm() {
       {/* ═══ STATS ROW ═══ */}
       <section className="bg-black py-12 px-6">
         <div className="max-w-6xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6">
-          {[
-            { value: '$69', label: 'Annual Plan' },
-            { value: '$299', label: 'Lifetime Access' },
-            { value: '4', label: 'Simple Steps' },
-            { value: '🇺🇸', label: 'U.S. Based Office' },
-          ].map((stat, i) => (
-            <motion.div key={stat.label}
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ delay: i * 0.08, duration: 0.5 }}
-              className="text-center">
+          {[{ value: '$69', label: 'Annual Plan' }, { value: '$299', label: 'Lifetime Access' }, { value: '4', label: 'Simple Steps' }, { value: '🇺🇸', label: 'U.S. Based Office' }].map((stat, i) => (
+            <motion.div key={stat.label} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08, duration: 0.5 }} className="text-center">
               <p className="text-4xl font-black text-white mb-1">{stat.value}</p>
               <p className="text-xs font-bold text-red-400 uppercase tracking-widest">{stat.label}</p>
             </motion.div>
@@ -538,20 +491,15 @@ export default function IndividualForm() {
           </motion.div>
           <div className="grid sm:grid-cols-3 gap-5">
             {GUIDE_STEPS.map((item, i) => (
-              <motion.div key={item.index}
-                initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="rounded-2xl border border-gray-200 bg-gray-50 p-7 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200">
+              <motion.div key={item.index} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }} className="rounded-2xl border border-gray-200 bg-gray-50 p-7 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200">
                 <div className="w-11 h-11 rounded-2xl bg-red-600 text-white font-black text-sm flex items-center justify-center mb-5 shadow-md shadow-red-200">{item.index}</div>
                 <h3 className="text-base font-bold text-gray-900 mb-2">{item.title}</h3>
                 <p className="text-sm text-gray-600 leading-relaxed mb-4">{item.body}</p>
                 {item.links && (
                   <div className="flex flex-wrap gap-2">
                     {item.links.map((link) => (
-                      <a key={link.href} href={link.href} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 border border-red-200 bg-white hover:bg-red-50 px-3 py-1.5 rounded-full transition-colors">
-                        {link.label}
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 border border-red-200 bg-white hover:bg-red-50 px-3 py-1.5 rounded-full transition-colors">
+                        {link.label}<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                       </a>
                     ))}
                   </div>
@@ -565,8 +513,7 @@ export default function IndividualForm() {
       {/* ═══ AGENT CONTACT + AIRLINES CTA ═══ */}
       <section className="bg-gray-50 border-t border-gray-100 py-12 px-6">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-gray-100">
               <p className="text-xs font-black uppercase tracking-widest text-red-600">Official Agent Details</p>
               <h3 className="mt-1 text-lg font-bold text-gray-900">Use These on the FAA Portal</h3>
@@ -575,36 +522,20 @@ export default function IndividualForm() {
               {SERVICE_CONTACT.map((row) => (
                 <div key={row.label} className="flex items-center px-6 py-4 gap-4">
                   <span className="w-20 shrink-0 text-xs font-bold uppercase tracking-widest text-gray-400">{row.label}</span>
-                  {row.href
-                    ? <a href={row.href} className="text-sm font-semibold text-red-600 hover:underline">{row.value}</a>
-                    : <span className="text-sm text-gray-800 font-medium">{row.value}</span>
-                  }
+                  {row.href ? <a href={row.href} className="text-sm font-semibold text-red-600 hover:underline">{row.value}</a> : <span className="text-sm text-gray-800 font-medium">{row.value}</span>}
                 </div>
               ))}
             </div>
           </motion.div>
-
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="relative rounded-2xl overflow-hidden min-h-[220px] flex">
-            <CardImage
-              srcs={[
-                'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=700&q=80&auto=format&fit=crop&crop=center',
-                'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=700&q=80&auto=format&fit=crop',
-              ]}
-              gradient="from-gray-950 via-gray-900 to-gray-800"
-              emoji="✈️"
-              alt="Airline aircraft"
-              className="absolute inset-0 w-full h-full"
-            />
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }} className="relative rounded-2xl overflow-hidden min-h-[220px] flex">
+            <CardImage srcs={['https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=700&q=80&auto=format&fit=crop&crop=center', 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=700&q=80&auto=format&fit=crop']} gradient="from-gray-950 via-gray-900 to-gray-800" emoji="✈️" alt="Airline aircraft" className="absolute inset-0 w-full h-full" />
             <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/70 to-gray-950/30" />
             <div className="relative z-10 flex flex-col justify-center px-8 py-8">
               <p className="text-xs font-black uppercase tracking-widest text-red-400 mb-2">Operators &amp; Airlines</p>
               <h3 className="text-xl font-black text-white mb-2 leading-tight">Managing 3+<br />Certificate Holders?</h3>
               <p className="text-sm text-gray-300 mb-6 leading-relaxed max-w-xs">Volume pricing, dedicated support, and enterprise-grade onboarding.</p>
-              <Link to="/airlines/register"
-                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all w-fit">
-                ✈ Go to Airlines Plan
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" /></svg>
+              <Link to="/airlines/register" className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all w-fit">
+                ✈ Go to Airlines Plan<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.3}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" /></svg>
               </Link>
             </div>
           </motion.div>
@@ -614,26 +545,21 @@ export default function IndividualForm() {
       {/* ═══ REGISTRATION FORM ═══ */}
       <section ref={formRef} className="bg-white py-16 px-6 border-t border-gray-100" id="registration-form">
         <div className="max-w-3xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
-            className="text-center mb-10">
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center mb-10">
             <div className="inline-flex items-center rounded-full border border-dashed border-gray-400 px-5 py-1.5 mb-4">
               <span className="text-black text-xs font-semibold tracking-wide">Secure Registration</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight mb-3">Complete Your Registration</h2>
-            <p className="text-gray-500 text-base max-w-md mx-auto leading-relaxed">
-              A guided 4-step form — takes less than 5 minutes. Your data is encrypted and handled securely.
-            </p>
+            <p className="text-gray-500 text-base max-w-md mx-auto leading-relaxed">A guided 4-step form — takes less than 5 minutes. Your data is encrypted and handled securely.</p>
             {!user && (
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
-                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626' }}>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', color: '#dc2626' }}>
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 Sign in or create an account to proceed past Step 2
               </div>
             )}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-            className="relative rounded-3xl border border-gray-200 bg-white shadow-[0_24px_80px_-30px_rgba(15,23,42,0.15)] overflow-hidden">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }} className="relative rounded-3xl border border-gray-200 bg-white shadow-[0_24px_80px_-30px_rgba(15,23,42,0.15)] overflow-hidden">
             {isBlocked && <WrongRoleBanner />}
 
             <div className="bg-gradient-to-b from-white to-gray-50/80 border-b border-gray-100 px-7 py-7">
@@ -648,65 +574,50 @@ export default function IndividualForm() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">Complete</p>
                 </div>
               </div>
-
               <div className="flex gap-2 mb-4 overflow-x-auto pb-0.5">
                 {STEPS.map((item, i) => {
-                  const num = i + 1; const current = num === step; const done = num < step
-                  const locked = num > 2 && !user
+                  const num = i + 1; const current = num === step; const done = num < step; const locked = num > 2 && !user
                   return (
-                    <div key={item.label}
-                      className={`min-w-[7rem] flex-1 rounded-2xl px-4 py-3 border transition-all duration-200 relative ${
-                        current ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-200'
-                        : done ? 'bg-red-50 border-red-200 text-red-700'
-                        : locked ? 'bg-gray-50 border-gray-200 text-gray-300'
-                        : 'bg-white border-gray-200 text-gray-400'
-                      }`}>
+                    <div key={item.label} className={`min-w-[7rem] flex-1 rounded-2xl px-4 py-3 border transition-all duration-200 relative ${current ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-200' : done ? 'bg-red-50 border-red-200 text-red-700' : locked ? 'bg-gray-50 border-gray-200 text-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-80">Step {num}</p>
                       <p className="mt-0.5 text-sm font-bold truncate">{item.label}</p>
-                      {locked && (
-                        <span className="absolute top-2 right-2">
-                          <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                        </span>
-                      )}
+                      {locked && <span className="absolute top-2 right-2"><svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg></span>}
                     </div>
                   )
                 })}
               </div>
-
               <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400"
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
-                />
+                <motion.div className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400" animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: 'easeOut' }} />
               </div>
             </div>
 
             <div className="px-7 py-8">
               <AnimatePresence mode="wait">
-                <motion.div key={step}
-                  initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}
-                  transition={{ duration: 0.22 }}>
+                <motion.div key={step} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.22 }}>
                   {step === 1 && <Step1PersonalInfo data={formData} update={update} onNext={handleNextToStep2} />}
                   {step === 2 && <Step2Certificates data={formData} update={update} onNext={handleNextToStep3} onBack={() => goToStep(1)} />}
                   {step === 3 && <Step3Preview data={formData} onNext={handleNextToStep4} onBack={() => goToStep(2)} />}
-                  {step === 4 && <Step4Payment data={formData} update={update} onBack={() => goToStep(3)} onSubmit={handleSubmit} submitting={submitting} error={error} isBlocked={isBlocked} />}
+                  {step === 4 && (
+                    <Step4Payment
+                      data={formData}
+                      update={update}
+                      onBack={() => goToStep(3)}
+                      onSubmit={handleSubmit}
+                      onMarkPaidAndFinish={handleMarkPaidAndFinish}
+                      submitting={submitting}
+                      error={error}
+                      isBlocked={isBlocked}
+                    />
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
           </motion.div>
 
           <div className="mt-6 flex flex-wrap gap-3 justify-center">
-            {[
-              { icon: '🔒', text: 'Secure & Encrypted' },
-              { icon: '✅', text: 'FAA Compliant' },
-              { icon: '🇺🇸', text: 'U.S. Based Office' },
-              { icon: '⚡', text: 'Fast Processing' },
-            ].map((badge) => (
-              <div key={badge.text}
-                className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 shadow-sm">
-                <span>{badge.icon}</span>
-                {badge.text}
+            {[{ icon: '🔒', text: 'Secure & Encrypted' }, { icon: '✅', text: 'FAA Compliant' }, { icon: '🇺🇸', text: 'U.S. Based Office' }, { icon: '⚡', text: 'Fast Processing' }].map((badge) => (
+              <div key={badge.text} className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 shadow-sm">
+                <span>{badge.icon}</span>{badge.text}
               </div>
             ))}
           </div>

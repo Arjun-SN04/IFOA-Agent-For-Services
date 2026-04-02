@@ -11,5 +11,7 @@ router.post('/seed-admin-login', authCtrl.seedAdminLogin);
 router.put('/update-credentials', authMiddleware, authCtrl.updateCredentials);
 router.put('/update-profile', authMiddleware, authCtrl.updateProfile);
 router.put('/link-registration', authMiddleware, authCtrl.linkRegistration);
+router.put('/add-subscription', authMiddleware, authCtrl.addSubscription);
+router.put('/update-airline-name', authMiddleware, authCtrl.updateAirlineName);
 
 module.exports = router;

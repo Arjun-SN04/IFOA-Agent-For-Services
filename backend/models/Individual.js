@@ -54,8 +54,11 @@ const IndividualSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  isPaid:        { type: Boolean, default: false, index: true },  // true only after Payment record confirmed
+  paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }, // link to Payment doc
   invoiceStatus: { type: String }, // "Paid", "Pending", etc. from Excel
   invoiceNumber: { type: String },
+  stripePaymentIntentId: { type: String, default: '' },
 
   agreedToTerms: { type: Boolean, required: true },
   submittedAt: { type: Date, default: Date.now },

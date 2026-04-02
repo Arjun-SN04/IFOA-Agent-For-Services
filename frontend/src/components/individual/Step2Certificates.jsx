@@ -46,6 +46,16 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
     }
 
     setErrors(nextErrors)
+
+    // Scroll to first invalid field
+    const firstKey = Object.keys(nextErrors)[0]
+    if (firstKey) {
+      setTimeout(() => {
+        const el = document.getElementById(`field-${firstKey}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+    }
+
     return Object.keys(nextErrors).length === 0
   }
 
@@ -65,6 +75,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
         <div className="mt-5 space-y-5">
           <Field label="Certificate Type" required error={errors.primaryCertificate}>
             <select
+              id="field-primaryCertificate"
               value={data.primaryCertificate}
               onChange={(e) => update({ primaryCertificate: e.target.value })}
               className={inputCls('primaryCertificate')}
@@ -84,7 +95,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
             error={errors.primaryAirmanCertificate}
             helper="Choose NEW if you are still applying. Choose EXISTING if you already hold the certificate."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div id="field-primaryAirmanCertificate" className="grid gap-3 sm:grid-cols-2">
               {['EXISTING', 'NEW'].map((value) => {
                 const selected = data.primaryAirmanCertificate === value
 
@@ -179,6 +190,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
           <div className="mt-5 space-y-4 rounded-3xl border border-blue-100 bg-white p-5">
             <Field label="Secondary Certificate Type" required error={errors.secondaryCertificate}>
               <select
+                id="field-secondaryCertificate"
                 value={data.secondaryCertificate}
                 onChange={(e) => update({ secondaryCertificate: e.target.value })}
                 className={inputCls('secondaryCertificate')}

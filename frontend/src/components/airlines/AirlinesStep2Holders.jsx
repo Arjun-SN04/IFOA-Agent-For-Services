@@ -78,6 +78,22 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
       return e
     })
     setErrors(errs)
+
+    // Scroll to the first holder card that has errors
+    const firstInvalidIdx = errs.findIndex(e => Object.keys(e).length > 0)
+    if (firstInvalidIdx !== -1) {
+      setTimeout(() => {
+        const el = document.getElementById(`holder-card-${firstInvalidIdx}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          // Then focus on the first invalid input inside that card
+          const firstField = Object.keys(errs[firstInvalidIdx])[0]
+          const input = el.querySelector(`[data-field="${firstField}"]`)
+          if (input) setTimeout(() => input.focus({ preventScroll: true }), 350)
+        }
+      }, 50)
+    }
+
     return errs.every(e => Object.keys(e).length === 0)
   }
 
@@ -103,27 +119,20 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3 flex items-center justify-between text-sm">
           <span className="text-blue-700 font-semibold">
             {data.subscriptionPlan}
-            {maxHolders
-              ? ` · ${maxHolders} holder${maxHolders !== 1 ? 's' : ''} selected`
-              : ` · ${holders.length} added`}
+            {maxHolders ? ` · ${maxHolders} holder${maxHolders !== 1 ? 's' : ''} selected` : ` · ${holders.length} added`}
           </span>
           <span className="font-black text-blue-900">
-            {isUnlimited ? 'Flat: ' : 'Total: '}
-            <span className="text-green-700">${numericTotal} USD</span>
+            {isUnlimited ? 'Flat: ' : 'Total: '}<span className="text-green-700">${numericTotal} USD</span>
           </span>
         </div>
       )}
 
-      {/* Holder limit warning — blue instead of yellow/amber */}
       {atLimit && (
         <div className="flex items-start gap-3 bg-blue-50 border border-blue-300 rounded-xl p-4 text-sm text-blue-800">
           <span className="text-xl flex-shrink-0">⚠️</span>
           <div>
             <p className="font-bold">Maximum holders reached ({maxHolders})</p>
-            <p>
-              You selected <strong>{maxHolders}</strong> holder{maxHolders !== 1 ? 's' : ''} in Step 1.
-              To add more, go back and increase the exact holder count.
-            </p>
+            <p>You selected <strong>{maxHolders}</strong> holder{maxHolders !== 1 ? 's' : ''} in Step 1. To add more, go back and increase the exact holder count.</p>
           </div>
         </div>
       )}
@@ -131,24 +140,15 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
       {/* Holder cards */}
       <div className="space-y-5">
         {holders.map((h, i) => (
-          <div key={i} className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
+          <div key={i} id={`holder-card-${i}`} className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden scroll-mt-6">
             {/* Card header */}
             <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center">
-                  {i + 1}
-                </div>
-                <span className="text-sm font-bold text-gray-900">
-                  {h.fullName?.trim() ? h.fullName : `Team Member #${i + 1}`}
-                </span>
+                <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-black flex items-center justify-center">{i + 1}</div>
+                <span className="text-sm font-bold text-gray-900">{h.fullName?.trim() ? h.fullName : `Team Member #${i + 1}`}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => removeHolder(i)}
-                disabled={holders.length <= 1}
-                title="Remove this member"
-                className="w-7 h-7 flex items-center justify-center rounded-full text-red-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-25 disabled:cursor-not-allowed"
-              >
+              <button type="button" onClick={() => removeHolder(i)} disabled={holders.length <= 1} title="Remove this member"
+                className="w-7 h-7 flex items-center justify-center rounded-full text-red-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-25 disabled:cursor-not-allowed">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -160,20 +160,18 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
               {/* Row 1: Full Name + DOB */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    Full Name <span className="text-red-400">*</span>
-                  </label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Full Name <span className="text-red-400">*</span></label>
                   <input type="text" placeholder="Full legal name" value={h.fullName || ''}
                     onChange={e => onChange(i, 'fullName', e.target.value)}
+                    data-field="fullName"
                     className={inputCls(i, 'fullName')} />
                   {errors[i]?.fullName && <p className="text-red-500 text-xs">{errors[i].fullName}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    Date of Birth <span className="text-red-400">*</span>
-                  </label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Date of Birth <span className="text-red-400">*</span></label>
                   <input type="date" value={h.dateOfBirth || ''}
                     onChange={e => onChange(i, 'dateOfBirth', e.target.value)}
+                    data-field="dateOfBirth"
                     className={inputCls(i, 'dateOfBirth')} />
                   {errors[i]?.dateOfBirth && <p className="text-red-500 text-xs">{errors[i].dateOfBirth}</p>}
                 </div>
@@ -182,16 +180,13 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
               {/* Row 2: Certificate Type + Status */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    Certificate Type <span className="text-red-400">*</span>
-                  </label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Certificate Type <span className="text-red-400">*</span></label>
                   <select value={h.certificateType || ''}
                     onChange={e => onChange(i, 'certificateType', e.target.value)}
+                    data-field="certificateType"
                     className={inputCls(i, 'certificateType') + ' cursor-pointer'}>
                     <option value="">Select certificate type…</option>
-                    {CERTIFICATE_TYPES.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
+                    {CERTIFICATE_TYPES.map(type => (<option key={type} value={type}>{type}</option>))}
                   </select>
                   {errors[i]?.certificateType && <p className="text-red-500 text-xs">{errors[i].certificateType}</p>}
                 </div>
@@ -199,20 +194,12 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                   <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Certificate Status</label>
                   <div className="flex gap-3 pt-1">
                     {['NEW', 'EXISTING'].map(val => (
-                      <label key={val} className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all duration-150 flex-1 justify-center ${
-                        h.certificateStatus === val
-                          ? 'border-blue-600 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 hover:border-blue-200 text-gray-600 bg-white'
-                      }`}>
-                        <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          h.certificateStatus === val ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
-                        }`}>
+                      <label key={val} className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all duration-150 flex-1 justify-center ${h.certificateStatus === val ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-blue-200 text-gray-600 bg-white'}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${h.certificateStatus === val ? 'border-blue-600 bg-blue-600' : 'border-gray-300'}`}>
                           {h.certificateStatus === val && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                         </span>
-                        <input type="radio" name={`status-${i}`} value={val}
-                          checked={h.certificateStatus === val}
-                          onChange={e => onChange(i, 'certificateStatus', e.target.value)}
-                          className="hidden" />
+                        <input type="radio" name={`status-${i}`} value={val} checked={h.certificateStatus === val}
+                          onChange={e => onChange(i, 'certificateStatus', e.target.value)} className="hidden" />
                         {val === 'NEW' ? 'New' : 'Existing'}
                       </label>
                     ))}
@@ -223,20 +210,18 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
               {/* Row 3: FAA Cert # + IACRA FTN */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    FAA Certificate # <span className="text-red-400">*</span>
-                  </label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">FAA Certificate # <span className="text-red-400">*</span></label>
                   <input type="text" placeholder="FAA Certificate Number" value={h.faaCertificateNumber || ''}
                     onChange={e => onChange(i, 'faaCertificateNumber', e.target.value)}
+                    data-field="faaCertificateNumber"
                     className={inputCls(i, 'faaCertificateNumber')} />
                   {errors[i]?.faaCertificateNumber && <p className="text-red-500 text-xs">{errors[i].faaCertificateNumber}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    IACRA FTN # <span className="text-red-400">*</span>
-                  </label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">IACRA FTN # <span className="text-red-400">*</span></label>
                   <input type="text" placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber || ''}
                     onChange={e => onChange(i, 'iacraFtnNumber', e.target.value)}
+                    data-field="iacraFtnNumber"
                     className={inputCls(i, 'iacraFtnNumber')} />
                   {errors[i]?.iacraFtnNumber && <p className="text-red-500 text-xs">{errors[i].iacraFtnNumber}</p>}
                 </div>
@@ -244,27 +229,17 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
 
               {/* Row 4: Email */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  placeholder="team.member@example.com"
-                  value={h.email || ''}
+                <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Email Address</label>
+                <input type="email" placeholder="team.member@example.com" value={h.email || ''}
                   onChange={e => onChange(i, 'email', e.target.value)}
-                  className={inputCls(i, 'email')}
-                />
+                  className={inputCls(i, 'email')} />
                 {errors[i]?.email && <p className="text-red-500 text-xs">{errors[i].email}</p>}
               </div>
 
               {/* Secondary Certificate toggle */}
               <div className="pt-1">
-                <label className={`flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 ${
-                  h.hasSecondaryCertificate ? 'border-blue-200 bg-blue-50/50' : 'border-gray-200 hover:border-blue-200 bg-white'
-                }`}>
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 flex-shrink-0 ${
-                    h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'
-                  }`}>
+                <label className={`flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 ${h.hasSecondaryCertificate ? 'border-blue-200 bg-blue-50/50' : 'border-gray-200 hover:border-blue-200 bg-white'}`}>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 flex-shrink-0 ${h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
                     {h.hasSecondaryCertificate && (
                       <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -276,15 +251,13 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                   <span className="text-sm font-semibold text-gray-700">This holder has a secondary FAA certificate</span>
                 </label>
 
-                {/* Secondary certificate fields */}
                 {h.hasSecondaryCertificate && (
                   <div className="mt-3 ml-2 pl-4 border-l-2 border-blue-200 space-y-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                        Secondary Certificate Type <span className="text-red-400">*</span>
-                      </label>
+                      <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Secondary Certificate Type <span className="text-red-400">*</span></label>
                       <select value={h.secondaryCertificateType || ''}
                         onChange={e => onChange(i, 'secondaryCertificateType', e.target.value)}
+                        data-field="secondaryCertificateType"
                         className={inputCls(i, 'secondaryCertificateType') + ' cursor-pointer'}>
                         <option value="">Select secondary type…</option>
                         {CERTIFICATE_TYPES.filter(t => t !== h.certificateType).map(type => (
@@ -317,22 +290,14 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
 
       {/* Actions */}
       <div className="flex gap-3 justify-between pt-6 border-t border-gray-100">
-        <button
-          type="button"
-          onClick={addHolder}
-          disabled={atLimit}
+        <button type="button" onClick={addHolder} disabled={atLimit}
           title={atLimit ? `Limit of ${maxHolders} holders reached — go back to Step 1 to change` : 'Add a team member'}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 font-semibold rounded-lg transition-all ${
-            atLimit ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
-          }`}
-        >
+          className={`inline-flex items-center gap-1.5 px-4 py-2.5 font-semibold rounded-lg transition-all ${atLimit ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-100 text-blue-700'}`}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           Add Member
-          {maxHolders !== null && (
-            <span className="ml-1 text-xs opacity-60 font-normal">({holders.length}/{maxHolders})</span>
-          )}
+          {maxHolders !== null && <span className="ml-1 text-xs opacity-60 font-normal">({holders.length}/{maxHolders})</span>}
         </button>
 
         <div className="flex gap-3">

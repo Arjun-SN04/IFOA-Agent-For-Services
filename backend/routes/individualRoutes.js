@@ -8,6 +8,7 @@ const {
   updateIndividual,
   deleteIndividual,
   exportToExcel,
+  markIndividualPaid,
 } = require('../controller/individualController');
 
 // Public
@@ -15,6 +16,9 @@ router.post('/', createIndividual);
 
 // Email lookup (must be before /:id to avoid conflict)
 router.get('/by-email', getIndividualByEmail);
+
+// Mark as paid immediately after Stripe payment completes on the frontend
+router.patch('/:id/mark-paid', markIndividualPaid);
 
 // Admin
 router.get('/', getAllIndividuals);

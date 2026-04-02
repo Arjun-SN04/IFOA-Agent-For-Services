@@ -27,26 +27,46 @@ const inputCls =
 const selectCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300'
 
-function Badge({ value, type = 'payment' }) {
+/**
+ * Badge — renders a coloured pill.
+ * type = 'status'  : Active | Pending | Inactive
+ * type = 'payment' : paid | pending | failed  (reads record.isPaid when available)
+ * type = 'plan'    : subscription plan label
+ * type = 'isPaid'  : explicit boolean true/false badge
+ */
+function Badge({ value, type = 'payment', isPaid }) {
   let cls = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
   let dot = 'w-1.5 h-1.5 rounded-full flex-shrink-0 '
+  let label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'
+
   if (type === 'status') {
-    if (value === 'Active')       { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
+    // Status is only visually Active when isPaid is confirmed true
+    const trulyActive = value === 'Active' && isPaid !== false
+    if (trulyActive)              { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
     else if (value === 'Pending') { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400' }
     else                          { cls += 'bg-slate-100 border-slate-200 text-slate-500'; dot += 'bg-slate-400' }
+    // Override label when status says Active but isPaid is false
+    if (value === 'Active' && isPaid === false) label = 'Pending'
   } else if (type === 'plan') {
     if (value?.includes('Unlimited'))     { cls += 'bg-red-50 border-red-200 text-red-700'; dot += 'bg-red-500' }
     else if (value?.includes('Multiple')) { cls += 'bg-slate-100 border-slate-200 text-slate-700'; dot += 'bg-slate-500' }
     else                                  { cls += 'bg-slate-50 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
+  } else if (type === 'isPaid') {
+    // Explicit isPaid boolean badge
+    if (isPaid === true) { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500'; label = 'Paid' }
+    else                 { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400'; label = 'Unpaid' }
   } else {
-    if (value === 'paid')        { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
+    // payment type: paid is only valid when isPaid === true in DB
+    const confirmedPaid = value === 'paid' && isPaid !== false
+    if (confirmedPaid)           { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
     else if (value === 'failed') { cls += 'bg-red-50 border-red-200 text-red-600'; dot += 'bg-red-500' }
     else                         { cls += 'bg-slate-100 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
+    if (value === 'paid' && isPaid === false) label = 'Pending'
   }
   return (
     <span className={cls}>
       <span className={dot} />
-      {value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'}
+      {label}
     </span>
   )
 }
@@ -101,12 +121,32 @@ function IndividualViewModal({ record, onClose, onEdit }) {
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <ViewField label="Status" value={record.status} />
-                <ViewField label="Payment Status" value={record.paymentStatus} />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</span>
+                  <Badge value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Confirmed</span>
+                  <Badge type="isPaid" isPaid={record.isPaid} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Status</span>
+                  <Badge value={record.paymentStatus} isPaid={record.isPaid} />
+                </div>
                 <ViewField label="Invoice" value={record.invoiceStatus} />
+                <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
-                <ViewField label="Subscription Date" value={fmtDate(record.subscriptionDate)} />
-                <ViewField label="Expiry" value={record.expirationDate ? fmtDate(record.expirationDate) : 'Never'} />
+                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
+                <ViewField
+                  label="Expiration Date"
+                  value={
+                    record.subscriptionPlan === 'Unlimited Plan'
+                      ? 'Never (Unlimited)'
+                      : record.expirationDate
+                      ? fmtDate(record.expirationDate)
+                      : record.isPaid ? '—' : 'Activates on payment'
+                  }
+                />
                 <ViewField label="Price" value={fmtMoney(record.price)} />
                 <ViewField label="Service Fees" value={fmtMoney(record.totalServiceFees)} />
               </div>
@@ -184,14 +224,34 @@ function AirlineViewModal({ record, onClose, onEdit }) {
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <ViewField label="Status" value={record.status} />
-                <ViewField label="Payment" value={record.paymentStatus} />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</span>
+                  <Badge value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Confirmed</span>
+                  <Badge type="isPaid" isPaid={record.isPaid} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment</span>
+                  <Badge value={record.paymentStatus} isPaid={record.isPaid} />
+                </div>
                 <ViewField label="Invoice" value={record.invoiceStatus} />
+                <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
                 <ViewField label="Holder Count" value={record.holderCount} />
                 <ViewField label="Exact Count" value={record.holderCountValue} />
-                <ViewField label="Subscription Date" value={fmtDate(record.subscriptionDate)} />
-                <ViewField label="Expiry" value={record.expirationDate ? fmtDate(record.expirationDate) : 'Never'} />
+                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
+                <ViewField
+                  label="Expiration Date"
+                  value={
+                    record.subscriptionPlan === 'Unlimited Plan'
+                      ? 'Never (Unlimited)'
+                      : record.expirationDate
+                      ? fmtDate(record.expirationDate)
+                      : record.isPaid ? '—' : 'Activates on payment'
+                  }
+                />
                 <ViewField label="Price/Cert" value={fmtMoney(record.pricePerCertificate ?? record.pricePerCert)} />
                 <ViewField label="Total Fees" value={fmtMoney(record.totalServiceFees ?? record.totalAmount)} />
               </div>
@@ -307,7 +367,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 <Field label="State / Province"><input className={inputCls} value={form.state || ''} onChange={e => set('state', e.target.value)} /></Field>
                 <Field label="Postal Code"><input className={inputCls} value={form.postalCode || ''} onChange={e => set('postalCode', e.target.value)} /></Field>
                 <Field label="Country"><input className={inputCls} value={form.country || ''} onChange={e => set('country', e.target.value)} /></Field>
-                <div className="sm:col-span-2"><Field label="Payment Email (PayPal)"><input className={inputCls} type="email" placeholder="paypal@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
+                <div className="sm:col-span-2"><Field label="Payment Email"><input className={inputCls} type="email" placeholder="billing@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
             <div><SectionHead label="FAA Certificate" />
@@ -343,6 +403,17 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
             </div>
             <div><SectionHead label="Payment & Invoice" />
               <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Payment Confirmed (isPaid)">
+                  <select className={selectCls} value={String(form.isPaid === true)} onChange={e => {
+                    const paid = e.target.value === 'true'
+                    set('isPaid', paid)
+                    if (paid) { set('paymentStatus', 'paid'); set('status', 'Active') }
+                    else { set('paymentStatus', 'pending'); set('status', 'Pending') }
+                  }}>
+                    <option value="false">Not Confirmed (Unpaid)</option>
+                    <option value="true">Confirmed (Paid)</option>
+                  </select>
+                </Field>
                 <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
                 <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
                 <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
@@ -362,7 +433,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
   )
 }
 
-// ─── Airline Edit Modal — FULL fields ─────────────────────────────────────────
+// ─── Airline Edit Modal ────────────────────────────────────────────────────────
 function AirlineEditModal({ record, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
@@ -390,10 +461,8 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
           </div>
-
           <div className="px-6 py-5 space-y-6 max-h-[68vh] overflow-y-auto">
             {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
-
             <div><SectionHead label="Status & Subscription" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Status"><select className={selectCls} value={form.status || 'Pending'} onChange={e => set('status', e.target.value)}><option>Pending</option><option>Active</option><option>Inactive</option></select></Field>
@@ -406,7 +475,6 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Total Fees (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.totalServiceFees ?? form.totalAmount ?? ''} onChange={e => set('totalServiceFees', parseFloat(e.target.value))} /></Field>
               </div>
             </div>
-
             <div><SectionHead label="Airline / Operator" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2"><Field label="Company Name"><input className={inputCls} value={form.airlineName || ''} onChange={e => set('airlineName', e.target.value)} /></Field></div>
@@ -418,7 +486,6 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Country"><input className={inputCls} value={form.country || ''} onChange={e => set('country', e.target.value)} /></Field>
               </div>
             </div>
-
             <div><SectionHead label="Point of Contact" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="First Name"><input className={inputCls} value={form.firstName || form.contactFirstName || ''} onChange={e => set('firstName', e.target.value)} /></Field>
@@ -427,10 +494,9 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Date of Birth"><input className={inputCls} type="date" value={form.dateOfBirth ? String(form.dateOfBirth).slice(0,10) : ''} onChange={e => set('dateOfBirth', e.target.value)} /></Field>
                 <Field label="Email"><input className={inputCls} type="email" value={form.email || form.contactEmail || ''} onChange={e => set('email', e.target.value)} /></Field>
                 <Field label="Phone"><input className={inputCls} value={form.phone || form.contactPhone || ''} onChange={e => set('phone', e.target.value)} /></Field>
-                <div className="sm:col-span-2"><Field label="Payment Email (PayPal)"><input className={inputCls} type="email" placeholder="paypal@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
+                <div className="sm:col-span-2"><Field label="Payment Email"><input className={inputCls} type="email" placeholder="billing@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
-
             {form.certificateHolders?.length > 0 && (
               <div><SectionHead label={`Certificate Holders (${form.certificateHolders.length})`} />
                 <div className="space-y-4">
@@ -487,16 +553,25 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 </div>
               </div>
             )}
-
             <div><SectionHead label="Payment & Invoice" />
               <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Payment Confirmed (isPaid)">
+                  <select className={selectCls} value={String(form.isPaid === true)} onChange={e => {
+                    const paid = e.target.value === 'true'
+                    set('isPaid', paid)
+                    if (paid) { set('paymentStatus', 'paid'); set('status', 'Active') }
+                    else { set('paymentStatus', 'pending'); set('status', 'Pending') }
+                  }}>
+                    <option value="false">Not Confirmed (Unpaid)</option>
+                    <option value="true">Confirmed (Paid)</option>
+                  </select>
+                </Field>
                 <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
                 <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
                 <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
               </div>
             </div>
           </div>
-
           <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
             <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
@@ -535,12 +610,52 @@ function EmptyState({ message = 'No records found' }) {
   )
 }
 
+// ─── Shared action buttons for a record row ────────────────────────────────────
+function RowActions({ onView, onEdit, onDelete, isDeleting }) {
+  return (
+    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+      <button onClick={onView} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /></svg>
+        View
+      </button>
+      <button onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
+        Edit
+      </button>
+      <button onClick={onDelete} disabled={isDeleting}
+        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
+        {isDeleting ? '…' : 'Del'}
+      </button>
+    </div>
+  )
+}
+
+// ─── Grouped Individuals Table ─────────────────────────────────────────────────
 function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
+  const [expanded, setExpanded] = useState({})
+
+  const groups = useMemo(() => {
+    const map = {}
+    data.forEach(r => {
+      const key = (r.email || '').toLowerCase().trim() || r._id
+      if (!map[key]) map[key] = []
+      map[key].push(r)
+    })
+    return Object.values(map).map(g => g.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
+  }, [data])
+
+  const toggle = (key) => setExpanded(p => ({ ...p, [key]: !p[key] }))
+
   if (!data.length) return <EmptyState message="No individual records found" />
+
+  const planLabel = (p) =>
+    p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('Unlimited') ? 'Unlimited' : p?.includes('1 Year') ? '1 Year' : p || '—'
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 900 }}>
+        <table className="w-full text-sm" style={{ minWidth: 920 }}>
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Name & Certificate</th>
@@ -551,64 +666,106 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.map(r => (
-              <tr key={r._id} className="hover:bg-slate-50/60 transition-colors cursor-pointer" onClick={() => onView(r)}>
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 text-xs font-black flex items-center justify-center flex-shrink-0">
-                      {((r.firstName?.[0] || '') + (r.lastName?.[0] || '')).toUpperCase() || 'I'}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 text-sm leading-tight truncate w-32">
-                        {[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 truncate w-32">{r.primaryCertificate || 'No cert type'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-4">
-                  <p className="text-slate-700 text-xs truncate w-36">{r.email || '—'}</p>
-                  <p className="text-slate-400 text-[11px] mt-0.5">{r.phone || '—'}</p>
-                </td>
-                <td className="px-4 py-4">
-                  <p className="text-slate-600 text-xs truncate w-20">{r.country || '—'}</p>
-                </td>
-                <td className="px-4 py-4">
-                  <span className="inline-block text-xs text-slate-700 font-medium leading-snug">
-                    {r.subscriptionPlan?.includes('Multiple') ? 'Multiple Yrs'
-                      : r.subscriptionPlan?.includes('Unlimited') ? 'Unlimited'
-                      : r.subscriptionPlan?.includes('1 Year') ? '1 Year' : r.subscriptionPlan || '—'}
-                  </span>
-                </td>
-                <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(r.price)}</td>
-                <td className="px-4 py-4"><Badge value={r.status} type="status" /></td>
-                <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
-                <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(r.createdAt)}</td>
-                <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onEdit(r)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap"
-                    >
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => onDelete(r._id, 'individual')}
-                      disabled={deleting === r._id}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap"
-                    >
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
-                      {deleting === r._id ? '…' : 'Delete'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <tbody>
+            {groups.map(group => {
+              const primary = group[0]
+              const key = (primary.email || '').toLowerCase().trim() || primary._id
+              const isOpen = !!expanded[key]
+              const hasMany = group.length > 1
+              const initials = ((primary.firstName?.[0] || '') + (primary.lastName?.[0] || '')).toUpperCase() || 'I'
+
+              return (
+                <>
+                  {/* ── Primary row ── */}
+                  <tr key={primary._id}
+                    className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
+                    onClick={() => hasMany ? toggle(key) : onView(primary)}>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">
+                            {[primary.firstName, primary.lastName].filter(Boolean).join(' ') || '—'}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{primary.primaryCertificate || 'No cert type'}</p>
+                          {hasMany && (
+                            <button
+                              onClick={e => { e.stopPropagation(); toggle(key) }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap"
+                            >
+                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                              Multiple Subscriptions ({group.length})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-slate-700 text-xs truncate max-w-[140px]">{primary.email || '—'}</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">{primary.phone || '—'}</p>
+                    </td>
+                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
+                    <td className="px-4 py-4"><span className="text-xs text-slate-700 font-medium">{planLabel(primary.subscriptionPlan)}</span></td>
+                    <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(primary.price)}</td>
+                    <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
+                    <td className="px-4 py-4">
+                      <RowActions
+                        onView={() => onView(primary)}
+                        onEdit={() => onEdit(primary)}
+                        onDelete={() => onDelete(primary._id, 'individual')}
+                        isDeleting={deleting === primary._id}
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ── Collapsed sub-rows ── */}
+                  {hasMany && isOpen && group.map((sub, si) => (
+                    <tr key={sub._id + '-sub'}
+                      className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                      onClick={() => onView(sub)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3 pl-4">
+                          <div className="flex flex-col items-center flex-shrink-0">
+                            <div className="w-px h-2 bg-amber-300" />
+                            <div className="w-2 h-2 rounded-full bg-amber-400 border-2 border-white" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
+                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[110px]">
+                              {[primary.firstName, primary.lastName].filter(Boolean).join(' ') || '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
+                      <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
+                      <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <RowActions
+                          onView={() => onView(sub)}
+                          onEdit={() => onEdit(sub)}
+                          onDelete={() => onDelete(sub._id, 'individual')}
+                          isDeleting={deleting === sub._id}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -616,81 +773,155 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
   )
 }
 
+// ─── Grouped Airlines Table — NO horizontal scroll, same structure as Individuals ──
 function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
+  const [expanded, setExpanded] = useState({})
+
+  const groups = useMemo(() => {
+    const map = {}
+    data.forEach(r => {
+      const key = (r.airlineName || '').toLowerCase().trim() || r._id
+      if (!map[key]) map[key] = []
+      map[key].push(r)
+    })
+    return Object.values(map).map(g => g.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
+  }, [data])
+
+  const toggle = (key) => setExpanded(p => ({ ...p, [key]: !p[key] }))
+
   if (!data.length) return <EmptyState message="No airline records found" />
+
+  const planLabel = (p) =>
+    p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || '—'
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 960 }}>
+        <table className="w-full text-sm" style={{ minWidth: 920 }}>
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-48">Airline</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Airline & Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Email</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Country</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders / Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.map(r => (
-              <tr key={r._id} className="hover:bg-slate-50/60 transition-colors cursor-pointer" onClick={() => onView(r)}>
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0">✈</div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 text-sm leading-tight truncate w-28">{r.airlineName || '—'}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 truncate w-28">{r.city || r.country || '—'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-4">
-                  <p className="text-slate-700 text-xs truncate w-36">
-                    {[r.firstName, r.lastName].filter(Boolean).join(' ') || [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || '—'}
-                  </p>
-                  <p className="text-slate-400 text-[11px] mt-0.5 truncate w-36">{r.email || r.contactEmail || '—'}</p>
-                </td>
-                <td className="px-4 py-4">
-                  <p className="text-slate-600 text-xs truncate w-20">{r.country || '—'}</p>
-                </td>
-                <td className="px-4 py-4">
-                  <span className="text-xs font-medium text-slate-700 leading-snug">
-                    {r.subscriptionPlan?.includes('Unlimited') ? 'Unlimited'
-                      : r.subscriptionPlan?.includes('Multiple') ? 'Multiple Yrs'
-                      : r.subscriptionPlan?.includes('1 Year') ? '1 Year'
-                      : r.subscriptionPlan || '—'}
-                  </span>
-                </td>
-                <td className="px-4 py-4">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">{r.certificateHolders?.length || 0}</span>
-                </td>
-                <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(r.totalAmount || r.totalServiceFees)}</td>
-                <td className="px-4 py-4"><Badge value={r.paymentStatus} /></td>
-                <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(r.createdAt)}</td>
-                <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onEdit(r)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap"
-                    >
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => onDelete(r._id, 'airline')}
-                      disabled={deleting === r._id}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap"
-                    >
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
-                      {deleting === r._id ? '…' : 'Delete'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <tbody>
+            {groups.map(group => {
+              const primary = group[0]
+              const key = (primary.airlineName || '').toLowerCase().trim() || primary._id
+              const isOpen = !!expanded[key]
+              const hasMany = group.length > 1
+              const contactName = [primary.firstName, primary.lastName].filter(Boolean).join(' ') ||
+                [primary.contactFirstName, primary.contactLastName].filter(Boolean).join(' ') || ''
+
+              return (
+                <>
+                  {/* ── Primary row ── */}
+                  <tr key={primary._id}
+                    className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
+                    onClick={() => hasMany ? toggle(key) : onView(primary)}>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0 select-none">✈</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">
+                            {primary.airlineName || '—'}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
+                          {hasMany && (
+                            <button
+                              onClick={e => { e.stopPropagation(); toggle(key) }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap"
+                            >
+                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                              Multiple Subscriptions ({group.length})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || '—'}</p>
+                    </td>
+                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
+                    <td className="px-4 py-4"><span className="text-xs font-medium text-slate-700">{planLabel(primary.subscriptionPlan)}</span></td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+                          {primary.certificateHolders?.length || 0}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                          {fmtMoney(primary.totalAmount || primary.totalServiceFees)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
+                    <td className="px-4 py-4">
+                      <RowActions
+                        onView={() => onView(primary)}
+                        onEdit={() => onEdit(primary)}
+                        onDelete={() => onDelete(primary._id, 'airline')}
+                        isDeleting={deleting === primary._id}
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ── Sub-rows (collapsed) — same structure, no scroll ── */}
+                  {hasMany && isOpen && group.map((sub, si) => (
+                    <tr key={sub._id + '-sub'}
+                      className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                      onClick={() => onView(sub)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3 pl-4">
+                          <div className="flex flex-col items-center flex-shrink-0">
+                            <div className="w-px h-2 bg-amber-300" />
+                            <div className="w-2 h-2 rounded-full bg-amber-400 border-2 border-white" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
+                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[100px]">{sub.airlineName || '—'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[130px]">{sub.email || sub.contactEmail || '—'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
+                      <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">
+                            {sub.certificateHolders?.length || 0}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                            {fmtMoney(sub.totalAmount || sub.totalServiceFees)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <RowActions
+                          onView={() => onView(sub)}
+                          onEdit={() => onEdit(sub)}
+                          onDelete={() => onDelete(sub._id, 'airline')}
+                          isDeleting={deleting === sub._id}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -701,20 +932,18 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
 function OverviewPanel({ individuals, airlines }) {
   const indTotal   = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
   const airTotal   = airlines.reduce((s, r) => s + (Number(r.totalAmount) || Number(r.totalServiceFees) || 0), 0)
-  const indPaid    = individuals.filter(r => r.paymentStatus === 'paid').length
-  const airPaid    = airlines.filter(r => r.paymentStatus === 'paid').length
+  // Use isPaid as the source of truth; fall back to paymentStatus for legacy records
+  const indPaid    = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
+  const airPaid    = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const allHolders = airlines.reduce((s, r) => s + (r.certificateHolders?.length || 0), 0)
-
   const planCounts = {
     '1 Year':     individuals.filter(r => r.subscriptionPlan === '1 Year Subscription Plan').length,
     'Multi-Year': individuals.filter(r => r.subscriptionPlan === 'Multiple Years Subscription Plan').length,
     'Unlimited':  individuals.filter(r => r.subscriptionPlan === 'Unlimited Plan').length,
   }
-
   const countryCounts = {}
   individuals.forEach(r => { if (r.country) countryCounts[r.country] = (countryCounts[r.country] || 0) + 1 })
   const topCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -731,7 +960,6 @@ function OverviewPanel({ individuals, airlines }) {
         <StatCard label="Paid" value={indPaid + airPaid} sub={`${indPaid} ind · ${airPaid} air`} accent="emerald"
           icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>} />
       </div>
-
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Individual Plan Distribution</p>
@@ -788,6 +1016,7 @@ export default function AdminDashboard() {
   const [filterPlan, setFilterPlan]   = useState('All')
   const [filterPayment, setFilterPayment] = useState('All')
   const [filterStatus, setFilterStatus]   = useState('All')
+  const [filterSubType, setFilterSubType] = useState('all')
 
   const [viewRec, setViewRec]   = useState(null)
   const [viewType, setViewType] = useState(null)
@@ -814,6 +1043,18 @@ export default function AdminDashboard() {
       setLoadErr('Could not connect to the server. Is the backend running on port 5000?')
     } finally { setLoading(false) }
   }
+
+  const multiKeySet = useMemo(() => {
+    const src = tab === 'individuals' ? individuals : airlines
+    const map = {}
+    src.forEach(r => {
+      const key = tab === 'airlines'
+        ? (r.airlineName || '').toLowerCase().trim() || r._id
+        : (r.email || '').toLowerCase().trim() || r._id
+      map[key] = (map[key] || 0) + 1
+    })
+    return new Set(Object.entries(map).filter(([, c]) => c > 1).map(([k]) => k))
+  }, [individuals, airlines, tab])
 
   const handleSave = async (id, data, type) => {
     setSaving(true)
@@ -844,6 +1085,7 @@ export default function AdminDashboard() {
   }
 
   const src = tab === 'individuals' ? individuals : airlines
+
   const filtered = useMemo(() => src.filter(r => {
     const q = search.toLowerCase()
     const matchSearch = !q || (
@@ -851,11 +1093,32 @@ export default function AdminDashboard() {
         ? [`${r.firstName || ''} ${r.lastName || ''}`, r.email, r.country, r.faaCertificateNumber, r.phone].some(v => String(v || '').toLowerCase().includes(q))
         : [r.airlineName, r.email || r.contactEmail, r.country, `${r.firstName || ''} ${r.lastName || ''}`].some(v => String(v || '').toLowerCase().includes(q))
     )
+    const groupKey = tab === 'airlines'
+      ? (r.airlineName || '').toLowerCase().trim() || r._id
+      : (r.email || '').toLowerCase().trim() || r._id
+    const isMulti = multiKeySet.has(groupKey)
+    const matchSubType = filterSubType === 'all' || (filterSubType === 'multi' && isMulti) || (filterSubType === 'single' && !isMulti)
+
     return matchSearch
       && (filterPlan === 'All' || r.subscriptionPlan === filterPlan)
       && (filterPayment === 'All' || r.paymentStatus === filterPayment)
       && (filterStatus === 'All' || r.status === filterStatus)
-  }), [src, search, filterPlan, filterPayment, filterStatus, tab])
+      && matchSubType
+  }), [src, search, filterPlan, filterPayment, filterStatus, filterSubType, tab, multiKeySet])
+
+  const uniqueAccountCount = useMemo(() => {
+    if (tab === 'overview') return 0
+    const keys = new Set()
+    filtered.forEach(r => {
+      const key = tab === 'airlines'
+        ? (r.airlineName || '').toLowerCase().trim() || r._id
+        : (r.email || '').toLowerCase().trim() || r._id
+      keys.add(key)
+    })
+    return keys.size
+  }, [filtered, tab])
+
+  const multiAccountCount = useMemo(() => multiKeySet.size, [multiKeySet])
 
   const PLANS    = ['All', '1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
@@ -866,6 +1129,9 @@ export default function AdminDashboard() {
     { key: 'individuals', label: 'Individuals', count: individuals.length },
     { key: 'airlines',    label: 'Airlines',    count: airlines.length },
   ]
+
+  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterSubType('all') }
+  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || filterSubType !== 'all'
 
   return (
     <DashboardLayout>
@@ -887,10 +1153,7 @@ export default function AdminDashboard() {
       {editRec && editType === 'airline'    && <AirlineEditModal    record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
 
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Admin Control Center</p>
-        </div>
+        <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Admin Control Center</p>
         <h1 className="text-2xl font-black text-slate-900">Registrations Dashboard</h1>
         <p className="text-slate-500 text-sm mt-1">Manage all pilot and airline operator registrations.</p>
       </div>
@@ -904,6 +1167,7 @@ export default function AdminDashboard() {
       )}
 
       <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-6 shadow-sm">
+        {/* Tab bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-100">
           <div className="flex flex-wrap gap-2">
             {TAB_CONFIG.map(t => (
@@ -911,7 +1175,7 @@ export default function AdminDashboard() {
                 onClick={() => {
                   const path = t.key === 'overview' ? '/admin' : t.key === 'individuals' ? '/admin/individuals' : '/admin/airlines'
                   navigate(path)
-                  setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All')
+                  clearFilters()
                 }}
                 className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${tab === t.key ? 'bg-red-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 {t.label}
@@ -929,6 +1193,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
+        {/* Filter bar */}
         {tab !== 'overview' && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
@@ -948,23 +1213,42 @@ export default function AdminDashboard() {
               className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-red-500 text-slate-600 transition">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
+            <div className="flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden text-xs font-semibold">
+              {[
+                { val: 'all',    label: 'All Accounts' },
+                { val: 'multi',  label: `Multiple Subs${multiAccountCount > 0 ? ` (${multiAccountCount})` : ''}` },
+                { val: 'single', label: 'Single Sub' },
+              ].map(opt => (
+                <button key={opt.val} onClick={() => setFilterSubType(opt.val)}
+                  className={`px-3 py-2 transition-colors whitespace-nowrap ${filterSubType === opt.val ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition ml-auto">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
               Export Excel
             </a>
-            {(search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All') && (
-              <button onClick={() => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All') }}
-                className="text-xs text-red-600 font-semibold hover:underline px-1">Clear filters</button>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="text-xs text-red-600 font-semibold hover:underline px-1">Clear filters</button>
             )}
           </div>
         )}
       </div>
 
       {tab !== 'overview' && !loading && (
-        <p className="text-sm text-slate-500 mb-4 px-1">
-          Showing <span className="font-semibold text-slate-800">{filtered.length}</span> of <span className="font-semibold text-slate-800">{src.length}</span> records
-        </p>
+        <div className="flex items-center gap-3 mb-4 px-1">
+          <p className="text-sm text-slate-500">
+            Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
+            <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
+          </p>
+          {filterSubType === 'multi' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-300 px-3 py-1 text-[11px] font-bold text-amber-700">
+              Showing accounts with multiple subscriptions only
+            </span>
+          )}
+        </div>
       )}
 
       {loading ? (

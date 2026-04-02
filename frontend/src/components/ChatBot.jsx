@@ -51,10 +51,16 @@ IFOA USA Agent for Service — Subscription Plans:
    • FAA Compliance Guaranteed
    • Real-Time Notification
    • Document Scanning & Forwarding
-   • Credit Card or Wire Payment
+   • Credit Card (Stripe) or Wire Payment
    • Unlimited Certificates
    Pricing: $60/cert/year (3–5 holders), $55/cert/year (5–10), $49/cert/year (10+)
    Unlimited option: $265/year (3–5), $255/year (5–10), $245/year (10+)
+
+PAYMENT INFORMATION:
+   • We accept payments via Stripe (credit/debit card) — instant activation upon successful payment.
+   • You can also choose "Pay Later" — submit your registration now and receive an invoice by email; your plan activates once payment is received.
+   • All card payments are secured by Stripe with 256-bit SSL encryption.
+   • We do NOT accept PayPal. Payment is processed exclusively through Stripe or wire transfer (Airlines plan only).
 `
 
 // ── Pre-registration steps panel ─────────────────────────────────────────────
@@ -132,7 +138,7 @@ function PreStepsPanel({ onContinue }) {
         {/* Step 3 */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-2">
-            <span className="w-6 h-6 rounded-full bg-slate-300 text-slate-600 text-[11px] font-black flex items-center justify-center flex-shrink-0">3</span>
+            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center flex-shrink-0">3</span>
             <p className="text-sm font-bold text-slate-500">Fill the IFOA Registration Form</p>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed px-3.5 pb-3.5">
@@ -243,8 +249,8 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
             className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             {msg.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
-                IF
+              <div className="w-9 h-9 rounded-full text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                <img src={ifoaLogo} alt="" />
               </div>
             )}
             <div className={`max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed ${
@@ -344,11 +350,9 @@ export default function ChatBot() {
   const [unread, setUnread] = useState(0)
 
   // ── Hero visibility tracking ─────────────────────────────────────────────
-  // Re-run whenever the route changes so we always observe the correct hero element.
   const { pathname } = useLocation()
   const [heroVisible, setHeroVisible] = useState(true)
 
-  // Never show chatbot on auth pages, admin login, or any dashboard/profile/subscription page
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/signup' ||
@@ -358,23 +362,19 @@ export default function ChatBot() {
     pathname.startsWith('/admin')
 
   useEffect(() => {
-    // Reset: assume hero is visible on every navigation (safe default)
     setHeroVisible(true)
     setOpen(false)
 
-    // Wait one tick so the new page's DOM has rendered
     const timer = setTimeout(() => {
       const hero = document.querySelector('[data-hero]')
 
       if (!hero) {
-        // No hero on this page — show chatbot immediately
         setHeroVisible(false)
         return
       }
 
       const observer = new IntersectionObserver(
         ([entry]) => {
-          // Hero is visible → hide chatbot; hero is gone → show chatbot
           setHeroVisible(entry.isIntersecting)
           if (entry.isIntersecting) setOpen(false)
         },
@@ -382,13 +382,11 @@ export default function ChatBot() {
       )
 
       observer.observe(hero)
-
-      // Cleanup when route changes again or component unmounts
       return () => observer.disconnect()
     }, 50)
 
     return () => clearTimeout(timer)
-  }, [pathname]) // ← re-runs on every route change, no MutationObserver needed
+  }, [pathname])
 
   useEffect(() => {
     if (open) setUnread(0)
@@ -400,7 +398,6 @@ export default function ChatBot() {
     }
   }, [messages])
 
-  // Don't render on auth pages or while hero is visible
   if (isAuthPage || heroVisible) return null
 
   return (
@@ -453,7 +450,6 @@ export default function ChatBot() {
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
                     <img src={ifoaLogo} alt="IFOA" className="h-8 w-auto object-contain" />
                   </div>
-                  
                 </div>
                 <div>
                   <p className="text-sm font-bold text-gray-900 leading-none">IFOA Assistant</p>

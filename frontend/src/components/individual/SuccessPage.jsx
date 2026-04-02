@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Footer from '../layout/footer'
@@ -18,6 +19,7 @@ const STEPS = [
 ]
 
 export default function SuccessPage({ name }) {
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [])
   return (
     <>
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fbff_0%,#eef5ff_100%)] px-4 py-14">

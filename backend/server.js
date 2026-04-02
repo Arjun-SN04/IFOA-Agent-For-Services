@@ -8,36 +8,36 @@ dotenv.config();
 const app = express();
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// Allow requests from your Vercel frontend (and localhost for dev)
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.FRONTEND_URL, // set this in Render environment variables
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    // Allow exact matches
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow all Vercel preview deployments (*.vercel.app)
     if (origin.endsWith('.vercel.app')) return callback(null, true);
     return callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
 }));
 
+// ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
+// ── JSON body parser for all other routes ─────────────────────────────────────
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/auth',        require('./routes/authRoutes'));
 app.use('/api/individuals', require('./routes/individualRoutes'));
-app.use('/api/airlines', require('./routes/airlinesRoutes'));
-app.use('/api/payments', require('./routes/paymentRoutes'));
-app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/airlines',    require('./routes/airlinesRoutes'));
+app.use('/api/payments',    require('./routes/paymentRoutes'));
+app.use('/api/chat',        require('./routes/chatRoutes'));
 
-// Health check — Render uses this to confirm the service is up
+// Health check
 app.get('/', (req, res) => res.json({ message: 'Agent for Service API is running' }));
 
 // ── Database + Server ─────────────────────────────────────────────────────────
