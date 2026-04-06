@@ -480,3 +480,108 @@ exports.exportAirlinesExcel = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── Admin: Get all signed-up airlines for dropdown ────────────────────────────
+exports.getSignUpAirlines = async (req, res) => {
+  try {
+    const airlines = await Airlines.find({ status: 'Active' })
+      .select('airlineName email _id')
+      .sort({ airlineName: 1 });
+
+    const formattedAirlines = airlines.map(a => ({
+      id: a._id,
+      name: a.airlineName,
+      email: a.email,
+    }));
+
+    res.json({ success: true, data: formattedAirlines });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: Create airline form with new User account ───────────────────────────
+exports.adminCreateAirlineForm = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const body = { ...req.body };
+
+    // Normalize emails
+    if (body.email) body.email = body.email.toLowerCase().trim();
+    if (body.pointOfContactEmail) body.pointOfContactEmail = body.pointOfContactEmail.toLowerCase().trim();
+
+    // Resolve price server-side
+    body.pricePerCertificate = resolvePricePerCertificate(body);
+
+    const isUnlimited = body.subscriptionPlan === 'Unlimited Plan';
+    const holdersFilled = body.certificateHolders?.length || 0;
+
+    body.committedCount = body.holderCountValue
+      ? parseInt(body.holderCountValue, 10)
+      : holdersFilled;
+
+    body.totalAmount = isUnlimited
+      ? body.pricePerCertificate
+      : body.pricePerCertificate * body.committedCount;
+
+    body.amountPaid = isUnlimited
+      ? body.pricePerCertificate
+      : body.pricePerCertificate * holdersFilled;
+
+    body.status = 'Active';
+    body.paymentStatus = 'paid';
+    body.isPaid = true;
+    body.subscriptionDate = new Date();
+
+    // Create airline record
+    const airline = new Airlines(body);
+    await airline.save();
+
+    // Create or update User account for airline
+    let user = await User.findOne({ email: body.pointOfContactEmail });
+
+    if (!user) {
+      // Create new airline user with email and airline name as password
+      user = new User({
+        email: body.pointOfContactEmail,
+        password: body.airlineName, // Password is airline name
+        role: 'airline',
+        airlineName: body.airlineName,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        registrationId: airline._id,
+        registrationModel: 'Airlines',
+        subscriptionIds: [airline._id],
+      });
+      await user.save();
+    } else {
+      // Update existing user if needed
+      user.airlineName = body.airlineName;
+      user.registrationId = airline._id;
+      user.registrationModel = 'Airlines';
+      if (!user.subscriptionIds.includes(airline._id)) {
+        user.subscriptionIds.push(airline._id);
+      }
+      await user.save();
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        airline: airline,
+        user: {
+          email: user.email,
+          role: user.role,
+          airlineName: user.airlineName,
+        },
+        loginCredentials: {
+          email: body.pointOfContactEmail,
+          password: body.airlineName,
+        },
+      },
+      message: 'Airline form created successfully. Login credentials have been set.',
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};

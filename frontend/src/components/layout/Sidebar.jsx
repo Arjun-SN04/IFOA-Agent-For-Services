@@ -48,11 +48,12 @@ function NavItem({ item, collapsed }) {
       title={collapsed ? item.label : undefined}
       className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-150 ${
         active
-          ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-md shadow-red-500/20'
-          : 'text-slate-800 hover:bg-gray-100 hover:text-red-600'
+          ? 'text-white shadow-sm'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
       }`}
+      style={active ? { background: '#1d4ed8' } : {}}
     >
-      <span className={`flex-shrink-0 w-[18px] h-[18px] ${active ? 'text-white' : 'text-slate-500 group-hover:text-red-500'}`}>
+      <span className={`flex-shrink-0 w-[18px] h-[18px] ${active ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}>
         {item.icon}
       </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -79,7 +80,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
   return (
     <aside
-      className={`fixed left-0 top-0 z-40 h-screen flex flex-col bg-white border-r border-slate-200 shadow-sm transition-all duration-300 ${
+      className={`fixed left-0 top-0 z-40 h-screen flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ${
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
       style={{
@@ -87,6 +88,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           typeof window !== 'undefined' && window.innerWidth < 768 && !mobileOpen
             ? 'translateX(-100%)'
             : 'translateX(0)',
+        boxShadow: '1px 0 0 0 #e2e8f0',
       }}
     >
       {/* ── Top strip: branding + collapse toggle ── */}
@@ -97,21 +99,25 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       >
         {collapsed ? (
           <Link to="/" title="Go to Home" className="flex items-center justify-center">
-            <img src={ifoaLogo} alt="IFOA USA" className="h-7 w-auto object-contain" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#0f172a' }}>
+              <img src={ifoaLogo} alt="IFOA USA" className="h-5 w-auto object-contain" />
+            </div>
           </Link>
         ) : (
           <Link to="/" className="flex items-center pl-1 group" title="Go to Home">
-            <img
-              src={ifoaLogo}
-              alt="IFOA USA"
-              className="h-9 w-auto object-contain flex-shrink-0"
-            />
+            <div className="flex items-center justify-center rounded-xl px-2 py-1" >
+              <img
+                src={ifoaLogo}
+                alt="IFOA USA"
+                className="h-7 w-auto object-contain flex-shrink-0"
+              />
+            </div>
           </Link>
         )}
 
         <button
           onClick={onToggle}
-          className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
+          className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors flex-shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -128,38 +134,34 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         className={`flex-shrink-0 border-b border-slate-100 ${
           collapsed ? 'px-2 py-3 flex justify-center' : 'px-3 py-3'
         }`}
-        style={{ background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 100%)' }}
       >
         {collapsed ? (
           <div
             title={`${fullName} (${user?.role ?? 'user'})`}
-            className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-white text-xs font-black shadow-md shadow-red-300/40 cursor-default border-2 border-red-100"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-black cursor-default"
+            style={{ background: '#1d4ed8' }}
           >
             {initials}
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            {/* Avatar */}
             <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white text-sm font-black shadow-md shadow-red-300/40 border-2 border-red-100">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-black" style={{ background: '#1d4ed8' }}>
                 {initials}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />
             </div>
 
-            {/* Info */}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-black text-slate-900 truncate leading-tight">{fullName}</p>
               <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{user?.email}</p>
-              {/* Role pill */}
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider mt-1 border ${
                   user?.role === 'admin'
-                    ? 'bg-red-600 text-white border-red-500'
-                    : 'bg-white text-red-600 border-red-200'
+                    ? 'bg-slate-900 text-white border-slate-700'
+                    : 'bg-slate-100 text-slate-600 border-slate-200'
                 }`}
               >
-                
                 {user?.role ?? 'user'}
               </span>
             </div>
@@ -172,11 +174,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         <Link
           to="/"
           title={collapsed ? 'Home' : undefined}
-          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-150 text-slate-800 hover:bg-gray-100 hover:text-red-600 ${
+          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition-all duration-150 text-slate-600 hover:bg-slate-100 hover:text-slate-900 ${
             collapsed ? 'justify-center' : ''
           }`}
         >
-          <span className="flex-shrink-0 w-[18px] h-[18px] text-slate-500 group-hover:text-red-500">
+          <span className="flex-shrink-0 w-[18px] h-[18px] text-slate-400">
             <HomeIcon />
           </span>
           {!collapsed && <span className="truncate">Home</span>}
@@ -188,7 +190,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         {nav.map(group => (
           <div key={group.group}>
             {!collapsed && (
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-red-400 px-3 mb-1.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 px-3 mb-1.5">
                 {group.group}
               </p>
             )}
@@ -207,7 +209,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         {!collapsed && (
           <a
             href="mailto:agent@theifoa.com"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+            className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
             <svg className="w-[16px] h-[16px] flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
@@ -218,11 +220,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         <button
           onClick={handleLogout}
           title={collapsed ? 'Logout' : undefined}
-          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-red-50 hover:text-red-600 transition-all duration-150 ${
+          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all duration-150 ${
             collapsed ? 'justify-center' : ''
           }`}
         >
-          <svg className="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <svg className="w-[18px] h-[18px] flex-shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15M12 9l3 3m0 0-3 3m3-3H2.25" />
           </svg>
           {!collapsed && <span>Log Out</span>}

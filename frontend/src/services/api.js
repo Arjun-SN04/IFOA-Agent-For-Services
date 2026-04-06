@@ -11,6 +11,10 @@ API.interceptors.request.use((config) => {
   return config
 })
 
+// ── Unified Registration ────────────────────────────────────────────────────
+// type: 'individual' | 'airline'
+export const register = (type, data) => API.post('/register', { type, ...data })
+
 // ── Individual ──────────────────────────────────────────────────────────────
 export const createIndividual         = (data)        => API.post('/individuals', data)
 export const getAllIndividuals         = ()            => API.get('/individuals')

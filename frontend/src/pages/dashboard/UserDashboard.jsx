@@ -8,16 +8,16 @@ import axios from 'axios'
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
 
-function StatCard({ label, value, icon, accent = 'red', sub }) {
+function StatCard({ label, value, icon, accent = 'slate', sub }) {
   const configs = {
-    red:     { wrap: 'bg-red-50 border-red-100',         icon: 'bg-red-600 text-white',     badge: 'text-red-700' },
-    emerald: { wrap: 'bg-emerald-50 border-emerald-100', icon: 'bg-emerald-600 text-white', badge: 'text-emerald-700' },
-    blue:    { wrap: 'bg-blue-50 border-blue-100',       icon: 'bg-blue-600 text-white',    badge: 'text-blue-700' },
-    sky:     { wrap: 'bg-sky-50 border-sky-100',         icon: 'bg-sky-600 text-white',     badge: 'text-sky-700' },
+    slate:   { wrap: 'bg-white border-slate-200',           icon: 'bg-slate-100 text-slate-600',   badge: 'text-slate-800' },
+    emerald: { wrap: 'bg-white border-emerald-100',         icon: 'bg-emerald-50 text-emerald-600', badge: 'text-emerald-700' },
+    blue:    { wrap: 'bg-white border-blue-100',            icon: 'bg-blue-50 text-blue-600',       badge: 'text-blue-700' },
+    sky:     { wrap: 'bg-white border-sky-100',             icon: 'bg-sky-50 text-sky-600',         badge: 'text-sky-700' },
   }
-  const c = configs[accent] || configs.red
+  const c = configs[accent] || configs.slate
   return (
-    <div className={`rounded-2xl border p-5 flex items-center gap-4 bg-white shadow-sm hover:shadow-md transition-shadow duration-200 ${c.wrap}`}>
+    <div className={`rounded-2xl border p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow duration-200 ${c.wrap}`}>
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
         {icon}
       </div>
@@ -34,7 +34,7 @@ function ActionRow({ icon, label, to, href }) {
   const cls = "flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-slate-50 transition-colors text-sm font-semibold text-slate-700 group"
   const inner = (
     <>
-      <span className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-red-600 group-hover:bg-red-100 transition-colors flex-shrink-0">
+      <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-slate-200 transition-colors flex-shrink-0">
         {icon}
       </span>
       {label}
@@ -63,17 +63,13 @@ export default function UserDashboard() {
         const endpointById    = isAirline ? '/airlines'          : '/individuals'
         const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
 
-        // 1. Try primary registrationId first (fastest path)
         if (user.registrationId) {
           try {
             const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
             if (r.data?.data) { setSub(r.data.data); return }
-          } catch {
-            // Fall through to email lookup for stale/unlinked registration IDs
-          }
+          } catch { /* fall through */ }
         }
 
-        // 2. Email fallback — always retrieves the most-recent subscription
         if (user.email) {
           const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
           if (r.data?.data) { setSub(r.data.data); return }
@@ -90,7 +86,7 @@ export default function UserDashboard() {
     const paid   = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
     const failed = sub.paymentStatus === 'failed' || sub.status === 'Inactive'
     if (paid)   return { label: 'Active',   accent: 'emerald', sub: sub.subscriptionPlan }
-    if (failed) return { label: 'Inactive', accent: 'red',     sub: sub.subscriptionPlan }
+    if (failed) return { label: 'Inactive', accent: 'slate',   sub: sub.subscriptionPlan }
     return { label: 'Pending', accent: 'blue', sub: sub.subscriptionPlan }
   }
   const subStatus = getSubStatus()
@@ -104,22 +100,22 @@ export default function UserDashboard() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
-          className="relative rounded-2xl overflow-hidden border border-blue-100"
-          style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 45%, #e0f2fe 100%)' }}
+          className="relative rounded-2xl overflow-hidden border border-slate-200"
+          style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}
         >
-          <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-30"
-            style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
           <div className="relative z-10 px-7 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Welcome back</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Welcome back</p>
               <h1 className="text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
               <p className="text-slate-500 text-sm mt-1">Here's an overview of your IFOA USA account.</p>
             </div>
             {!subLoading && !sub && (
               <Link
                 to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
-                className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 14px rgba(37,99,235,0.35)' }}
+                className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all"
+                style={{ background: '#1d4ed8' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#1e40af'}
+                onMouseLeave={e => e.currentTarget.style.background = '#1d4ed8'}
               >
                 {user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -147,7 +143,7 @@ export default function UserDashboard() {
           <StatCard
             label="Account Type"
             value={user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
-            accent="red"
+            accent="slate"
             sub="Current role"
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>}
           />
@@ -176,7 +172,7 @@ export default function UserDashboard() {
                 </svg>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Info</p>
               </div>
-              <Link to="/dashboard/profile" className="text-xs text-red-600 font-semibold hover:underline">Edit →</Link>
+              <Link to="/dashboard/profile" className="text-xs text-slate-500 font-semibold hover:text-slate-700 hover:underline">Edit →</Link>
             </div>
             <div className="px-5 py-4 space-y-3">
               {[
@@ -231,7 +227,7 @@ export default function UserDashboard() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.22 }}
-            className="rounded-2xl border border-blue-200 bg-blue-50 p-5 flex items-start gap-4"
+            className="rounded-2xl border border-blue-100 bg-blue-50 p-5 flex items-start gap-4"
           >
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -256,7 +252,7 @@ export default function UserDashboard() {
             className={`rounded-2xl border p-5 flex items-start gap-4 ${
               sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                 ? 'border-emerald-100 bg-emerald-50'
-                : 'border-blue-200 bg-blue-50'
+                : 'border-blue-100 bg-blue-50'
             }`}
           >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${

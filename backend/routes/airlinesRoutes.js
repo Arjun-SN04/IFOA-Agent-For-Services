@@ -10,6 +10,8 @@ const {
   exportAirlinesExcel,
   addHoldersToSubscription,
   markAirlinesPaid,
+  getSignUpAirlines,
+  adminCreateAirlineForm,
 } = require('../controller/airlinesController');
 
 // Public
@@ -17,6 +19,8 @@ router.post('/', createAirlinesSubscription);
 
 // ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
 router.get('/export/excel', exportAirlinesExcel);
+router.get('/signup/list', getSignUpAirlines); // Get all signed-up airlines for dropdown
+router.post('/admin/create-form', adminCreateAirlineForm); // Admin create airline form
 
 // Email lookup
 router.get('/by-email', getAirlinesSubscriptionByEmail);

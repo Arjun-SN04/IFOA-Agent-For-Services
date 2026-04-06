@@ -5,10 +5,32 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/layout/footer'
 import classicStamp from '../assets/Classic-Stamp.png'
 import dgrCrewImg from '../assets/DGR-Crew.jpg'
+import faaHeroImg from '../assets/FAA_hero.png'
+import cockpitImg from '../assets/cokpit.png'
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.12, duration: 0.6, ease: 'easeOut' } }),
+// ── Color tokens ──────────────────────────────────────────────────────────────
+const C = {
+  blue:      '#1d4ed8',
+  blueDark:  '#1e40af',
+  blueLight: '#3b82f6',
+  blueXLight:'#dbeafe',
+  blueMuted: '#eff6ff',
+  red:       '#dc2626',
+  redDark:   '#b91c1c',
+  redLight:  '#ef4444',
+  redMuted:  '#fef2f2',
+  redXLight: '#fecaca',
+  dark:      '#0f172a',
+  darkSoft:  '#1e293b',
+  white:     '#ffffff',
+  gray50:    '#f8fafc',
+  gray100:   '#f1f5f9',
+  gray200:   '#e2e8f0',
+  gray300:   '#cbd5e1',
+  gray400:   '#94a3b8',
+  gray600:   '#475569',
+  gray700:   '#334155',
+  gray900:   '#0f172a',
 }
 
 const PLANS = [
@@ -16,143 +38,121 @@ const PLANS = [
     name: 'Turboprop Plan',
     subtitle: '1 Year Subscription',
     price: '$69.00',
-    subtitleColor: 'text-red-600',
-    features: [
-      'Dedicated U.S. Mailing Address',
-      'FAA Compliance Guaranteed',
-      'Real-Time Notification',
-      'Document Scanning & Forwarding',
-      'Yearly Payment',
-      'Unlimited Certificates',
-    ],
+    features: ['Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'Yearly Payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
-    to: '/individual/register',
+    to: '/register',
     img: 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=600&q=80&auto=format&fit=crop&crop=center',
-    imgFallback: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=600&q=80&auto=format&fit=crop',
   },
   {
     name: 'Jet Plan',
     subtitle: 'Up to 5 Years Subscription',
     price: '$55.00',
-    subtitleColor: 'text-red-600',
-    features: [
-      '20% Discount Yearly',
-      'Dedicated U.S. Mailing Address',
-      'FAA Compliance Guaranteed',
-      'Real-Time Notification',
-      'Document Scanning & Forwarding',
-      'One Payment for the Period',
-      'Unlimited Certificates',
-    ],
+    features: ['20% Discount Yearly', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'One Payment for the Period', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
-    to: '/individual/register',
+    to: '/register',
     img: 'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=600&q=80&auto=format&fit=crop&crop=center',
-    imgFallback: 'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=600&q=80&auto=format&fit=crop',
   },
   {
     name: 'VIP Plan',
     subtitle: 'Unlimited Subscription',
     price: '$299.00',
-    subtitleColor: 'text-red-600',
     bestValue: true,
-    features: [
-      'The Most Economic Flat Rate',
-      'Dedicated U.S. Mailing Address',
-      'FAA Compliance Guaranteed',
-      'Real-Time Notification',
-      'Document Scanning & Forwarding',
-      'One Time Lifetime Payment',
-      'Unlimited Certificates',
-    ],
+    features: ['The Most Economic Flat Rate', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'One Time Lifetime Payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
-    to: '/individual/register',
+    to: '/register',
     img: 'https://images.unsplash.com/photo-1529074963764-98f45c47344b?w=600&q=80&auto=format&fit=crop&crop=center',
-    imgFallback: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80&auto=format&fit=crop',
   },
   {
     name: 'Airlines Plan',
     subtitle: 'Choose Subscription Duration',
     price: 'Tailored Price',
-    subtitleColor: 'text-red-600',
     isAirlines: true,
-    features: [
-      'Volume Discount',
-      'Dedicated U.S. Mailing Address',
-      'FAA Compliance Guaranteed',
-      'Real-Time Notification',
-      'Document Scanning & Forwarding',
-      'Credit Card or Wire payment',
-      'Unlimited Certificates',
-    ],
+    features: ['Volume Discount', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'Credit Card or Wire payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
-    to: '/airlines/register',
-    img: 'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=600&q=80&auto=format&fit=crop&crop=center',
-    imgFallback: 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=600&q=80&auto=format&fit=crop',
+    to: '/register',
+    img: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=600&q=80&auto=format&fit=crop&crop=center',
   },
 ]
 
 const HOW_STEPS = [
-  { num: '01', title: 'Create Your Account', desc: 'Complete our secure online registration form with your personal and FAA certificate details.' },
-  { num: '02', title: 'Assign Your Agent', desc: 'Designate IFOA USA as your official U.S. Agent on the FAA USAS portal using your dedicated U.S. address.' },
-  { num: '03', title: 'Receive & Manage Mail', desc: 'FAA correspondence is scanned and digitally forwarded to your dashboard in real-time, wherever you are.' },
-  { num: '04', title: 'Stay FAA Compliant', desc: 'Decide how to handle your physical mail. We shred or forward it internationally — your choice.' },
+  {
+    num: 1,
+    title: 'Create Your Account',
+    desc: 'Create your account and get instant access to your secure personal dashboard, where you can monitor any FAA correspondence received. We will provide you with a dedicated U.S. address.',
+  },
+  {
+    num: 2,
+    title: 'Assign Your Agent for Service',
+    desc: 'Designate IFOA USA as your official U.S. Registered Agent on the FAA website. You will receive a dedicated U.S. address, which you can use to update your FAA records and ensure all official documents reach you.',
+  },
+  {
+    num: 3,
+    title: 'Receive & Manage Mails',
+    desc: 'Any FAA correspondence sent to your assigned U.S. address will be scanned and digitally forwarded to your dashboard or email, keeping you informed in real-time, no matter where you are.',
+  },
+  {
+    num: 4,
+    title: 'Decide How to Handle Your Mails',
+    desc: 'You decide what you would like us to do with your FAA correspondence. We can securely shred it for you or forward the physical mail for you (extra costs), which is critical for items such as FAA certificates.',
+  },
+]
+
+const WHY_CHOOSE = [
+  { icon: '✈', title: 'Aviation-Specific Expertise', desc: 'Our services are designed specifically for individuals and businesses in the aviation industry, ensuring full FAA compliance.' },
+  { icon: '⚡', title: 'Fast and Simple Setup', desc: 'Register in just a few minutes, and your U.S. address will be active within 24 hours.' },
+  { icon: '🔒', title: 'Fully Digital and Secure', desc: "You'll receive real-time notifications when mail arrives at your U.S. address." },
+  { icon: '💻', title: 'Custom Software', desc: 'Tailored solution that streamlines FAA compliance through Agent for Service Appointment and optimizes workflows.' },
+  { icon: '📍', title: 'Oklahoma Office', desc: "Our Oklahoma office, located in close proximity to the FAA, ensures fast and efficient handling and forwarding of our customers' mail." },
+  { icon: '👤', title: 'Personal Contact', desc: 'Personalized, proactive guidance from an aviation-focused team ensures seamless FAA compliance.' },
 ]
 
 function PlanCard({ plan, index }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ delay: index * 0.09, duration: 0.5 }}
-      className={`relative flex flex-col rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
-        plan.bestValue
-          ? 'border-2 border-yellow-400 bg-white'
-          : 'border border-gray-200 bg-white'
-      }`}
+      transition={{ delay: index * 0.08, duration: 0.5 }}
+      className="relative flex flex-col rounded-2xl overflow-hidden hover:-translate-y-1 transition-all duration-300"
+      style={{
+        background: C.white,
+        border: plan.bestValue ? `2px solid ${C.blue}` : `1px solid ${C.gray200}`,
+        boxShadow: plan.bestValue ? '0 8px 40px rgba(29,78,216,0.10)' : '0 1px 6px rgba(15,23,42,0.06)',
+      }}
     >
-      {/* Best Value badge */}
       {plan.bestValue && (
-        <div className="absolute top-3 right-3 z-10 bg-yellow-400 text-yellow-900 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
-          <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
+        <div className="absolute top-3 right-3 z-10 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: C.blue }}>
           Best Value
         </div>
       )}
-      <div className="relative h-44 overflow-hidden bg-gray-100">
-        <img
-          src={plan.img}
-          alt={plan.name}
-          className="w-full h-full object-cover"
-          onError={e => { e.target.onerror = null; e.target.src = plan.imgFallback }}
-        />
-        {plan.bestValue && (
-          <div className="absolute inset-0 bg-gradient-to-t from-yellow-400/10 to-transparent pointer-events-none" />
-        )}
+      <div className="relative h-52 overflow-hidden" style={{ background: `linear-gradient(135deg, ${C.blueMuted} 0%, ${C.gray50} 100%)` }}>
+        <img src={plan.img} alt={plan.name} className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.background = C.gray100 }} />
       </div>
       <div className="flex flex-col flex-1 p-6">
-        <h3 className={`text-xl font-black mb-1 ${ plan.bestValue ? 'text-gray-900' : 'text-gray-900' }`}>{plan.name}</h3>
-        <p className="text-2xl font-black text-gray-900 mb-1">{plan.price}</p>
-        <p className={`text-sm font-bold mb-4 ${plan.subtitleColor}`}>{plan.subtitle}</p>
+        <h3 className="text-xl font-black mb-1" style={{ color: C.dark }}>{plan.name}</h3>
+        <p className="text-2xl font-black mb-1" style={{ color: C.dark }}>{plan.price}</p>
+        <p className="text-sm font-semibold mb-4" style={{ color: C.blue }}>{plan.subtitle}</p>
         {plan.bestValue && (
-          <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-4 font-semibold">
-            🌟 Pay once, covered for life — no renewals!
+          <p className="text-xs rounded-lg px-3 py-2 mb-4 font-semibold" style={{ color: C.blue, background: C.blueMuted, border: `1px solid ${C.blueXLight}` }}>
+            Pay once, covered for life — no renewals!
           </p>
         )}
         <ul className="space-y-2 mb-6 flex-1">
           {plan.features.map(f => (
-            <li key={f} className="text-sm text-gray-600 text-center">{f}</li>
+            <li key={f} className="text-sm flex items-center gap-2" style={{ color: C.gray600 }}>
+              <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: C.blueMuted }}>
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ color: C.blue }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              {f}
+            </li>
           ))}
         </ul>
-        <Link
-          to={plan.to}
-          className={`block text-center py-3 px-6 font-bold rounded-xl text-sm transition-all duration-200 ${
-            plan.bestValue
-              ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-md shadow-yellow-200'
-              : 'bg-red-600 hover:bg-red-700 text-white'
-          }`}
-        >
+        <Link to={plan.to} className="block text-center py-3 px-6 font-bold rounded-xl text-sm transition-all duration-200 text-white"
+          style={{ background: plan.bestValue ? C.blue : C.dark }}
+          onMouseEnter={e => { e.currentTarget.style.background = plan.bestValue ? C.blueDark : C.darkSoft }}
+          onMouseLeave={e => { e.currentTarget.style.background = plan.bestValue ? C.blue : C.dark }}>
           {plan.cta}
         </Link>
       </div>
@@ -164,88 +164,36 @@ const FAQ_ITEMS = [
   {
     question: 'How do I appoint a designated Agent for Services?',
     answer: (
-      <div className="space-y-4 text-sm text-gray-700 leading-relaxed">
-        <div>
-          <p className="font-bold text-gray-900 mb-1">STEP 1 — FAA IACRA Portal</p>
-          <p>Register on the IACRA portal: <a href="https://iacra.faa.gov" target="_blank" rel="noreferrer" className="text-red-600 underline">https://iacra.faa.gov</a></p>
-          <p className="mt-1">IACRA (Integrated Airman Certification and Rating Application) is an FAA website that allows people to apply for new Airman Certificates or to upgrade their existing certificates.</p>
-          <p className="mt-1">IACRA will display your FTN (FAA Tracking Number).</p>
-        </div>
-        <div>
-          <p className="font-bold text-gray-900 mb-1">STEP 2 — IFOA USA Portal</p>
-          <p>Create your account on the IFOA USA Portal: <a href="https://theifoa-agent.com" target="_blank" rel="noreferrer" className="text-red-600 underline">https://theifoa-agent.com</a></p>
-          <p className="mt-1">Register your certificates and get instant access to your secure personal dashboard to monitor any FAA correspondence received.</p>
-          <p className="mt-1">Now you get your dedicated U.S. address.</p>
-        </div>
-        <div>
-          <p className="font-bold text-gray-900 mb-1">STEP 3 — FAA USAS Portal</p>
-          <p>Register your Agent for Services on the USAS portal: <a href="https://usas.faa.gov" target="_blank" rel="noreferrer" className="text-red-600 underline">usas.faa.gov</a> to complete your submission.</p>
-          <p className="mt-2">You will need to provide the following information about the Agent for Service:</p>
-          <ul className="list-disc list-inside space-y-1 mt-1 ml-2">
-            <li>Full name</li>
-            <li>U.S. address</li>
-            <li>Email address</li>
-            <li>A phone number</li>
-          </ul>
-          <p className="mt-2 italic text-gray-500">Important: You may need to use a private or public email address (e.g., Gmail, Hotmail, etc.) instead of a corporate email address.</p>
-        </div>
+      <div className="space-y-4 text-sm leading-relaxed" style={{ color: C.gray700 }}>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>STEP 1 — FAA IACRA Portal</p><p>Register on the IACRA portal: <a href="https://iacra.faa.gov" target="_blank" rel="noreferrer" style={{ color: C.blue }} className="underline">https://iacra.faa.gov</a></p><p className="mt-1">It will display your FTN (FAA Tracking Number).</p></div>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>STEP 2 — IFOA USA Portal</p><p>Create your account at <a href="https://theifoa-agent.com" target="_blank" rel="noreferrer" style={{ color: C.blue }} className="underline">https://theifoa-agent.com</a>. You will get your dedicated U.S. address.</p></div>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>STEP 3 — FAA USAS Portal</p><p>Complete your designation at: <a href="https://usas.faa.gov" target="_blank" rel="noreferrer" style={{ color: C.blue }} className="underline">usas.faa.gov</a></p></div>
       </div>
     ),
   },
   {
-    question: 'Can I appoint a U.S. Agent for Service for my company or multiple FAA certificate holders under one entity?',
-    answer: (
-      <p className="text-sm text-gray-700 leading-relaxed">
-        We offer tailored U.S. Agent for Service solutions for individual certificate holders and organizations. As company-level requirements can differ significantly, please contact our team directly to discuss your specific needs. We'll help determine the best service package for your unique circumstances.
-      </p>
-    ),
+    question: 'Can I appoint a U.S. Agent for Service for my company or multiple FAA certificate holders?',
+    answer: <p className="text-sm leading-relaxed" style={{ color: C.gray700 }}>We offer tailored solutions for individual certificate holders and organizations. Please contact our team to discuss your specific needs.</p>,
   },
   {
     question: 'How do I get my documents?',
-    answer: (
-      <div className="text-sm text-gray-700 leading-relaxed space-y-2">
-        <p>All FAA-related documents received at your U.S. address will be digitally scanned and uploaded to a secure online dashboard within one business day.</p>
-        <p>You will receive real-time email notifications, so you can respond quickly and avoid missing important FAA communications.</p>
-        <p>After digital delivery, you can choose whether to have the original physical documents securely shredded or forwarded internationally (extra costs).</p>
-      </div>
-    ),
+    answer: <p className="text-sm leading-relaxed" style={{ color: C.gray700 }}>All FAA-related documents will be digitally scanned and uploaded to a secure online dashboard within one business day. You will receive real-time email notifications.</p>,
   },
   {
-    question: 'What is IACRA and FTN Number',
+    question: 'What is IACRA and FTN Number?',
     answer: (
-      <div className="text-sm text-gray-700 leading-relaxed space-y-4">
-        <div>
-          <p className="font-bold text-gray-900 mb-1">What is the FTN number?</p>
-          <p>An FTN number (FAA Tracking Number) is a unique ID assigned to you when you register in the FAA's IACRA system.</p>
-          <p className="mt-1">It stays the same for your entire aviation career and is used to keep track of all your FAA applications, tests, and certificates.</p>
-          <p className="mt-1">You need your FTN when scheduling FAA knowledge exams (like the Aircraft Dispatcher test) and when filling out forms in IACRA.</p>
-        </div>
-        <div>
-          <p className="font-bold text-gray-900 mb-1">What is the IACRA?</p>
-          <p>The FAA IACRA, or Integrated Airman Certification and Rating Application, is an online system used by the Federal Aviation Administration to manage the certification process for airmen.</p>
-          <p className="mt-1">It allows applicants to apply for certificates and ratings, verifies their identity and qualifications, and enables instructors, examiners, and FAA representatives to process and track applications electronically.</p>
-          <p className="mt-1">IACRA helps ensure regulatory compliance while streamlining the entire certification workflow.</p>
-        </div>
+      <div className="text-sm leading-relaxed space-y-3" style={{ color: C.gray700 }}>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>FTN (FAA Tracking Number)</p><p>A unique ID assigned when you register in IACRA. It stays the same for your entire aviation career.</p></div>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>IACRA</p><p>The FAA online system for managing airman certification. It allows applicants to apply for certificates and ratings electronically.</p></div>
       </div>
     ),
   },
   {
     question: 'What will happen if I do not respect the Deadlines?',
     answer: (
-      <div className="text-sm text-gray-700 leading-relaxed space-y-4">
-        <div>
-          <p className="font-bold text-gray-900 mb-1">For Current Certificate Holders:</p>
-          <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>Suspension of Privileges: Your FAA certificate remains valid, but you cannot exercise its privileges until you appoint a U.S. Agent for Service.</li>
-            <li>Inactive Aircraft Registration: Your aircraft registration stays active but cannot be used operationally until a U.S. Agent for Service is designated.</li>
-          </ul>
-        </div>
-        <div>
-          <p className="font-bold text-gray-900 mb-1">For New Applicants:</p>
-          <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>Certification Delays: You cannot complete FAA certification processes without officially naming a U.S. Agent for Service on your application.</li>
-          </ul>
-        </div>
+      <div className="text-sm leading-relaxed space-y-3" style={{ color: C.gray700 }}>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>For Current Certificate Holders:</p><p>Suspension of Privileges — your certificate remains valid but you cannot exercise its privileges.</p></div>
+        <div><p className="font-bold mb-1" style={{ color: C.dark }}>For New Applicants:</p><p>Certification Delays — you cannot complete FAA certification without officially naming a U.S. Agent for Service.</p></div>
       </div>
     ),
   },
@@ -253,21 +201,22 @@ const FAQ_ITEMS = [
 
 function FAQItem({ item, isOpen, onToggle }) {
   return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-5 text-left bg-white hover:bg-gray-50 transition-colors duration-200"
-      >
-        <span className="font-bold text-gray-900 text-sm pr-4">{item.question}</span>
-        <span className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300 ease-in-out ${isOpen ? 'rotate-45 border-red-600 bg-red-50' : 'border-gray-300'}`}>
-          <svg className={`w-3.5 h-3.5 transition-colors duration-200 ${isOpen ? 'text-red-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.gray200}` }}>
+      <button onClick={onToggle} className="w-full flex items-center justify-between px-6 py-5 text-left transition-colors duration-200"
+        style={{ background: isOpen ? C.blueMuted : C.white }}
+        onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = C.gray50 }}
+        onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = C.white }}>
+        <span className="font-bold text-sm pr-4" style={{ color: C.dark }}>{item.question}</span>
+        <span className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
+          style={{ border: `1.5px solid ${isOpen ? C.blue : C.gray200}`, background: isOpen ? C.blueXLight : 'transparent', transform: isOpen ? 'rotate(45deg)' : 'rotate(0)' }}>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: isOpen ? C.blue : C.gray400 }}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
           </svg>
         </span>
       </button>
       <div style={{ display: 'grid', gridTemplateRows: isOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.32s cubic-bezier(0.4,0,0.2,1)' }}>
         <div style={{ overflow: 'hidden' }}>
-          <div className="px-6 pb-6 bg-white border-t border-gray-100">
+          <div className="px-6 pb-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
             <div className="pt-4">{item.answer}</div>
           </div>
         </div>
@@ -279,19 +228,17 @@ function FAQItem({ item, isOpen, onToggle }) {
 function FAQSection() {
   const [openIndex, setOpenIndex] = useState(null)
   const toggle = (i) => setOpenIndex(prev => prev === i ? null : i)
-
   return (
-    <section className="py-20 px-6 bg-white border-t border-gray-100">
+    <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
       <div className="max-w-6xl mx-auto grid md:grid-cols-[1fr_1.6fr] gap-14 items-start">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-          <h2 className="text-4xl font-black text-gray-900 mb-4">Frequently Asked<br />Questions</h2>
-          <p className="text-gray-600 leading-relaxed mb-3">All You Need to Know About Appointing an FAA U.S. Agent for Service with IFOA USA.</p>
-          <p className="text-gray-600 leading-relaxed">Still have questions? No worries, reach out! We are happy to help you find the answers you need.</p>
+          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Support</p>
+          <h2 className="text-4xl font-black mb-4" style={{ color: C.dark }}>Frequently Asked<br />Questions</h2>
+          <p className="leading-relaxed mb-3" style={{ color: C.gray600 }}>All You Need to Know About Appointing an FAA U.S. Agent for Service with IFOA USA.</p>
+          <p className="leading-relaxed" style={{ color: C.gray600 }}>Still have questions? Reach out — we are happy to help.</p>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }} className="space-y-3">
-          {FAQ_ITEMS.map((item, i) => (
-            <FAQItem key={i} item={item} isOpen={openIndex === i} onToggle={() => toggle(i)} />
-          ))}
+          {FAQ_ITEMS.map((item, i) => <FAQItem key={i} item={item} isOpen={openIndex === i} onToggle={() => toggle(i)} />)}
         </motion.div>
       </div>
     </section>
@@ -300,64 +247,158 @@ function FAQSection() {
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white font-sans">
+    <div className="min-h-screen font-sans" style={{ background: C.white }}>
       <Navbar />
 
-      {/* ── HERO ── */}
-      <section data-hero className="relative h-[92vh] min-h-[560px] flex items-center overflow-hidden">
-        <img
-          src="https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=1900&q=85&auto=format&fit=crop&crop=center"
-          alt="Aviation"
-          className="absolute inset-0 w-full h-full object-cover object-center"
-          onError={(e) => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=1900&q=80&auto=format&fit=crop' }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/40" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
-        <div className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 lg:px-16 w-full">
-          <motion.div className="max-w-2xl">
-            <motion.div className="inline-flex items-center rounded-full px-4 py-1.5 mb-6 bg-white/5 backdrop-blur-md border border-white/10 shadow-sm">
-              <span className="text-white/80 text-xs font-medium tracking-wide">U.S. Agent for Service — FAA Compliant</span>
-            </motion.div>
-            <motion.h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-white leading-tight mb-6 tracking-tight">
-              Your US Agent<br />
-              <span className="bg-gradient-to-r text-white bg-clip-text text-transparent">For Service</span>
-            </motion.h1>
-            <motion.p className="text-lg text-gray-300 mb-4 max-w-xl leading-relaxed">
-              You focus on flying and flight planning —<span className="text-white font-semibold"> we handle compliance & documentation.</span>
-            </motion.p>
-            <motion.p className="text-white/90 font-semibold text-base mb-10">
-              <span className="text-red-400">$69/year</span>
-              <span className="mx-2 text-white/40">•</span>
-              <span className="text-red-400">$299 lifetime</span>
-            </motion.p>
-            <motion.div className="flex flex-wrap gap-4">
-              <Link to="/individual/register"
-                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-semibold px-8 py-3.5 rounded-xl text-base transition-all duration-200 shadow-lg shadow-red-900/30">
-                Individual Registration
+      {/* ══════════════════════════════════════════════════════════════════
+          HERO — Gray background, clean editorial layout like reference image
+      ══════════════════════════════════════════════════════════════════ */}
+      <section data-hero className="relative overflow-hidden" style={{ minHeight: 620, background: C.gray50 }}>
+        <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full py-16 lg:py-24 grid lg:grid-cols-2 gap-10 lg:gap-0 items-center">
+
+          {/* Left: text */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="relative z-10 pr-0 lg:pr-12"
+          >
+            {/* Eyebrow */}
+            <p
+              className="text-xs font-bold uppercase tracking-[0.2em] mb-5"
+              style={{ color: '#b8973a' }}
+            >
+              FAA U.S. AGENT FOR SERVICE
+            </p>
+
+            {/* Main headline */}
+            <h1
+              className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[1.0] tracking-tight mb-6"
+              style={{ color: C.dark }}
+            >
+              YOUR U.S AGENT FOR <br />
+              SERVICE<br />
+            </h1>
+
+            {/* Subtext */}
+            <p className="text-base leading-relaxed mb-8 max-w-md" style={{ color: C.gray600 }}>
+              You focus on flying and flight planning — we handle compliance & documentation.
+            </p>
+
+            {/* Pricing + CTA row */}
+            <div className="flex flex-col sm:flex-row sm:items-end gap-6 mb-3">
+              {/* Price badge and button */}
+              <div className="relative inline-flex flex-col gap-3">
+                <span
+                  className="text-[11px] font-bold text-white px-3 py-0.5 rounded-full z-10 w-fit"
+                  style={{ background: C.blue }}
+                >
+                  only $69/Year
+                </span>
+                <Link
+                  to="/register"
+                  className="relative inline-flex items-center justify-center font-black px-7 py-4 rounded-xl text-sm text-white transition-all duration-200"
+                  style={{ background: C.blue, minWidth: 280 }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+                  onMouseLeave={e => e.currentTarget.style.background = C.blue}
+                >
+                  Get Your U.S. Agent for Service – Sign Up Now
+                </Link>
+              </div>
+
+              {/* Login */}
+              <Link
+                to="/login"
+                className="inline-flex items-center justify-center font-bold px-7 py-4 rounded-xl text-sm transition-all duration-200"
+                style={{
+                  background: C.white,
+                  border: `2px solid ${C.gray300}`,
+                  color: C.dark,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.dark; e.currentTarget.style.color = C.white }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.color = C.dark }}
+              >
+                Login
               </Link>
-              <Link to="/airlines/register"
-                className="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/20 hover:border-white/40 text-white font-medium px-8 py-3.5 rounded-xl text-base transition-all duration-200 backdrop-blur-md">
-                ✈ Airlines Plan
-              </Link>
-              <a href="#how-it-works"
-                className="inline-flex items-center gap-2 text-white/80 hover:text-white font-medium px-6 py-3 rounded-xl text-base transition-all duration-200 underline underline-offset-4">
-                How It Works →
-              </a>
-            </motion.div>
+            </div>
+
+           
+
+            {/* Trust badges */}
+            <div className="flex flex-wrap gap-2 mt-6">
+              {[
+                { icon: '✅', text: '100% FAA Compliant' },
+                { icon: '⚡', text: '24hr Activation' },
+                { icon: '🔒', text: 'Secure & Encrypted' },
+                { icon: '🇺🇸', text: 'Daytona Beach, FL' },
+              ].map(b => (
+                <div key={b.text} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium"
+                  style={{ background: C.gray50, border: `1px solid ${C.gray200}`, color: C.gray600 }}>
+                 {b.text}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Right: Pilot image — professional cockpit/pilot image */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.7, delay: 0.1 }}
+            className="relative flex items-center justify-center lg:justify-end h-full"
+            style={{ minHeight: 700, background: `linear-gradient(to left, transparent 0%, ${C.gray50} 100%)` }}
+          >
+            <img
+              src="https://cdn.prod.website-files.com/63b2c1af8b66abbf8b197d6e/678e03f5b040319ac8887390_144fe1744b8fc13cb120a0e235f1ee77_agent-hero-img.png"
+              alt="Professional Pilot"
+              className="w-full object-contain"
+              style={{
+                maxHeight: 750,
+                maxWidth: 550,
+                filter: 'drop-shadow(0 4px 16px rgba(29,78,216,0.12))',
+              }}
+            />
           </motion.div>
         </div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.6 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-          <span className="text-white/40 text-xs tracking-widest uppercase">Scroll</span>
-          <motion.div animate={{ y: [0, 6, 0] }} transition={{ repeat: Infinity, duration: 1.6 }} className="w-px h-8 bg-white/30" />
-        </motion.div>
+
+        {/* Subtle bottom border / separator */}
+        <div className="absolute bottom-0 left-0 right-0 h-px" style={{ background: C.gray100 }} />
       </section>
 
-      {/* ── WHO WE ARE ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          COMPLIANCE ALERT
+      ══════════════════════════════════════════════════════════════════ */}
+      <section className="py-6 px-6" style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white text-base font-black" style={{ background: C.dark }}>!</div>
+            <div>
+              <p className="font-black text-sm" style={{ color: C.dark }}>FAA Agent for Service Rule Now in Effect</p>
+              <p className="text-sm mt-0.5" style={{ color: C.gray600 }}>
+                Effective October 8, 2024 — All FAA certificate holders with a foreign address must designate a U.S. Agent for Service.{' '}
+                <strong style={{ color: C.dark }}>Enforcement action has begun.</strong>
+              </p>
+            </div>
+          </div>
+          <Link to="/register"
+            className="shrink-0 font-bold text-sm px-6 py-3 rounded-xl text-white transition-all duration-200 whitespace-nowrap"
+            style={{ background: C.blue }}
+            onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+            onMouseLeave={e => e.currentTarget.style.background = C.blue}>
+            Get Compliant Now
+          </Link>
+        </div>
+      </section>
+
+
+
+        {/* ── WHO WE ARE ── */}
       <section className="py-20 px-6 bg-white">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-3">About Our Service</p>
+            <p className="ext-xs font-bold uppercase tracking-widest mb-3" 
+            style={{ color: C.blue }}
+            >About Our Service</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-snug mb-6">
               Effortless FAA Compliance<br />for Pilots &amp; Dispatchers Worldwide
             </h2>
@@ -368,12 +409,12 @@ export default function Home() {
               Our <strong className="text-gray-900">Daytona Beach</strong> team ensures your FAA correspondence and regulatory notices are handled promptly and professionally.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link to="/individual/register"
+              <Link to="/register"
                 className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200 shadow-sm">
-                Individual Register
+                 Register
               </Link>
-              <Link to="/airlines/register"
-                className="inline-flex items-center gap-2 bg-red-600/10 hover:bg-red-600/20 border border-red-200 text-red-700 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200">
+              <Link to="/register"
+                className="inline-flex items-center gap-2  bg-red-600 hover:bg-red-700 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200">
                 ✈ Airlines Register
               </Link>
             </div>
@@ -397,40 +438,134 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── STAMP ── */}
-      <section className="py-20 px-6 bg-white border-t border-gray-100">
+      {/* ══════════════════════════════════════════════════════════════════
+          HOW IT WORKS — 4 steps
+      ══════════════════════════════════════════════════════════════════ */}
+      <section id="how-it-works" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="flex flex-col md:flex-row items-center gap-12 md:gap-16">
-            <div className="flex-shrink-0 w-full md:w-[380px]">
-              <img src={classicStamp} alt="IFOA USA stamp" className="w-full h-auto object-contain rounded-2xl" />
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-14 text-center">
+            <h2 className="text-3xl sm:text-4xl font-black mb-2" style={{ color: C.dark }}>HOW TO APPOINT YOUR FAA AGENT FOR SERVICE</h2>
+            <p className="text-sm" style={{ color: C.gray400 }}>Fast, digital, reliable &amp; safe</p>
+          </motion.div>
+
+       
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {HOW_STEPS.map((s, i) => (
+              <motion.div key={s.num} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
+                className="rounded-2xl p-6 flex flex-col" style={{ background: C.white, border: `1px solid ${C.gray200}`, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+                <div className="inline-flex items-center rounded-lg px-3 py-1 text-white text-xs font-black uppercase tracking-wider mb-4 self-start" style={{ background: C.blue }}>
+                  Step {s.num}
+                </div>
+                <h3 className="text-base font-bold mb-3" style={{ color: C.dark }}>{s.title}</h3>
+                <p className="text-sm leading-relaxed" style={{ color: C.gray600 }}>{s.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+   {/* ══════════════════════════════════════════════════════════════════
+          STAMP / ABOUT
+      ══════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-16">
+          <div className="flex-shrink-0 w-full md:w-[420px]">
+            <img src={classicStamp} alt="IFOA USA stamp" className="w-full h-auto object-contain rounded-2xl" />
+          </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="flex-1">
+            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>About Our Service</p>
+            <h2 className="text-3xl font-bold mb-5" style={{ color: C.dark }}>Effortless FAA Compliance for Pilots &amp; Dispatchers Worldwide</h2>
+            <p className="text-base leading-relaxed mb-5" style={{ color: C.gray600 }}>
+              Whether you are an <strong style={{ color: C.dark }}>FAA-Certified Pilot</strong> or <strong style={{ color: C.dark }}>Part 65 Aircraft Dispatcher</strong> based outside the United States, meeting FAA regulatory requirements should not complicate your operations.
+            </p>
+            <p className="text-base leading-relaxed mb-5" style={{ color: C.gray600 }}>
+              Our <strong style={{ color: C.dark }}>Daytona Beach</strong> team ensures your FAA correspondence and regulatory notices are handled promptly and professionally.
+            </p>
+            <p className="text-base leading-relaxed" style={{ color: C.gray600 }}>
+              Trust us to simplify your FAA compliance so you can stay focused on what you <strong style={{ color: C.dark }}>DO BEST</strong>.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+
+
+
+      {/* ══════════════════════════════════════════════════════════════════
+          WHO NEEDS IT
+      ══════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
+        <div className="max-w-6xl mx-auto">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="grid lg:grid-cols-2 gap-14 items-center">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Who Needs This</p>
+              <h2 className="text-3xl sm:text-4xl font-bold leading-snug mb-6" style={{ color: C.dark }}>Who Needs a FAA<br />Agent for Service?</h2>
+              <p className="leading-relaxed mb-6 text-base" style={{ color: C.gray600 }}>
+                New requirements published in{' '}
+                <a href="https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_3-1.pdf" target="_blank" rel="noreferrer" className="font-bold underline" style={{ color: C.dark }}>FAA AC 3-1</a>
+                {' '}and{' '}
+                <a href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C" target="_blank" rel="noreferrer" className="font-bold underline" style={{ color: C.dark }}>14 CFR Part 3 Subpart C</a>
+                {' '}require FAA certificate holders with non-U.S. addresses to appoint a U.S. Agent for Service.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {['FAA-Certificated Pilots (Part 61)', 'Aircraft Mechanics & Dispatchers (Part 65)', 'Flight & Ground Instructors', 'Aircraft Owners (Part 47)', 'Aviation Businesses (Part 107)'].map(item => (
+                  <li key={item} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: C.blueMuted }}>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ color: C.blue }}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <span className="text-sm font-medium" style={{ color: C.gray700 }}>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                  style={{ background: C.blue }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+                  onMouseLeave={e => e.currentTarget.style.background = C.blue}>
+                  Register as Airline
+                </Link>
+                <Link to="/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                  style={{ color: C.dark, border: `1px solid ${C.gray200}` }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.gray400; e.currentTarget.style.background = C.gray50 }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.background = '' }}>
+                  Airlines Plan
+                </Link>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-gray-700 text-base leading-relaxed mb-5">
-                Whether you are an <strong>FAA-Certified Pilot</strong> or <strong>Part 65 Aircraft Dispatcher</strong> based outside the United States, meeting FAA regulatory requirements should not complicate your operations.
-              </p>
-              <p className="text-gray-700 text-base leading-relaxed mb-5">
-                Our <strong>Daytona Beach</strong> team ensures your FAA correspondence and regulatory notices are handled promptly and professionally, allowing you to concentrate fully on your primary responsibilities.
-              </p>
-              <p className="text-gray-700 text-base leading-relaxed">
-                Trust us to simplify your FAA compliance so you can stay focused on what you <strong>DO BEST</strong> and what <strong>YOU LOVE THE MOST.</strong>
-              </p>
+            <div className="flex flex-col gap-5">
+              <div className="relative rounded-3xl overflow-hidden shadow-xl" style={{ height: 340 }}>
+                <img src={dgrCrewImg} alt="FAA certified aviation crew" className="w-full h-full object-cover object-top" />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(15,23,42,0.05), rgba(15,23,42,0.45))' }} />
+                <div className="absolute top-4 left-4">
+                  <span className="inline-flex items-center gap-1.5 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
+                    14 CFR Part 3 · Subpart C
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[{ value: '14 CFR', label: 'Regulation' }, { value: 'Part 3', label: 'Subpart C' }, { value: '100%', label: 'FAA Compliant' }].map(s => (
+                  <div key={s.label} className="rounded-xl px-4 py-3 text-center" style={{ border: `1px solid ${C.gray200}`, background: C.gray50 }}>
+                    <p className="font-black text-sm" style={{ color: C.dark }}>{s.value}</p>
+                    <p className="text-[10px] mt-0.5 font-medium" style={{ color: C.gray400 }}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* ── SUBSCRIPTION PLANS ── */}
-      <section id="pricing" className="py-20 px-6 bg-gray-50 border-t border-gray-100">
+      {/* ══════════════════════════════════════════════════════════════════
+          SUBSCRIPTION PLANS
+      ══════════════════════════════════════════════════════════════════ */}
+      <section id="pricing" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-12">
-            <div className="flex items-center gap-3 mb-4">
-              <svg className="w-6 h-6 text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h2 className="text-3xl sm:text-4xl font-black text-gray-900">Subscription Plans</h2>
-            </div>
-            <div className="h-0.5 w-full bg-gray-200 rounded-full" />
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-12 text-center">
+            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Pricing</p>
+            <h2 className="text-3xl sm:text-4xl font-black" style={{ color: C.dark }}>Subscription Plans</h2>
+            <p className="mt-3 text-sm" style={{ color: C.gray400 }}>Simple, transparent pricing — no hidden fees</p>
           </motion.div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {PLANS.map((plan, i) => <PlanCard key={plan.name} plan={plan} index={i} />)}
@@ -438,274 +573,51 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── AIRLINES DEAL BANNER ── */}
-      <section className="py-16 px-6 bg-white border-t border-gray-100">
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="relative rounded-3xl overflow-hidden min-h-[220px] flex">
-            <div className="relative z-10 bg-black flex flex-col justify-center px-10 py-10 w-full md:w-1/2">
-              <h2 className="text-3xl sm:text-4xl font-black text-white mb-3 leading-tight">Enjoy the Airlines Deal!</h2>
-              <p className="text-gray-300 text-sm mb-2 leading-relaxed">Are you an Operator with more than 3 FAA Certificate Holders?</p>
-              <p className="text-gray-400 text-sm mb-7 leading-relaxed">Subscribe for the Airlines Plan Now</p>
-              <Link to="/airlines/register"
-                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all duration-200 w-fit">
-                Go to Airlines Plan
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" /></svg>
-              </Link>
-            </div>
-            <div className="hidden md:block md:w-1/2 relative">
-              <img
-                src="https://images.unsplash.com/photo-1559178772-c8e4ef8c5f80?w=900&q=85&auto=format&fit=crop&crop=center"
-                alt="Aircraft cockpit"
-                className="absolute inset-0 w-full h-full object-cover"
-                onError={(e) => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=900&q=80&auto=format&fit=crop' }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-gray-950/40 to-transparent" />
-            </div>
-          </motion.div>
-        </div>
-      </section>
+   
 
-      {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" className="py-20 px-6 bg-gray-50 border-t border-gray-100">
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-14">
-            <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-3">Process</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">How to Appoint IFOA USA<br />as Your Agent for Service</h2>
-          </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {HOW_STEPS.map((s, i) => (
-              <motion.div key={s.num} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="bg-white rounded-2xl border border-gray-200 px-7 py-8 hover:border-red-200 hover:shadow-md transition-all duration-200">
-                <span className="block text-5xl font-black text-red-100 mb-4 leading-none select-none">{s.num}</span>
-                <h3 className="text-base font-bold text-gray-900 mb-2">{s.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{s.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── COMPLIANCE ── */}
-      <section className="bg-gray-50 py-20 px-6 border-t border-gray-100">
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-            <p className="text-red-600 text-xs font-bold uppercase tracking-widest mb-3">Regulation</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-4">
-              Why and Who Needs a FAA<br />Agent for Service?
-            </h2>
-          </motion.div>
-          <div className="grid lg:grid-cols-2 gap-16 items-stretch">
-
-            {/* ══ LEFT: all text content stacked ══ */}
-            <motion.div
-              initial={{ opacity: 0, x: -24 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="flex flex-col justify-between gap-10"
-            >
-              {/* Regulation block */}
-              <div>
-                <p className="text-gray-600 leading-relaxed mb-6 text-base">
-                  Recent updates to FAA Compliance Requirements now mandate that individuals and businesses holding FAA
-                  Certificates with a permanent address outside the United States must designate a U.S. Agent for Service,
-                  as outlined in{' '}
-                  <a
-                    href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-bold text-gray-900 underline underline-offset-2 hover:text-red-600 transition-colors duration-200"
-                  >14 CFR Part 3, Subpart C</a> and{' '}
-                  <a
-                    href="https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_3-1.pdf"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-bold text-gray-900 underline underline-offset-2 hover:text-red-600 transition-colors duration-200"
-                  >FAA Advisory Circular AC 3-1</a>.
-                </p>
-                <ul className="space-y-2.5 mb-7">
-                  {[
-                    'FAA-Certificated Pilots (Part 61)',
-                    'Aircraft Mechanics & Dispatchers (Part 65)',
-                    'Flight & Ground Instructors',
-                    'Aircraft Owners (Part 47)',
-                    'Aviation Businesses (Part 107)',
-                  ].map(item => (
-                    <li key={item} className="flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-red-600 shrink-0" />
-                      <span className="text-gray-700 font-medium text-sm">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-gray-500 leading-relaxed text-sm">
-                  An Agent for Service is a representative (entity or an individual who is 18 or older) with a U.S.
-                  address designated by a certificate holder to receive official FAA correspondence, legal notices, and
-                  other critical communications on his/her behalf.
-                </p>
-                <p className="text-gray-500 leading-relaxed text-sm mt-4">
-                  The Agent for Service shall ensure the timely delivery of essential documents and continued compliance
-                  with FAA regulations. More information in the{' '}
-                  <a
-                    href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C/section-3.302"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-red-600 font-semibold underline underline-offset-2 hover:text-red-800 transition-colors duration-200"
-                  >14 CFR Part Subpart C Section 3.302</a>.
-                </p>
-              </div>
-
-              {/* Divider */}
-              <div className="h-px bg-gray-200 w-full" />
-
-              {/* btn block */}
-              <div className="flex flex-wrap gap-3 justify-start">
-                  <Link
-                    to="/individual/register"
-                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-7 py-3.5 rounded-xl text-sm transition-all duration-200 shadow-md shadow-red-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Register as Individual
-                  </Link>
-                  <Link
-                    to="/airlines/register"
-                    className="inline-flex items-center gap-2 border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 font-semibold px-7 py-3.5 rounded-xl text-sm transition-all duration-200"
-                  >
-                    ✈ Airlines Plan
-                  </Link>
-                </div>
-            </motion.div>
-
-            {/* ══ RIGHT: DGR Crew image + bottom text ══ */}
-            <motion.div
-              initial={{ opacity: 0, x: 24 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.65, delay: 0.1 }}
-              className="flex flex-col gap-5"
-            >
-              {/* Image container — fixed height, no cropping */}
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl w-full" style={{ height: 380 }}>
-                <img
-                  src={dgrCrewImg}
-                  alt="FAA certified aviation crew"
-                  className="w-full h-full object-cover object-top"
-                />
-                {/* Subtle top vignette */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/50" />
-                {/* Top-left regulation pill */}
-                <div className="absolute top-4 left-4">
-                  <span className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full">
-                    14 CFR Part 3 · Subpart C
-                  </span>
-                </div>
-              </div>
-
-              {/* Info card below the image */}
-              <div className="rounded-2xl border border-gray-200 bg-white px-6 py-5 flex items-center justify-between gap-4 shadow-sm">
-                <div>
-                  <p className="text-gray-900 font-black text-base leading-tight">FAA Certified Crew</p>
-                  <p className="text-gray-500 text-xs mt-1 leading-relaxed">Fully compliant U.S. Agent for Service — Daytona Beach, FL</p>
-                </div>
-                <span className="w-11 h-11 rounded-xl bg-red-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-red-200">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </span>
-              </div>
-
-              {/* Stat pills row */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { value: '14 CFR', label: 'Regulation' },
-                  { value: 'Part 3', label: 'Subpart C' },
-                  { value: '100%', label: 'FAA Compliant' },
-                ].map(s => (
-                  <div key={s.label} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center">
-                    <p className="text-gray-900 font-black text-sm">{s.value}</p>
-                    <p className="text-gray-400 text-[10px] mt-0.5 font-medium">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ── */}
-      <FAQSection />
-
-      {/* ── HOW TO APPOINT ── */}
-      <section className="py-20 px-6 bg-white border-t border-gray-100">
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-4">
-            <h2 className="text-3xl sm:text-4xl font-black text-gray-900 mb-2">How to Appoint IFOA USA as Agent for Service</h2>
-            <p className="text-gray-500 text-base mb-10">Once your account is created with us, managing your FAA compliance is effortless, reliable, secure, and without hidden fees.</p>
-          </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 border border-gray-200 rounded-2xl overflow-hidden" style={{ gridTemplateRows: 'auto 1fr' }}>
-            {[
-              { icon: <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>, step: '1. Create Your Account', desc: 'Create your account and get instant access to your secure personal dashboard, where you can monitor any FAA correspondence received. We will provide you with a dedicated U.S. address.' },
-              { icon: <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /><path strokeLinecap="round" strokeLinejoin="round" d="M17 11l2 2 4-4" /></svg>, step: '2. Assign Your Agent for Service', desc: 'Designate IFOA USA as your official U.S. Registered Agent on the FAA website. You will receive a dedicated U.S. address, which you can use to update your FAA records and ensure all official documents reach you.' },
-              { icon: <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>, step: '3. Receive & Manage Mails', desc: 'Any FAA correspondence sent to your assigned U.S. address will be scanned and digitally forwarded to your dashboard or email, keeping you informed in real-time, no matter where you are.' },
-              { icon: <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>, step: '4. Decide How to Handle Your Mails', desc: 'You decide what you would like us to do with your FAA correspondence. We can securely shred it for you or forward the physical mail for you (extra costs), which is critical for items such as FAA certificates.' },
-            ].map((item, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="flex flex-col border-r last:border-r-0 border-gray-200">
-                <div className="bg-black flex flex-col items-center justify-center py-8 px-6 gap-3 h-[160px]">
-                  {item.icon}
-                  <h3 className="text-white font-bold text-center text-sm leading-snug">{item.step}</h3>
-                </div>
-                <div className="p-6 bg-white flex-1">
-                  <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── LESS THAN $70 / VIDEO ── */}
-      <section className="py-20 px-6 bg-gray-50 border-t border-gray-100">
+      {/* ══════════════════════════════════════════════════════════════════
+          PRICING HIGHLIGHT + VIDEO
+      ══════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-14 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <h2 className="text-4xl sm:text-5xl font-black text-red-500 mb-6">Less Than $70 Per Year</h2>
-            <p className="text-gray-700 leading-relaxed mb-4">
-              You can choose one affordable payment of <strong>$69 per year,</strong> or even <strong>$299 for an UNLIMITED period</strong>, with absolutely <strong>NO HIDDEN FEES</strong>, that secures your FAA compliance and peace of mind through IFOA USA as a U.S. Agent Service.
+            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Pricing</p>
+            <h2 className="text-4xl sm:text-5xl font-black mb-6" style={{ color: C.dark }}>Less Than $70 Per Year</h2>
+            <p className="leading-relaxed mb-4" style={{ color: C.gray700 }}>
+              Choose one affordable payment of <strong style={{ color: C.dark }}>$69 per year,</strong> or <strong style={{ color: C.dark }}>$299 for an UNLIMITED period</strong>, with absolutely <strong style={{ color: C.dark }}>NO HIDDEN FEES.</strong>
             </p>
-            <p className="text-gray-700 leading-relaxed mb-6">
-              You will gain a dedicated U.S. mailing address for FAA correspondence, instant digital forwarding of essential documents, and secure, convenient online access whenever needed.
+            <p className="leading-relaxed mb-6" style={{ color: C.gray700 }}>
+              You will gain a dedicated U.S. mailing address for FAA correspondence, instant digital forwarding, and secure online access.
             </p>
-            <p className="text-gray-900 font-black text-xl mb-3">Do not miss this unbeatable rate!</p>
-            <p className="text-gray-600 mb-8">Preregister today and lock in worry-free compliance!</p>
-            <Link to="/individual/register"
-              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-8 py-3.5 rounded-xl text-sm transition-all duration-200">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <p className="font-black text-xl mb-3" style={{ color: C.dark }}>Do not miss this unbeatable rate!</p>
+            <p className="mb-8" style={{ color: C.gray600 }}>Register today and lock in worry-free compliance!</p>
+            <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-8 py-3.5 rounded-xl text-sm transition-all duration-200"
+              style={{ background: C.blue }}
+              onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+              onMouseLeave={e => e.currentTarget.style.background = C.blue}>
               Create Your Account
             </Link>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
             <div className="rounded-2xl overflow-hidden shadow-lg mb-6">
-              <iframe width="100%" height="315" src="https://www.youtube.com/embed/qYtEEb3GeVM"
-                title="IFOA USA - Your US Agent for Service" frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen className="w-full" />
+              <iframe width="100%" height="315" src="https://www.youtube.com/embed/qYtEEb3GeVM" title="IFOA USA" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full" />
             </div>
             <div className="space-y-4">
               {['A dedicated U.S. address for official FAA correspondence', 'Real-time unlimited digital mail forwarding so you never miss important documents'].map((point, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0 w-6 h-6 rounded-full border-2 border-red-500 flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  <div className="mt-0.5 shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center" style={{ borderColor: C.blue }}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C.blue }}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                   </div>
-                  <p className="text-gray-700 text-sm leading-relaxed">{point}</p>
+                  <p className="text-sm leading-relaxed" style={{ color: C.gray700 }}>{point}</p>
                 </div>
               ))}
             </div>
           </motion.div>
         </div>
       </section>
+
+      {/* FAQ */}
+      <FAQSection />
 
       <Footer />
     </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import DashboardLayout from '../components/layout/DashboardLayout'
+import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import {
   deleteAirlinesSubscription,
   deleteIndividual,
@@ -22,10 +23,10 @@ const fmtMoney = (v) =>
     : '—'
 
 const inputCls =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
 
 const selectCls =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300'
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
 
 function Badge({ value, type = 'payment', isPaid }) {
   let cls = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
@@ -39,7 +40,7 @@ function Badge({ value, type = 'payment', isPaid }) {
     else                          { cls += 'bg-slate-100 border-slate-200 text-slate-500'; dot += 'bg-slate-400' }
     if (value === 'Active' && isPaid === false) label = 'Pending'
   } else if (type === 'plan') {
-    if (value?.includes('Unlimited'))     { cls += 'bg-red-50 border-red-200 text-red-700'; dot += 'bg-red-500' }
+    if (value?.includes('Unlimited'))     { cls += 'bg-indigo-50 border-indigo-200 text-indigo-700'; dot += 'bg-indigo-500' }
     else if (value?.includes('Multiple')) { cls += 'bg-slate-100 border-slate-200 text-slate-700'; dot += 'bg-slate-500' }
     else                                  { cls += 'bg-slate-50 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
   } else if (type === 'isPaid') {
@@ -79,7 +80,7 @@ function ViewField({ label, value }) {
 }
 
 function SectionHead({ label }) {
-  return <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-3 pt-1">{label}</p>
+  return <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3 pt-1">{label}</p>
 }
 
 // ─── Individual View Modal ─────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Individual — Record</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Individual — Record</p>
               <h2 className="text-lg font-extrabold text-slate-900">{fullName}</h2>
             </div>
             <div className="flex items-center gap-2">
@@ -126,16 +127,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
                 <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
                 <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
-                <ViewField
-                  label="Expiration Date"
-                  value={
-                    record.subscriptionPlan === 'Unlimited Plan'
-                      ? 'Never (Unlimited)'
-                      : record.expirationDate
-                      ? fmtDate(record.expirationDate)
-                      : record.isPaid ? '—' : 'Activates on payment'
-                  }
-                />
+                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDate(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price" value={fmtMoney(record.price)} />
                 <ViewField label="Service Fees" value={fmtMoney(record.totalServiceFees)} />
               </div>
@@ -199,7 +191,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Airline — Record</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Airline — Record</p>
               <h2 className="text-lg font-extrabold text-slate-900">{record.airlineName || 'Airline'}</h2>
             </div>
             <div className="flex items-center gap-2">
@@ -213,34 +205,16 @@ function AirlineViewModal({ record, onClose, onEdit }) {
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</span>
-                  <Badge value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Confirmed</span>
-                  <Badge type="isPaid" isPaid={record.isPaid} />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment</span>
-                  <Badge value={record.paymentStatus} isPaid={record.isPaid} />
-                </div>
+                <div className="flex flex-col gap-1"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</span><Badge value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} /></div>
+                <div className="flex flex-col gap-1"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Confirmed</span><Badge type="isPaid" isPaid={record.isPaid} /></div>
+                <div className="flex flex-col gap-1"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment</span><Badge value={record.paymentStatus} isPaid={record.isPaid} /></div>
                 <ViewField label="Invoice" value={record.invoiceStatus} />
                 <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
                 <ViewField label="Holder Count" value={record.holderCount} />
                 <ViewField label="Exact Count" value={record.holderCountValue} />
                 <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
-                <ViewField
-                  label="Expiration Date"
-                  value={
-                    record.subscriptionPlan === 'Unlimited Plan'
-                      ? 'Never (Unlimited)'
-                      : record.expirationDate
-                      ? fmtDate(record.expirationDate)
-                      : record.isPaid ? '—' : 'Activates on payment'
-                  }
-                />
+                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDate(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price/Cert" value={fmtMoney(record.pricePerCertificate ?? record.pricePerCert)} />
                 <ViewField label="Total Fees" value={fmtMoney(record.totalServiceFees ?? record.totalAmount)} />
               </div>
@@ -248,9 +222,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Airline / Operator" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="col-span-2 sm:col-span-3"><ViewField label="Company" value={record.airlineName} /></div>
-                <div className="col-span-2 sm:col-span-3">
-                  <ViewField label="Address" value={[record.addressLine1, record.addressLine2, record.city, record.state, record.postalCode, record.country].filter(Boolean).join(', ')} />
-                </div>
+                <div className="col-span-2 sm:col-span-3"><ViewField label="Address" value={[record.addressLine1, record.addressLine2, record.city, record.state, record.postalCode, record.country].filter(Boolean).join(', ')} /></div>
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Point of Contact" />
@@ -270,7 +242,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
                 <div className="space-y-3">
                   {record.certificateHolders.map((h, i) => (
                     <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-3">Holder #{i + 1}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Holder #{i + 1}</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         <ViewField label="Full Name" value={h.fullName} />
                         <ViewField label="Date of Birth" value={h.dateOfBirth ? fmtDate(h.dateOfBirth) : '—'} />
@@ -325,7 +297,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Edit Individual</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Individual</p>
               <h2 className="text-lg font-extrabold text-slate-900">{fullName}</h2>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
@@ -367,22 +339,15 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 <Field label="IACRA / FTN"><input className={inputCls} value={form.iacraTrackingNumber || ''} onChange={e => set('iacraTrackingNumber', e.target.value)} /></Field>
                 <div className="sm:col-span-2">
                   <label className="flex items-center gap-2 cursor-pointer mb-3">
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${form.hasSecondaryCertificate ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${form.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}
                       onClick={() => set('hasSecondaryCertificate', !form.hasSecondaryCertificate)}>
                       {form.hasSecondaryCertificate && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                     </div>
                     <span className="text-xs font-semibold text-slate-700">Has secondary certificate</span>
                   </label>
                   {form.hasSecondaryCertificate && (
-                    <div className="grid sm:grid-cols-2 gap-3 ml-2 pl-4 border-l-2 border-red-200">
-                      <Field label="Secondary Cert Type">
-                        <select className={selectCls} value={form.secondaryCertificate || ''} onChange={e => set('secondaryCertificate', e.target.value)}>
-                          <option value="">— Select —</option>
-                          <option value="Part 61 - Pilot">Part 61 - Pilot</option>
-                          <option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option>
-                          <option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option>
-                        </select>
-                      </Field>
+                    <div className="grid sm:grid-cols-2 gap-3 ml-2 pl-4 border-l-2 border-blue-200">
+                      <Field label="Secondary Cert Type"><select className={selectCls} value={form.secondaryCertificate || ''} onChange={e => set('secondaryCertificate', e.target.value)}><option value="">— Select —</option><option value="Part 61 - Pilot">Part 61 - Pilot</option><option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option><option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option></select></Field>
                       <Field label="Secondary FAA Cert #"><input className={inputCls} value={form.secondaryFaaCertificateNumber || ''} onChange={e => set('secondaryFaaCertificateNumber', e.target.value)} /></Field>
                       <Field label="Secondary IACRA FTN #"><input className={inputCls} value={form.secondaryIacraTrackingNumber || ''} onChange={e => set('secondaryIacraTrackingNumber', e.target.value)} /></Field>
                     </div>
@@ -411,7 +376,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
           </div>
           <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -445,7 +410,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Edit Airline</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Airline</p>
               <h2 className="text-lg font-extrabold text-slate-900">{record.airlineName || 'Airline'}</h2>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
@@ -491,46 +456,26 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <div className="space-y-4">
                   {form.certificateHolders.map((h, idx) => (
                     <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-3">Holder #{idx + 1}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Holder #{idx + 1}</p>
                       <div className="grid sm:grid-cols-2 gap-3">
                         <Field label="Full Name"><input className={inputCls} value={h.fullName || ''} onChange={e => setHolder(idx, 'fullName', e.target.value)} /></Field>
                         <Field label="Date of Birth"><input className={inputCls} type="date" value={h.dateOfBirth ? String(h.dateOfBirth).slice(0,10) : ''} onChange={e => setHolder(idx, 'dateOfBirth', e.target.value)} /></Field>
-                        <Field label="Certificate Type">
-                          <select className={selectCls} value={h.certificateType || ''} onChange={e => setHolder(idx, 'certificateType', e.target.value)}>
-                            <option value="">— Select —</option>
-                            <option value="Part 61 - Pilot">Part 61 - Pilot</option>
-                            <option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option>
-                            <option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option>
-                          </select>
-                        </Field>
-                        <Field label="Certificate Status">
-                          <select className={selectCls} value={h.certificateStatus || ''} onChange={e => setHolder(idx, 'certificateStatus', e.target.value)}>
-                            <option value="">— Select —</option>
-                            <option value="NEW">NEW</option>
-                            <option value="EXISTING">EXISTING</option>
-                          </select>
-                        </Field>
+                        <Field label="Certificate Type"><select className={selectCls} value={h.certificateType || ''} onChange={e => setHolder(idx, 'certificateType', e.target.value)}><option value="">— Select —</option><option value="Part 61 - Pilot">Part 61 - Pilot</option><option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option><option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option></select></Field>
+                        <Field label="Certificate Status"><select className={selectCls} value={h.certificateStatus || ''} onChange={e => setHolder(idx, 'certificateStatus', e.target.value)}><option value="">— Select —</option><option value="NEW">NEW</option><option value="EXISTING">EXISTING</option></select></Field>
                         <Field label="FAA Certificate #"><input className={inputCls} value={h.faaCertificateNumber || ''} onChange={e => setHolder(idx, 'faaCertificateNumber', e.target.value)} /></Field>
                         <Field label="IACRA FTN #"><input className={inputCls} value={h.iacraFtnNumber || ''} onChange={e => setHolder(idx, 'iacraFtnNumber', e.target.value)} /></Field>
                         <div className="sm:col-span-2"><Field label="Email"><input className={inputCls} type="email" placeholder="holder@example.com" value={h.email || ''} onChange={e => setHolder(idx, 'email', e.target.value)} /></Field></div>
                         <div className="sm:col-span-2">
                           <label className="flex items-center gap-2 cursor-pointer mb-3">
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${h.hasSecondaryCertificate ? 'bg-red-600 border-red-600' : 'bg-white border-slate-300'}`}
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}
                               onClick={() => setHolder(idx, 'hasSecondaryCertificate', !h.hasSecondaryCertificate)}>
                               {h.hasSecondaryCertificate && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                             </div>
                             <span className="text-xs font-semibold text-slate-700">Has secondary certificate</span>
                           </label>
                           {h.hasSecondaryCertificate && (
-                            <div className="grid sm:grid-cols-2 gap-3 ml-2 pl-4 border-l-2 border-red-200">
-                              <Field label="Secondary Cert Type">
-                                <select className={selectCls} value={h.secondaryCertificateType || ''} onChange={e => setHolder(idx, 'secondaryCertificateType', e.target.value)}>
-                                  <option value="">— Select —</option>
-                                  <option value="Part 61 - Pilot">Part 61 - Pilot</option>
-                                  <option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option>
-                                  <option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option>
-                                </select>
-                              </Field>
+                            <div className="grid sm:grid-cols-2 gap-3 ml-2 pl-4 border-l-2 border-blue-200">
+                              <Field label="Secondary Cert Type"><select className={selectCls} value={h.secondaryCertificateType || ''} onChange={e => setHolder(idx, 'secondaryCertificateType', e.target.value)}><option value="">— Select —</option><option value="Part 61 - Pilot">Part 61 - Pilot</option><option value="Part 61 - Flight or Ground Instructor">Part 61 - Instructor</option><option value="Part 65 - Aircraft Dispatcher">Part 65 - Dispatcher</option></select></Field>
                               <Field label="Secondary FAA Cert #"><input className={inputCls} value={h.secondaryFaaCertificateNumber || ''} onChange={e => setHolder(idx, 'secondaryFaaCertificateNumber', e.target.value)} /></Field>
                               <Field label="Secondary IACRA FTN #"><input className={inputCls} value={h.secondaryIacraFtnNumber || ''} onChange={e => setHolder(idx, 'secondaryIacraFtnNumber', e.target.value)} /></Field>
                             </div>
@@ -563,7 +508,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
           </div>
           <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -620,7 +565,6 @@ function RowActions({ onView, onEdit, onDelete, isDeleting }) {
 }
 
 // ─── Grouped Individuals Table ─────────────────────────────────────────────────
-// Groups by email — same collapse behaviour as Airlines table
 function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
   const [expanded, setExpanded] = useState({})
 
@@ -668,13 +612,12 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
 
               return (
                 <React.Fragment key={key}>
-                  {/* ── Primary row ── */}
                   <tr
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 text-xs font-black flex items-center justify-center flex-shrink-0">
                           {initials}
                         </div>
                         <div className="min-w-0">
@@ -707,16 +650,10 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                     <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
-                      <RowActions
-                        onView={() => onView(primary)}
-                        onEdit={() => onEdit(primary)}
-                        onDelete={() => onDelete(primary._id, 'individual')}
-                        isDeleting={deleting === primary._id}
-                      />
+                      <RowActions onView={() => onView(primary)} onEdit={() => onEdit(primary)} onDelete={() => onDelete(primary._id, 'individual')} isDeleting={deleting === primary._id} />
                     </td>
                   </tr>
 
-                  {/* ── Collapsed sub-rows (each additional subscription) ── */}
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr key={sub._id + '-sub'}
                       className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
@@ -729,31 +666,19 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                           </div>
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
-                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[110px]">
-                              {[sub.firstName, sub.lastName].filter(Boolean).join(' ') || '—'}
-                            </p>
+                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[110px]">{[sub.firstName, sub.lastName].filter(Boolean).join(' ') || '—'}</p>
                             <p className="text-[10px] text-slate-400 truncate max-w-[110px]">{sub.primaryCertificate || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p>
-                        <p className="text-slate-400 text-[11px] mt-0.5">{sub.phone || '—'}</p>
-                      </td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p><p className="text-slate-400 text-[11px] mt-0.5">{sub.phone || '—'}</p></td>
                       <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <RowActions
-                          onView={() => onView(sub)}
-                          onEdit={() => onEdit(sub)}
-                          onDelete={() => onDelete(sub._id, 'individual')}
-                          isDeleting={deleting === sub._id}
-                        />
-                      </td>
+                      <td className="px-4 py-3"><RowActions onView={() => onView(sub)} onEdit={() => onEdit(sub)} onDelete={() => onDelete(sub._id, 'individual')} isDeleting={deleting === sub._id} /></td>
                     </tr>
                   ))}
                 </React.Fragment>
@@ -815,7 +740,6 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
 
               return (
                 <React.Fragment key={key}>
-                  {/* ── Primary row ── */}
                   <tr
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
@@ -823,53 +747,35 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0 select-none">✈</div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">
-                            {primary.airlineName || '—'}
-                          </p>
+                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
                           {hasMany && (
-                            <button
-                              onClick={e => { e.stopPropagation(); toggle(key) }}
-                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap"
-                            >
-                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
+                            <button onClick={e => { e.stopPropagation(); toggle(key) }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap">
+                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                               Multiple Subscriptions ({group.length})
                             </button>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || '—'}</p>
-                    </td>
+                    <td className="px-4 py-4"><p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || '—'}</p></td>
                     <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs font-medium text-slate-700">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-0.5">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
                           {primary.certificateHolders?.length || 0}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
-                          {fmtMoney(primary.totalAmount || primary.totalServiceFees)}
-                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtMoney(primary.totalAmount || primary.totalServiceFees)}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
-                    <td className="px-4 py-4">
-                      <RowActions
-                        onView={() => onView(primary)}
-                        onEdit={() => onEdit(primary)}
-                        onDelete={() => onDelete(primary._id, 'airline')}
-                        isDeleting={deleting === primary._id}
-                      />
-                    </td>
+                    <td className="px-4 py-4"><RowActions onView={() => onView(primary)} onEdit={() => onEdit(primary)} onDelete={() => onDelete(primary._id, 'airline')} isDeleting={deleting === primary._id} /></td>
                   </tr>
 
-                  {/* ── Sub-rows (collapsed) ── */}
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr key={sub._id + '-sub'}
                       className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
@@ -891,25 +797,14 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">
-                            {sub.certificateHolders?.length || 0}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
-                            {fmtMoney(sub.totalAmount || sub.totalServiceFees)}
-                          </span>
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">{sub.certificateHolders?.length || 0}</span>
+                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtMoney(sub.totalAmount || sub.totalServiceFees)}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <RowActions
-                          onView={() => onView(sub)}
-                          onEdit={() => onEdit(sub)}
-                          onDelete={() => onDelete(sub._id, 'airline')}
-                          isDeleting={deleting === sub._id}
-                        />
-                      </td>
+                      <td className="px-4 py-3"><RowActions onView={() => onView(sub)} onEdit={() => onEdit(sub)} onDelete={() => onDelete(sub._id, 'airline')} isDeleting={deleting === sub._id} /></td>
                     </tr>
                   ))}
                 </React.Fragment>
@@ -965,7 +860,7 @@ function OverviewPanel({ individuals, airlines }) {
                     <span className="font-bold text-slate-900">{count} <span className="text-slate-400 font-normal">({pct}%)</span></span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-red-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
+                    <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
                   </div>
                 </div>
               )
@@ -980,7 +875,7 @@ function OverviewPanel({ individuals, airlines }) {
                 <span className="text-sm text-slate-700 font-medium">{country}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.round((count / individuals.length) * 100)}%` }} />
+                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.round((count / individuals.length) * 100)}%` }} />
                   </div>
                   <span className="text-xs font-bold text-slate-600 w-4 text-right">{count}</span>
                 </div>
@@ -996,7 +891,7 @@ function OverviewPanel({ individuals, airlines }) {
 export default function AdminDashboard() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const tabFromPath = pathname.endsWith('/individuals') ? 'individuals' : pathname.endsWith('/airlines') ? 'airlines' : 'overview'
+  const tabFromPath = pathname.endsWith('/individuals') ? 'individuals' : pathname.endsWith('/airlines') ? 'airlines' : pathname.endsWith('/add-airline') ? 'add-airline' : 'overview'
   const [tab, setTab] = useState(tabFromPath)
   useEffect(() => { setTab(tabFromPath) }, [pathname])
 
@@ -1117,9 +1012,10 @@ export default function AdminDashboard() {
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
 
   const TAB_CONFIG = [
-    { key: 'overview',    label: 'Overview',    count: null },
-    { key: 'individuals', label: 'Individuals', count: individuals.length },
-    { key: 'airlines',    label: 'Airlines',    count: airlines.length },
+    { key: 'overview',    label: 'Overview',      count: null },
+    { key: 'individuals', label: 'Individuals',   count: individuals.length },
+    { key: 'airlines',    label: 'Airlines',      count: airlines.length },
+    { key: 'add-airline', label: '+ Add Airline', count: null },
   ]
 
   const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterSubType('all') }
@@ -1145,7 +1041,7 @@ export default function AdminDashboard() {
       {editRec && editType === 'airline'    && <AirlineEditModal    record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
 
       <div className="mb-6">
-        <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Admin Control Center</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Admin Control Center</p>
         <h1 className="text-2xl font-black text-slate-900">Registrations Dashboard</h1>
         <p className="text-slate-500 text-sm mt-1">Manage all pilot and airline operator registrations.</p>
       </div>
@@ -1165,11 +1061,14 @@ export default function AdminDashboard() {
             {TAB_CONFIG.map(t => (
               <button key={t.key}
                 onClick={() => {
-                  const path = t.key === 'overview' ? '/admin' : t.key === 'individuals' ? '/admin/individuals' : '/admin/airlines'
+                  let path = '/admin'
+                  if (t.key === 'individuals') path = '/admin/individuals'
+                  else if (t.key === 'airlines') path = '/admin/airlines'
+                  else if (t.key === 'add-airline') path = '/admin/add-airline'
                   navigate(path)
                   clearFilters()
                 }}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${tab === t.key ? 'bg-red-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${tab === t.key ? 'bg-blue-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 {t.label}
                 {t.count !== null && (
                   <span className={`rounded-full px-2 py-0.5 text-xs ${tab === t.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{t.count}</span>
@@ -1186,23 +1085,23 @@ export default function AdminDashboard() {
         </div>
 
         {/* Filter bar */}
-        {tab !== 'overview' && (
+        {tab !== 'overview' && tab !== 'add-airline' && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
               <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100 w-44 bg-white transition" />
+                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-44 bg-white transition" />
             </div>
             <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-red-500 text-slate-600 transition">
+              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {PLANS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Plans' : p}</option>)}
             </select>
             <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-red-500 text-slate-600 transition">
+              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {PAYMENTS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Payments' : p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-red-500 text-slate-600 transition">
+              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
             <div className="flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden text-xs font-semibold">
@@ -1212,7 +1111,7 @@ export default function AdminDashboard() {
                 { val: 'single', label: 'Single Sub' },
               ].map(opt => (
                 <button key={opt.val} onClick={() => setFilterSubType(opt.val)}
-                  className={`px-3 py-2 transition-colors whitespace-nowrap ${filterSubType === opt.val ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+                  className={`px-3 py-2 transition-colors whitespace-nowrap ${filterSubType === opt.val ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
                   {opt.label}
                 </button>
               ))}
@@ -1223,13 +1122,13 @@ export default function AdminDashboard() {
               Export Excel
             </a>
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-xs text-red-600 font-semibold hover:underline px-1">Clear filters</button>
+              <button onClick={clearFilters} className="text-xs text-blue-600 font-semibold hover:underline px-1">Clear filters</button>
             )}
           </div>
         )}
       </div>
 
-      {tab !== 'overview' && !loading && (
+      {tab !== 'overview' && tab !== 'add-airline' && !loading && (
         <div className="flex items-center gap-3 mb-4 px-1">
           <p className="text-sm text-slate-500">
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
@@ -1245,11 +1144,15 @@ export default function AdminDashboard() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-40 gap-4">
-          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-red-600 animate-spin" />
+          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
           <p className="text-sm font-semibold text-slate-500">Loading records…</p>
         </div>
       ) : tab === 'overview' ? (
         <OverviewPanel individuals={individuals} airlines={airlines} />
+      ) : tab === 'add-airline' ? (
+        <div className="px-4">
+          <AdminAirlineForm />
+        </div>
       ) : tab === 'individuals' ? (
         <IndividualsTable data={filtered} onView={r => openView(r, 'individual')} onEdit={r => { setEditRec(r); setEditType('individual') }} onDelete={handleDelete} deleting={deleting} />
       ) : (

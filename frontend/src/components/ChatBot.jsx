@@ -6,13 +6,12 @@ import ifoaLogo from '../assets/IFOA_USA_white.png'
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 const SUGGESTIONS = [
-  { label: '💰 Compare all plans', q: 'What are all the subscription plans and prices?' },
-  { label: '⭐ Best value plan?', q: 'Which plan is the best value?' },
-  { label: '✈️ Who needs this?', q: 'Who needs an Agent for Service?' },
-  { label: '🪪 EXISTING vs NEW cert?', q: 'What is the difference between EXISTING and NEW certificate status?' },
-  { label: '🔢 FAA Certificate Number?', q: 'What is an FAA Certificate Number and where do I find it?' },
-  { label: '📋 What is IACRA/FTN?', q: 'What is the IACRA FTN tracking number?' },
-  { label: '💳 How do I pay?', q: 'How does payment work?' },
+  'I need an FAA Agent for Service, how does it all work?',
+  'How much does the service cost?',
+  'Do I need to notify the FAA if I change my Agent for Service?',
+  'What kind of FAA mail will go to you?',
+  'How do I complete the USAS appointment?',
+  'What is an IACRA FTN tracking number?',
 ]
 
 const PLAN_INFO = `
@@ -43,9 +42,8 @@ IFOA USA Agent for Service — Subscription Plans:
    • Document Scanning & Forwarding
    • One Time Lifetime Payment
    • Unlimited Certificates
-   WHY IT'S BEST VALUE: $299 once vs $69/year. After just 5 years you start saving money — and you're covered for life with no renewals ever.
 
-4. AIRLINES PLAN — Tailored Price (Choose Subscription Duration)
+4. AIRLINES PLAN — Tailored Price
    • Volume Discount for operators with 3+ FAA certificate holders
    • Dedicated U.S. Mailing Address
    • FAA Compliance Guaranteed
@@ -53,132 +51,148 @@ IFOA USA Agent for Service — Subscription Plans:
    • Document Scanning & Forwarding
    • Credit Card (Stripe) or Wire Payment
    • Unlimited Certificates
-   Pricing: $60/cert/year (3–5 holders), $55/cert/year (5–10), $49/cert/year (10+)
-   Unlimited option: $265/year (3–5), $255/year (5–10), $245/year (10+)
 
 PAYMENT INFORMATION:
-   • We accept payments via Stripe (credit/debit card) — instant activation upon successful payment.
-   • You can also choose "Pay Later" — submit your registration now and receive an invoice by email; your plan activates once payment is received.
+   • We accept payments via Stripe (credit/debit card).
+   • You can also choose "Pay Later" — submit your registration now and receive an invoice by email.
    • All card payments are secured by Stripe with 256-bit SSL encryption.
-   • We do NOT accept PayPal. Payment is processed exclusively through Stripe or wire transfer (Airlines plan only).
+   • We do NOT accept PayPal.
 `
 
-// ── Pre-registration steps panel ─────────────────────────────────────────────
-function PreStepsPanel({ onContinue }) {
+// ── Home view (like the reference image) ─────────────────────────────────────
+function HomeView({ onAsk, onViewMessages }) {
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 bg-gradient-to-r from-blue-700 to-blue-600 flex-shrink-0">
-        <p className="text-xs font-bold text-blue-200 uppercase tracking-widest mb-0.5">Before You Begin</p>
-        <p className="text-sm font-bold text-white leading-snug">Complete these steps first</p>
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Greeting */}
+      <div className="px-6 pt-8 pb-6 bg-gray-50">
+        <h2 className="text-2xl font-black text-gray-900 leading-snug mb-1">
+          Hi there 👋
+        </h2>
+        <h3 className="text-2xl font-black text-gray-900 leading-snug">
+          How can we help?
+        </h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50">
-
-        {/* Step 1 — IACRA */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-2">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center flex-shrink-0">1</span>
-            <p className="text-sm font-bold text-slate-800">FAA IACRA</p>
-          </div>
-          <p className="text-xs text-slate-600 leading-relaxed px-3.5 pb-2">
-            Retrieve your <span className="font-semibold text-slate-700">FTN Number</span> on the FAA IACRA website as a:
-          </p>
-          <ul className="px-3.5 pb-2 space-y-0.5">
-            <li className="text-xs text-slate-600 flex items-start gap-1.5">
-              <span className="text-blue-500 mt-0.5">•</span>
-              <span><span className="font-semibold">NEW</span> certificate applicant, or</span>
-            </li>
-            <li className="text-xs text-slate-600 flex items-start gap-1.5">
-              <span className="text-blue-500 mt-0.5">•</span>
-              <span><span className="font-semibold">EXISTING</span> certificate holder</span>
-            </li>
-          </ul>
-          <div className="px-3.5 pb-3.5">
-            <a
-              href="https://iacra.faa.gov"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors group"
-            >
-              <span className="text-xs font-semibold text-blue-700">Access FAA IACRA Portal</span>
-              <svg className="w-3.5 h-3.5 text-blue-500 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </a>
-          </div>
-        </div>
-
-        {/* Step 2 — USAS */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-2">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center flex-shrink-0">2</span>
-            <p className="text-sm font-bold text-slate-800">FAA USAS</p>
-          </div>
-          <p className="text-xs text-slate-600 leading-relaxed px-3.5 pb-2">
-            Register <span className="font-semibold text-slate-700">IFOA</span> as your official U.S. Agent for Service with the FAA.
-          </p>
-          <p className="text-[11px] text-slate-400 px-3.5 pb-2 italic">
-            The FAA's appointment portal (USAS) has been available since April 2, 2025.
-          </p>
-          <div className="px-3.5 pb-3.5">
-            <a
-              href="https://usas.faa.gov"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors group"
-            >
-              <span className="text-xs font-semibold text-blue-700">Access FAA USAS Portal</span>
-              <svg className="w-3.5 h-3.5 text-blue-500 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </a>
-          </div>
-        </div>
-
-        {/* Step 3 */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-2">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-black flex items-center justify-center flex-shrink-0">3</span>
-            <p className="text-sm font-bold text-slate-500">Fill the IFOA Registration Form</p>
-          </div>
-          <p className="text-xs text-slate-500 leading-relaxed px-3.5 pb-3.5">
-            Once you have your FTN and have registered in USAS, complete the IFOA form. Need help? Ask our assistant.
-          </p>
-        </div>
-
-      </div>
-
-      <div className="flex-shrink-0 border-t border-slate-100 bg-white px-4 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+        {/* Recent message card */}
         <button
-          onClick={onContinue}
-          className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-bold transition-all shadow-sm"
+          onClick={onViewMessages}
+          className="w-full bg-white rounded-2xl p-4 text-left transition-all hover:shadow-md"
+          style={{ border: '1px solid #e5e7eb' }}
         >
-          I'm ready — help me fill the form →
+          <p className="text-xs font-bold text-gray-500 mb-3">Recent message</p>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" >
+              <img src={ifoaLogo} alt="IFOA" className="h-5 w-auto object-contain" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-bold text-gray-900">IFOA Assistant</p>
+                <p className="text-xs text-gray-400 flex-shrink-0 ml-2">now</p>
+              </div>
+              <p className="text-sm text-gray-500 truncate">
+                Hi! I'm the IFOA Form Assistant. How can I help you today?
+              </p>
+            </div>
+          </div>
         </button>
-        <p className="text-[10px] text-slate-400 text-center">IFOA AGENT FOR SERVICE</p>
+
+        {/* Ask a question */}
+        <button
+          onClick={() => onAsk('')}
+          className="w-full bg-white rounded-2xl px-5 py-4 flex items-center justify-between text-left transition-all hover:shadow-md"
+          style={{ border: '1px solid #e5e7eb' }}
+        >
+          <span className="text-sm font-bold text-gray-900">Ask a question</span>
+          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </button>
+
+        {/* Search / common questions */}
+        <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
+          <div className="px-5 py-4 flex items-center justify-between border-b border-gray-100">
+            <span className="text-sm font-bold text-gray-900">Search for help</span>
+            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          {SUGGESTIONS.map((s, i) => (
+            <button
+              key={s}
+              onClick={() => onAsk(s)}
+              className="w-full px-5 py-3.5 flex items-center justify-between text-left transition-colors hover:bg-gray-50 group"
+              style={{ borderBottom: i < SUGGESTIONS.length - 1 ? '1px solid #f3f4f6' : 'none' }}
+            >
+              <span className="text-sm text-gray-700 leading-snug pr-3">{s}</span>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Article view (for FAQ-style answers) ─────────────────────────────────────
+function ArticleView({ title, content, onBack }) {
+  return (
+    <div className="flex flex-col h-full bg-white">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <h2 className="text-2xl font-black text-gray-900 leading-snug mb-2">{title}</h2>
+        <p className="text-xs text-gray-400 mb-6">Updated recently</p>
+        <div className="text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">{content}</div>
+
+        <div className="mt-8 border-t border-gray-100 pt-6">
+          <h3 className="text-base font-bold text-gray-900 mb-4">Related Articles</h3>
+          <div className="space-y-0">
+            {SUGGESTIONS.filter(s => s !== title).slice(0, 3).map(s => (
+              <button
+                key={s}
+                className="w-full py-4 flex items-center justify-between text-left border-b border-gray-100 group hover:text-gray-900 transition-colors"
+                onClick={() => onBack()}
+              >
+                <span className="text-sm text-gray-600 pr-3">{s}</span>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
 // ── Chat view ─────────────────────────────────────────────────────────────────
-function ChatView({ messages, setMessages, loading, setLoading }) {
-  const [input, setInput] = useState('')
+function ChatView({ messages, setMessages, loading, setLoading, initialQuestion }) {
+  const [input, setInput] = useState(initialQuestion || '')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
+  const sentInitial = useRef(false)
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
   }, [messages])
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 150)
+    if (initialQuestion && !sentInitial.current) {
+      sentInitial.current = true
+      sendMessage(initialQuestion)
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 150)
+    }
   }, [])
 
   const sendMessage = async (text) => {
-    const msg = (text || input).trim()
+    const msg = (text !== undefined ? text : input).trim()
     if (!msg || loading) return
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = '42px'
@@ -235,28 +249,26 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
       )
     })
 
-  const showSuggestions = messages.length <= 1
-
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-3 bg-slate-50/60 min-h-0">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50 min-h-0">
         {messages.map((msg, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
-            className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             {msg.role === 'assistant' && (
-              <div className="w-9 h-9 rounded-full text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
-                <img src={ifoaLogo} alt="" />
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm" >
+                <img src={ifoaLogo} alt="" className="h-4 w-auto object-contain" />
               </div>
             )}
-            <div className={`max-w-[78%] px-3.5 py-2.5 text-sm leading-relaxed ${
+            <div className={`max-w-[78%] px-4 py-3 text-sm leading-relaxed ${
               msg.role === 'user'
-                ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm shadow-sm'
-                : 'bg-white text-slate-800 rounded-2xl rounded-bl-sm border border-slate-100 shadow-sm'
+                ? 'bg-black text-white rounded-2xl rounded-br-sm shadow-sm'
+                : 'bg-white text-gray-800 rounded-2xl rounded-bl-sm border border-gray-200 shadow-sm'
             }`}>
               {renderText(msg.content)}
             </div>
@@ -264,39 +276,25 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
         ))}
 
         {loading && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2 justify-start">
-            <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 shadow-sm">IF</div>
-            <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-sm px-4 py-3.5 shadow-sm">
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 justify-start">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" >
+              <img src={ifoaLogo} alt="" className="h-4 w-auto object-contain" />
+            </div>
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3.5 shadow-sm">
               <div className="flex gap-1.5 items-center">
                 {[0, 150, 300].map(delay => (
-                  <span key={delay} className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                  <span key={delay} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
                 ))}
               </div>
             </div>
           </motion.div>
         )}
 
-        {showSuggestions && !loading && (
-          <div className="pt-1 pl-9">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Common questions</p>
-            <div className="flex flex-col gap-1.5">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s.q}
-                  onClick={() => sendMessage(s.q)}
-                  className="text-left text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl px-3 py-2 transition-colors"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex-shrink-0 border-t border-slate-100 bg-white px-3 pt-2 pb-2">
+      {/* Input */}
+      <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 pt-3 pb-3">
         <div className="flex items-end gap-2">
           <textarea
             ref={(el) => { inputRef.current = el; textareaRef.current = el }}
@@ -305,18 +303,23 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
             onChange={e => {
               setInput(e.target.value)
               e.target.style.height = 'auto'
-              e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px'
+              e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
             }}
             onKeyDown={handleKey}
-            placeholder="Ask about any form field…"
-            className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition leading-relaxed"
-            style={{ height: 42, maxHeight: 80 }}
+            placeholder="Write a message…"
+            className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition leading-relaxed"
+            style={{ height: 44, maxHeight: 100 }}
+            onFocus={e => { e.target.style.borderColor = '#000'; e.target.style.background = '#fff' }}
+            onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f9fafb' }}
             disabled={loading}
           />
           <button
             onClick={() => sendMessage()}
             disabled={!input.trim() || loading}
-            className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all flex-shrink-0 active:scale-95"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-white transition-all flex-shrink-0 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ background: '#000' }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#222' }}
+            onMouseLeave={e => e.currentTarget.style.background = '#000'}
           >
             {loading ? (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -330,26 +333,30 @@ function ChatView({ messages, setMessages, loading, setLoading }) {
             )}
           </button>
         </div>
-        <p className="text-[10px] text-slate-400 text-center mt-1.5">IFOA AGENT FOR SERVICE</p>
       </div>
     </div>
   )
 }
 
+// ── Width sizes ───────────────────────────────────────────────────────────────
+const WIDTH_SIZES = [380, 480, 600]
+
 // ── Root ChatBot component ────────────────────────────────────────────────────
 export default function ChatBot() {
   const [open, setOpen] = useState(false)
-  const [view, setView] = useState('presteps')
+  const [view, setView] = useState('home') // 'home' | 'chat' | 'article'
+  const [widthIndex, setWidthIndex] = useState(0)
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hi! 👋 I'm the IFOA Form Assistant.\n\nBefore filling the form, make sure you've completed the FAA IACRA and USAS steps shown earlier.\n\nNow I can help you with any question about the registration form — plans, pricing, FAA certificates, or form fields. What would you like to know?",
+      content: "Hi! 👋 I'm the IFOA Form Assistant.\n\nI can help you with any question about FAA compliance, our registration form, plans, pricing, FAA certificates, or form fields. What would you like to know?",
     },
   ])
   const [loading, setLoading] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [initialQuestion, setInitialQuestion] = useState(null)
+  const [articleContent, setArticleContent] = useState(null)
 
-  // ── Hero visibility tracking ─────────────────────────────────────────────
   const { pathname } = useLocation()
   const [heroVisible, setHeroVisible] = useState(true)
 
@@ -364,15 +371,9 @@ export default function ChatBot() {
   useEffect(() => {
     setHeroVisible(true)
     setOpen(false)
-
     const timer = setTimeout(() => {
       const hero = document.querySelector('[data-hero]')
-
-      if (!hero) {
-        setHeroVisible(false)
-        return
-      }
-
+      if (!hero) { setHeroVisible(false); return }
       const observer = new IntersectionObserver(
         ([entry]) => {
           setHeroVisible(entry.isIntersecting)
@@ -380,25 +381,71 @@ export default function ChatBot() {
         },
         { threshold: 0.05 }
       )
-
       observer.observe(hero)
       return () => observer.disconnect()
     }, 50)
-
     return () => clearTimeout(timer)
   }, [pathname])
 
-  useEffect(() => {
-    if (open) setUnread(0)
-  }, [open])
-
+  useEffect(() => { if (open) setUnread(0) }, [open])
   useEffect(() => {
     if (!open && messages.length > 1 && messages[messages.length - 1].role === 'assistant') {
       setUnread(n => n + 1)
     }
   }, [messages])
 
+  const handleAsk = (q) => {
+    setInitialQuestion(q || null)
+    setView('chat')
+  }
+
+  const handleViewMessages = () => {
+    setInitialQuestion(null)
+    setView('chat')
+  }
+
+  const currentWidth = WIDTH_SIZES[widthIndex]
+
+  const cycleWidth = () => {
+    setWidthIndex(i => (i + 1) % WIDTH_SIZES.length)
+  }
+
   if (isAuthPage || heroVisible) return null
+
+  const chatHeight = typeof window !== 'undefined' && window.innerHeight < 640
+    ? 'calc(100vh - 90px)'
+    : 620
+
+  // Bottom tabs
+  const tabs = [
+    {
+      id: 'home',
+      label: 'Home',
+      icon: (
+        <svg className="w-5 h-5" fill={view === 'home' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={view === 'home' ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+      ),
+    },
+    {
+      id: 'chat',
+      label: 'Messages',
+      icon: (
+        <svg className="w-5 h-5" fill={view === 'chat' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={view === 'chat' ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      icon: (
+        <svg className="w-5 h-5" fill={view === 'article' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={view === 'article' ? 0 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+  ]
 
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999]">
@@ -411,15 +458,15 @@ export default function ChatBot() {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.93 }}
             onClick={() => setOpen(true)}
-            className="relative w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-2xl shadow-red-500/50 flex items-center justify-center"
+            className="relative w-14 h-14 rounded-full text-white shadow-2xl flex items-center justify-center"
+            style={{ background: '#000', boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />
             </svg>
-            <span className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping opacity-50" />
             {unread > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
                 {unread}
@@ -437,42 +484,65 @@ export default function ChatBot() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-0 right-0 bg-white rounded-2xl shadow-2xl shadow-slate-900/25 border border-slate-200 overflow-hidden flex flex-col"
+            className="absolute bottom-0 right-0 bg-white rounded-2xl overflow-hidden flex flex-col"
             style={{
-              width: typeof window !== 'undefined' && window.innerWidth < 400 ? 'calc(100vw - 24px)' : 360,
-              height: typeof window !== 'undefined' && window.innerHeight < 600 ? 'calc(100vh - 100px)' : 560,
+              width: typeof window !== 'undefined' && window.innerWidth < 420
+                ? 'calc(100vw - 24px)'
+                : currentWidth,
+              height: chatHeight,
+              boxShadow: '0 24px 80px rgba(0,0,0,0.20), 0 4px 16px rgba(0,0,0,0.10)',
+              border: '1px solid #e5e7eb',
+              transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
             }}
           >
             {/* Header */}
-            <div className="relative flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 bg-white border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
-                    <img src={ifoaLogo} alt="IFOA" className="h-8 w-auto object-contain" />
-                  </div>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" >
+                  <img src={ifoaLogo} alt="IFOA" className="h-6 w-auto object-contain" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-900 leading-none">IFOA Assistant</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {view === 'presteps' ? 'Before you start' : 'Form help · Always here'}
-                  </p>
+                  <p className="text-sm font-black text-gray-900 leading-none">IFOA Assistant</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-none">FAA Compliance · Always here</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                {view === 'chat' && (
+
+              <div className="flex items-center gap-1.5">
+                {/* Width toggle */}
+                <button
+                  onClick={cycleWidth}
+                  title={`Width: ${currentWidth}px — click to resize`}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+                >
+                  {widthIndex === WIDTH_SIZES.length - 1 ? (
+                    /* Compress icon */
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                  ) : (
+                    /* Expand icon */
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Back (when in non-home view) */}
+                {view !== 'home' && (
                   <button
-                    onClick={() => setView('presteps')}
-                    title="Pre-registration steps"
-                    className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-all"
+                    onClick={() => setView('home')}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
                 )}
+
+                {/* Close */}
                 <button
                   onClick={() => setOpen(false)}
-                  className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-all"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -483,16 +553,49 @@ export default function ChatBot() {
 
             {/* View content */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              {view === 'presteps' ? (
-                <PreStepsPanel onContinue={() => setView('chat')} />
-              ) : (
+              {view === 'home' && (
+                <HomeView
+                  onAsk={handleAsk}
+                  onViewMessages={handleViewMessages}
+                />
+              )}
+              {view === 'chat' && (
                 <ChatView
                   messages={messages}
                   setMessages={setMessages}
                   loading={loading}
                   setLoading={setLoading}
+                  initialQuestion={initialQuestion}
                 />
               )}
+              {view === 'article' && articleContent && (
+                <ArticleView
+                  title={articleContent.title}
+                  content={articleContent.content}
+                  onBack={() => setView('home')}
+                />
+              )}
+            </div>
+
+            {/* Bottom tab bar */}
+            <div className="flex-shrink-0 border-t border-gray-100 bg-white">
+              <div className="flex items-center">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'home') setView('home')
+                      else if (tab.id === 'chat') { setInitialQuestion(null); setView('chat') }
+                      else setView('article')
+                    }}
+                    className="flex-1 flex flex-col items-center gap-1 py-3 transition-colors"
+                    style={{ color: (view === tab.id || (tab.id === 'help' && view === 'article')) ? '#000' : '#9ca3af' }}
+                  >
+                    {tab.icon}
+                    <span className="text-[10px] font-bold">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}

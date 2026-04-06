@@ -7,8 +7,7 @@ import ChatBot from './components/ChatBot'
 
 // Public pages
 import Home from './pages/Home'
-import IndividualForm from './pages/IndividualForm'
-import AirlinesForm from './pages/AirlinesForm'
+import RegisterPage from './pages/RegisterPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 
@@ -48,8 +47,10 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/seed-admin-signup" element={<SeedAdminSignupPage />} />
         <Route path="/seed-admin-login" element={<SeedAdminLoginPage />} />
-        <Route path="/individual/register" element={<IndividualForm />} />
-        <Route path="/airlines/register" element={<AirlinesForm />} />
+
+        {/* ── Unified Registration ────────────────────────────── */}
+        {/* Single /register route — user selects Individual or Airline on the page */}
+        <Route path="/register" element={<RegisterPage />} />
 
         {/* ── Admin only ─────────────────────────────────────── */}
         <Route path="/admin" element={
@@ -63,6 +64,11 @@ function App() {
           </ProtectedRoute>
         } />
         <Route path="/admin/airlines" element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/add-airline" element={
           <ProtectedRoute roles={['admin']}>
             <AdminDashboard />
           </ProtectedRoute>
