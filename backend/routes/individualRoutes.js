@@ -1,5 +1,7 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
+const authMiddleware = require('../middleware/auth');
 const {
   createIndividual,
   getAllIndividuals,
@@ -10,10 +12,25 @@ const {
   exportToExcel,
   markIndividualPaid,
   markInvoiceGenerated,
+  adminCreateIndividualForm,
+  adminImportIndividualsFromExcel,
 } = require('../controller/individualController');
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Admin access required.' });
+  }
+  return next();
+}
 
 // Public
 router.post('/', createIndividual);
+
+// Admin create/import
+router.post('/admin/create-form', authMiddleware, requireAdmin, adminCreateIndividualForm);
+router.post('/admin/import-excel', authMiddleware, requireAdmin, upload.single('file'), adminImportIndividualsFromExcel);
 
 // ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
 router.get('/export/excel', exportToExcel);

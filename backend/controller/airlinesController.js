@@ -1,6 +1,8 @@
 const Airlines             = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription'); // legacy model
+const User = require('../models/User');
 const ExcelJS = require('exceljs');
+const XLSX = require('xlsx');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -13,6 +15,263 @@ function resolvePricePerCertificate(body) {
   return 55; // Multiple Years fallback
 }
 
+function inferRowKind(row) {
+  const marker = String(
+    row?.type || row?.role || row?.accountType || row?.registrationType || row?.entity || ''
+  ).toLowerCase().trim();
+
+  if (marker.includes('airline') || marker.includes('company') || marker.includes('operator')) return 'airline';
+  if (marker.includes('individual') || marker.includes('pilot') || marker.includes('dispatcher')) return 'individual';
+
+  if (row?.airlineName || row?.Airlines || row?.holderCount || row?.holderCountValue || row?.certificateHolders || row?.TeamMembers || row?.['Team Members']) return 'airline';
+  return 'individual';
+}
+
+function toDateOrNull(v) {
+  if (!v) return null;
+  let parsed = v;
+  if (typeof v === 'number') {
+    parsed = new Date(Math.round((v - 25569) * 86400 * 1000));
+  } else if (typeof v === 'string') {
+    const s = v.trim();
+    if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(s)) {
+      const parts = s.replace(/[.-]/g, '/').split('/');
+      const mm = parts[0].padStart(2, '0');
+      const dd = parts[1].padStart(2, '0');
+      const yyyy = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      parsed = `${yyyy}-${mm}-${dd}`;
+    } else {
+      parsed = s;
+    }
+  }
+  const d = new Date(parsed);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function pick(row, keys, fallback = '') {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined && row[key] !== null && row[key] !== '') {
+      return row[key];
+    }
+  }
+  return fallback;
+}
+
+function toNumberOrUndefined(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  const cleaned = String(v).replace(/[$,\s]/g, '').trim();
+  if (!cleaned) return undefined;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function splitFullName(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { firstName: '', lastName: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: parts[0] };
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+}
+
+function holderRangeFromCount(count) {
+  if (count <= 5) return '3 to 5';
+  if (count <= 10) return '5 to 10';
+  return 'More than 10';
+}
+
+function buildHolderFromExportRow(row, fallbackEmail, fallbackCertType) {
+  const holderName = String(pick(row, ['holderFullName', 'fullName', 'Team Members_1', 'Holder Name'], '')).trim();
+  const iacra = String(pick(row, ['holderIacraFtnNumber', 'iacraFtnNumber', 'IACRA Tracking Number (FTN)', '__EMPTY_2'], '')).trim();
+  if (!holderName && !iacra) return null;
+
+  const certStatusRaw = String(pick(row, ['holderCertificateStatus', 'certificateStatus', '__EMPTY', 'FAA USAS Confirmation'], 'EXISTING')).trim().toUpperCase();
+  const certStatus = ['NEW', 'EXISTING'].includes(certStatusRaw) ? certStatusRaw : (['Y', 'YES', 'TRUE', '1'].includes(certStatusRaw) ? 'EXISTING' : 'NEW');
+
+  return {
+    fullName: holderName || 'Unknown Holder',
+    dateOfBirth: toDateOrNull(pick(row, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || new Date('1990-01-01'),
+    certificateType: pick(row, ['holderCertificateType', 'certificateType', 'Primary Certificate'], fallbackCertType || 'Part 65 - Aircraft Dispatcher'),
+    certificateStatus: certStatus,
+    faaCertificateNumber: String(pick(row, ['holderFaaCertificateNumber', 'faaCertificateNumber', 'FAA Certificate Number', '__EMPTY_1'], '')).trim(),
+    iacraFtnNumber: iacra || 'UNKNOWN-FTN',
+    email: String(pick(row, ['holderEmail', 'Holder Email', '__EMPTY_3', 'Email'], fallbackEmail)).trim().toLowerCase(),
+    hasSecondaryCertificate: toBool(pick(row, ['holderHasSecondaryCertificate', 'hasSecondaryCertificate'], false), false),
+    secondaryCertificateType: String(pick(row, ['holderSecondaryCertificateType', 'secondaryCertificateType'], '')).trim(),
+    secondaryFaaCertificateNumber: String(pick(row, ['holderSecondaryFaaCertificateNumber', 'secondaryFaaCertificateNumber'], '')).trim(),
+    secondaryIacraFtnNumber: String(pick(row, ['holderSecondaryIacraFtnNumber', 'secondaryIacraFtnNumber'], '')).trim(),
+  };
+}
+
+function toBool(v, defaultValue = false) {
+  if (v === undefined || v === null || v === '') return defaultValue;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v === 1;
+  const s = String(v).trim().toLowerCase();
+  return ['true', '1', 'yes', 'y', 'paid', 'active'].includes(s);
+}
+
+function buildAirlinePayload(raw) {
+  const src = { ...raw };
+  let subscriptionPlan = pick(src, ['subscriptionPlan', 'Subscription Plan'], '1 Year Subscription Plan');
+  if (!subscriptionPlan) {
+    const oneYearVal = toNumberOrUndefined(pick(src, ['1 Year Plan'], ''));
+    const unlimitedVal = toNumberOrUndefined(pick(src, ['Unlimited Plan'], ''));
+    subscriptionPlan = unlimitedVal ? 'Unlimited Plan' : (oneYearVal ? '1 Year Subscription Plan' : '1 Year Subscription Plan');
+  }
+
+  const holderCountNum = Number(toNumberOrUndefined(pick(src, ['holderCountValue', 'Team Members', 'TeamMembers'], '3')) || 3);
+  const holderCount = pick(src, ['holderCount'], holderRangeFromCount(holderCountNum));
+  const holderCountValue = String(holderCountNum || 3);
+
+  const airlineName = String(pick(src, ['airlineName', 'Airlines'], '')).trim();
+  const pocName = String(pick(src, ['pointOfContact', 'Point of Contact'], '')).trim();
+  const splitName = splitFullName(pocName);
+  const firstName = String(pick(src, ['firstName'], splitName.firstName)).trim();
+  const lastName = String(pick(src, ['lastName'], splitName.lastName)).trim();
+  const email = String(pick(src, ['email', 'Email', 'pointOfContactEmail'], '')).toLowerCase().trim();
+  const phone = String(pick(src, ['phone', 'Phone', 'pointOfContactPhone'], '')).trim();
+
+  if (!airlineName || !firstName || !lastName || !email || !phone) {
+    throw new Error('airlineName, firstName, lastName, email, and phone are required.');
+  }
+
+  const paymentStatusRaw = String(pick(src, ['paymentStatus', 'Invoice ', 'Invoice', 'invoiceStatus'], 'pending')).toLowerCase();
+  const paid = toBool(src.isPaid, paymentStatusRaw === 'paid');
+  const paymentStatus = paid ? 'paid' : (paymentStatusRaw === 'failed' ? 'failed' : 'pending');
+  const status = paid ? 'Active' : (pick(src, ['status', 'Status'], 'Pending'));
+
+  const holder = buildHolderFromExportRow(src, email, pick(src, ['Primary Certificate', 'certificateType'], 'Part 65 - Aircraft Dispatcher')) || {
+    fullName: `${firstName} ${lastName}`.trim(),
+    dateOfBirth: toDateOrNull(pick(src, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || new Date('1990-01-01'),
+    certificateType: pick(src, ['holderCertificateType', 'certificateType', 'Primary Certificate'], 'Part 65 - Aircraft Dispatcher'),
+    certificateStatus: pick(src, ['holderCertificateStatus', 'certificateStatus'], 'EXISTING'),
+    faaCertificateNumber: String(pick(src, ['holderFaaCertificateNumber', 'faaCertificateNumber', 'FAA Certificate Number'], '')).trim(),
+    iacraFtnNumber: String(pick(src, ['holderIacraFtnNumber', 'iacraFtnNumber', 'IACRA Tracking Number (FTN)'], 'UNKNOWN-FTN')).trim(),
+    email,
+    hasSecondaryCertificate: false,
+    secondaryCertificateType: '',
+    secondaryFaaCertificateNumber: '',
+    secondaryIacraFtnNumber: '',
+  };
+
+  const payload = {
+    subscriptionPlan,
+    holderCount,
+    holderCountValue,
+    airlineName,
+    firstName,
+    lastName,
+    middleName: String(pick(src, ['middleName', 'Middle Name'], '')).trim(),
+    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])),
+    email,
+    phone,
+    addressLine1: String(pick(src, ['addressLine1', 'Address Line 1'], '')).trim(),
+    addressLine2: String(pick(src, ['addressLine2', 'Address Line 2'], '')).trim(),
+    city: String(pick(src, ['city', 'City'], '')).trim(),
+    state: String(pick(src, ['state', 'State'], '')).trim(),
+    postalCode: String(pick(src, ['postalCode', 'Zip/Postal Code', 'Postal Code'], '')).trim(),
+    country: String(pick(src, ['country', 'Country'], '')).trim(),
+    paymentEmail: String(src.paymentEmail || email).toLowerCase().trim(),
+    paymentStatus,
+    isPaid: paid,
+    status,
+    agreedToTerms: src.agreedToTerms === undefined ? true : toBool(src.agreedToTerms, true),
+    pointOfContact: String(pick(src, ['pointOfContact', 'Point of Contact'], `${firstName} ${lastName}`)).trim(),
+    pointOfContactEmail: String(pick(src, ['pointOfContactEmail', 'Email'], email)).toLowerCase().trim(),
+    pointOfContactPhone: String(pick(src, ['pointOfContactPhone', 'Phone'], phone)).trim(),
+    certificateHolders: [holder],
+  };
+
+  const sourcePrice = toNumberOrUndefined(pick(src, ['pricePerCertificate', 'Unlimited Plan', '1 Year Plan'], ''));
+  payload.pricePerCertificate = resolvePricePerCertificate(payload);
+  if (sourcePrice) payload.pricePerCertificate = sourcePrice;
+  const isUnlimited = payload.subscriptionPlan === 'Unlimited Plan';
+  payload.committedCount = Number(payload.holderCountValue || payload.certificateHolders.length || 1);
+  payload.totalAmount = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.committedCount;
+  payload.amountPaid = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.certificateHolders.length;
+  payload.subscriptionDate = paid ? (toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date()) : toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date']));
+  payload.invoiceStatus = pick(src, ['invoiceStatus', 'Invoice ', 'Invoice'], paid ? 'Paid' : 'Pending');
+  payload.invoiceNumber = pick(src, ['invoiceNumber', 'Invoice Number'], '');
+  const totalServiceFees = toNumberOrUndefined(pick(src, ['totalServiceFees', 'Total Service Fees', 'TOTAL'], ''));
+  if (totalServiceFees !== undefined) payload.totalServiceFees = totalServiceFees;
+
+  return payload;
+}
+
+function parseAirlineRecordsFromRows(rows) {
+  const hasExportAirlineShape = rows.some((r) => Object.prototype.hasOwnProperty.call(r, 'Airlines') || Object.prototype.hasOwnProperty.call(r, 'Team Members_1'));
+  if (!hasExportAirlineShape) {
+    return rows.map((row, idx) => ({ rowNumber: idx + 2, payload: buildAirlinePayload(row) }));
+  }
+
+  const parsed = [];
+  let current = null;
+  let currentRowNumber = null;
+
+  const pushCurrent = () => {
+    if (!current) return;
+    if (!Array.isArray(current.certificateHolders) || !current.certificateHolders.length) {
+      current.certificateHolders = [buildHolderFromExportRow({}, current.email, current.primaryCertificate) || {
+        fullName: `${current.firstName} ${current.lastName}`.trim(),
+        dateOfBirth: new Date('1990-01-01'),
+        certificateType: 'Part 65 - Aircraft Dispatcher',
+        certificateStatus: 'EXISTING',
+        faaCertificateNumber: '',
+        iacraFtnNumber: 'UNKNOWN-FTN',
+        email: current.email,
+        hasSecondaryCertificate: false,
+        secondaryCertificateType: '',
+        secondaryFaaCertificateNumber: '',
+        secondaryIacraFtnNumber: '',
+      }];
+    }
+    if (!current.holderCountValue || current.holderCountValue === '0') {
+      current.holderCountValue = String(current.certificateHolders.length || 1);
+      current.committedCount = Number(current.holderCountValue);
+      current.holderCount = holderRangeFromCount(current.committedCount);
+    }
+    parsed.push({ rowNumber: currentRowNumber || 2, payload: current });
+  };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNumber = i + 2;
+    const airlineName = String(pick(row, ['airlineName', 'Airlines'], '')).trim();
+    const holder = buildHolderFromExportRow(row, String(pick(row, ['Email'], '')).trim().toLowerCase(), pick(row, ['Primary Certificate'], 'Part 65 - Aircraft Dispatcher'));
+
+    const rowHasAnyData = Object.values(row).some((v) => v !== undefined && v !== null && String(v).trim() !== '');
+    if (!rowHasAnyData) continue;
+
+    if (airlineName) {
+      pushCurrent();
+      current = buildAirlinePayload(row);
+      current.certificateHolders = [];
+      currentRowNumber = rowNumber;
+      if (holder) current.certificateHolders.push(holder);
+      continue;
+    }
+
+    if (current && holder) {
+      current.certificateHolders.push(holder);
+    }
+  }
+
+  pushCurrent();
+  return parsed;
+}
+
+function isAirlineSheet(sheetName, rows) {
+  const name = String(sheetName || '').toLowerCase();
+  if (name.includes('airline')) return true;
+  if (!rows.length) return false;
+  return rows.some((r) =>
+    Object.prototype.hasOwnProperty.call(r, 'Airlines') ||
+    Object.prototype.hasOwnProperty.call(r, 'Team Members') ||
+    Object.prototype.hasOwnProperty.call(r, 'Team Members_1') ||
+    Object.prototype.hasOwnProperty.call(r, 'Point of Contact')
+  );
+}
+
 // ── Create ────────────────────────────────────────────────────────────────────
 exports.createAirlinesSubscription = async (req, res) => {
   try {
@@ -20,6 +279,25 @@ exports.createAirlinesSubscription = async (req, res) => {
     // Normalize email fields
     if (body.email)        body.email        = body.email.toLowerCase().trim();
     if (body.contactEmail) body.contactEmail = body.contactEmail.toLowerCase().trim();
+
+    const normalizedEmail = body.email || body.contactEmail;
+    if (normalizedEmail) {
+      const emailRegex = new RegExp('^' + normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+      const [primaryDoc, legacyContactDoc, legacyEmailDoc] = await Promise.all([
+        Airlines.findOne({ email: emailRegex }),
+        AirlinesSubscription.findOne({ contactEmail: emailRegex }),
+        AirlinesSubscription.findOne({ email: emailRegex }),
+      ]);
+      const existing = primaryDoc || legacyContactDoc || legacyEmailDoc;
+
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: 'You have already submitted this form. Please edit your submitted form from the Subscription dashboard.',
+          data: existing,
+        });
+      }
+    }
 
     // Always resolve price server-side to prevent client-side tampering
     body.pricePerCertificate = resolvePricePerCertificate(body);
@@ -197,12 +475,31 @@ exports.getAirlinesSubscriptionById = async (req, res) => {
 // ── Update ────────────────────────────────────────────────────────────────────
 exports.updateAirlinesSubscription = async (req, res) => {
   try {
+    const allowedFields = [
+      'airlineName',
+      'firstName', 'lastName', 'middleName', 'dateOfBirth',
+      'email', 'phone',
+      'pointOfContact', 'pointOfContactEmail', 'pointOfContactPhone',
+      'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
+      'certificateHolders',
+    ];
+
+    const payload = {};
+    allowedFields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        payload[field] = req.body[field];
+      }
+    });
+
+    if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
+    if (payload.pointOfContactEmail) payload.pointOfContactEmail = String(payload.pointOfContactEmail).toLowerCase().trim();
+
     let doc = await Airlines.findByIdAndUpdate(
-      req.params.id, req.body, { new: true, runValidators: false },
+      req.params.id, payload, { new: true, runValidators: false },
     );
     if (!doc) {
       doc = await AirlinesSubscription.findByIdAndUpdate(
-        req.params.id, req.body, { new: true, runValidators: false },
+        req.params.id, payload, { new: true, runValidators: false },
       );
     }
     if (!doc)
@@ -220,6 +517,18 @@ exports.deleteAirlinesSubscription = async (req, res) => {
     if (!doc) doc = await AirlinesSubscription.findByIdAndDelete(req.params.id);
     if (!doc)
       return res.status(404).json({ success: false, message: 'Not found' });
+
+    // Unlink deleted subscription from any linked user account.
+    await User.updateMany(
+      { subscriptionIds: doc._id },
+      { $pull: { subscriptionIds: doc._id } },
+    );
+
+    await User.updateMany(
+      { registrationId: doc._id },
+      { $set: { registrationId: null, registrationModel: null } },
+    );
+
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -268,6 +577,8 @@ exports.markAirlinesPaid = async (req, res) => {
       subscriptionDate: now,
       invoiceStatus:    'Paid',
       invoiceNumber:    doc.invoiceNumber || `INV-${Date.now()}`,
+      wirePaymentRequested: false,
+      wirePaymentRequestedAt: null,
     };
     if (expirationDate !== null) {
       update.expirationDate = expirationDate;
@@ -281,6 +592,45 @@ exports.markAirlinesPaid = async (req, res) => {
     res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Airline Wire Transfer Invoice Request ───────────────────────────────────
+// Called when airline user selects "Wire Transfer" in step 4 and submits request.
+exports.requestAirlineInvoice = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const now = req.body?.requestedAt ? new Date(req.body.requestedAt) : new Date();
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Airline ID is required.' });
+    }
+
+    const update = {
+      wirePaymentRequested: true,
+      wirePaymentRequestedAt: Number.isNaN(now.getTime()) ? new Date() : now,
+      paymentStatus: 'pending',
+      status: 'Pending',
+      invoiceStatus: 'Wire Requested',
+    };
+
+    const updated = await Airlines.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true },
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Airline subscription not found.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Wire transfer invoice request submitted successfully.',
+      data: updated,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -580,6 +930,126 @@ exports.adminCreateAirlineForm = async (req, res) => {
         },
       },
       message: 'Airline form created successfully. Login credentials have been set.',
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: Bulk import airlines from Excel ───────────────────────────────────
+exports.adminImportAirlinesFromExcel = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, message: 'Excel file is required.' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    if (!workbook.SheetNames.length) {
+      return res.status(400).json({ success: false, message: 'No worksheet found in uploaded file.' });
+    }
+
+    const sheetRows = workbook.SheetNames.flatMap((sheetName) => {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      return rows.map((row) => ({ ...row, __sheetName: sheetName }));
+    });
+    if (!sheetRows.length) {
+      return res.status(400).json({ success: false, message: 'The uploaded sheet is empty.' });
+    }
+
+    const created = [];
+    const failed = [];
+    const skipped = [];
+
+    const bySheet = new Map();
+    sheetRows.forEach((row) => {
+      const s = row.__sheetName || 'Sheet1';
+      if (!bySheet.has(s)) bySheet.set(s, []);
+      bySheet.get(s).push(row);
+    });
+
+    const recordsToImport = [];
+    for (const [sheetName, rows] of bySheet.entries()) {
+      if (!isAirlineSheet(sheetName, rows)) {
+        skipped.push({ row: `${sheetName}!1`, reason: 'Skipped non-airline worksheet.' });
+        continue;
+      }
+
+      try {
+        const parsed = parseAirlineRecordsFromRows(rows);
+        parsed.forEach((entry) => {
+          const rowKind = inferRowKind(entry.payload);
+          if (rowKind !== 'airline') {
+            skipped.push({ row: `${sheetName}!${entry.rowNumber}`, reason: `Skipped ${rowKind} row during airline import.` });
+          } else {
+            recordsToImport.push({ sheetName, rowNumber: entry.rowNumber, payload: entry.payload });
+          }
+        });
+      } catch (sheetErr) {
+        failed.push({ row: `${sheetName}!2`, error: sheetErr.message });
+      }
+    }
+
+    for (const rec of recordsToImport) {
+      const { payload, rowNumber, sheetName } = rec;
+
+      try {
+        const existing = await Airlines.findOne({
+          airlineName: payload.airlineName,
+          email: payload.email,
+        });
+        if (existing) {
+          skipped.push({ row: `${sheetName}!${rowNumber}`, reason: `Airline already exists: ${payload.airlineName}` });
+          continue;
+        }
+
+        const airline = await Airlines.create(payload);
+
+        let user = await User.findOne({ email: payload.pointOfContactEmail });
+        if (!user) {
+          user = await User.create({
+            email: payload.pointOfContactEmail,
+            password: payload.airlineName,
+            role: 'airline',
+            airlineName: payload.airlineName,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            registrationId: airline._id,
+            registrationModel: 'Airlines',
+            subscriptionIds: [airline._id],
+          });
+        } else {
+          user.airlineName = payload.airlineName;
+          user.registrationId = airline._id;
+          user.registrationModel = 'Airlines';
+          if (!Array.isArray(user.subscriptionIds)) user.subscriptionIds = [];
+          if (!user.subscriptionIds.some((id) => String(id) === String(airline._id))) {
+            user.subscriptionIds.push(airline._id);
+          }
+          await user.save();
+        }
+
+        created.push({
+          row: `${sheetName}!${rowNumber}`,
+          id: airline._id,
+          airlineName: airline.airlineName,
+          email: payload.pointOfContactEmail,
+        });
+      } catch (rowErr) {
+        failed.push({ row: `${sheetName}!${rowNumber}`, error: rowErr.message });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Imported ${created.length} airline row(s) from Excel.`,
+      data: {
+        importedCount: created.length,
+        failedCount: failed.length,
+        skippedCount: skipped.length,
+        created,
+        failed,
+        skipped,
+      },
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

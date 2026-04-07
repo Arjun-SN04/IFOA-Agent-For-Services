@@ -103,7 +103,7 @@ export default function UserDashboard() {
           className="relative rounded-2xl overflow-hidden border border-slate-200"
           style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}
         >
-          <div className="relative z-10 px-7 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="relative z-10 px-7 py-6 flex flex-col items-center text-center gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Welcome back</p>
               <h1 className="text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
@@ -112,7 +112,7 @@ export default function UserDashboard() {
             {!subLoading && !sub && (
               <Link
                 to={user?.role === 'airline' ? '/register' : '/register'}
-                className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all"
+                className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all"
                 style={{ background: '#0000ff' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
                 onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}

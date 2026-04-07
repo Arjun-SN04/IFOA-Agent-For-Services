@@ -52,7 +52,7 @@ export default function LoginPage() {
           {/* Simple white header with logo */}
           <div className="px-8 py-8 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-14 w-auto mx-auto" />
+              <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
             </Link>
             <p className="text-slate-500 text-sm mt-3 font-medium">FAA U.S. Agent for Service Platform</p>
           </div>

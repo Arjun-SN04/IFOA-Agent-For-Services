@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import axios from 'axios'
@@ -117,62 +117,71 @@ function RightSidebar({ regType }) {
         scrollbarWidth: 'none',
       }}
     >
-      <div className="flex-1 p-3">
-      <div className="pb-3 mb-3 border-b border-white/10">
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-300 mb-2">Guided Help</p>
-        <h3 className="text-lg font-black text-white leading-tight">{isIndividual ? 'Individual Registration Support' : 'Airline Registration Support'}</h3>
-        <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-          {isIndividual ? 'Follow these steps and complete the form quickly.' : 'Use this checklist to onboard your team smoothly.'}
-        </p>
-      </div>
-
-      {isIndividual && (
-        <div className="pb-3 mb-3 border-b border-white/10">
-          <p className="text-sm font-black text-white mb-2">Video Guide (Live)</p>
-          <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black/30">
-            <iframe
-              className="w-full h-full"
-              src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1"
-              title="IFOA Registration Walkthrough"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={regType}
+          initial={{ opacity: 0, x: isIndividual ? -24 : 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: isIndividual ? 24 : -24 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          className={`flex-1 p-3 ${isIndividual ? 'pb-24' : 'pb-36'}`}
+        >
+          <div className="pb-3 mb-3 border-b border-white/10">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-300 mb-2">Guided Help</p>
+            <h3 className="text-lg font-black text-white leading-tight">{isIndividual ? 'Individual Registration Support' : 'Airline Registration Support'}</h3>
+            <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+              {isIndividual ? 'Follow these steps and complete the form quickly.' : 'Use this checklist to onboard your team smoothly.'}
+            </p>
           </div>
-        </div>
-      )}
 
-      <div className="pb-3 mb-3 border-b border-white/10">
-        <p className="text-sm font-black text-white mb-2.5">FAA Portals</p>
-        <PortalCards regType={regType} />
-      </div>
-
-      {!isIndividual && (
-      <div>
-        <p className="text-sm font-black text-white mb-2.5">Agent Details</p>
-        <div className="divide-y divide-white/10 rounded-2xl border border-white/10">
-          {SERVICE_CONTACT.map((row) => (
-            <div key={row.label} className="grid grid-cols-[100px_1fr] gap-3 px-3 py-2.5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{row.label}</p>
-              {row.href ? (
-                <a href={row.href} className="text-sm font-semibold text-slate-200 hover:underline">{row.value}</a>
-              ) : (
-                <p className="text-sm font-medium text-slate-200">{row.value}</p>
-              )}
+          {isIndividual && (
+            <div className="pb-3 mb-3 border-b border-white/10">
+              <p className="text-sm font-black text-white mb-2">Video Guide (Live)</p>
+              <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black/30">
+                <iframe
+                  className="w-full h-full"
+                  src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1"
+                  title="IFOA Registration Walkthrough"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
             </div>
-          ))}
-        </div>
+          )}
 
-        <div className="mt-3 p-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Quick Tip</p>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            {isIndividual
-              ? 'Keep your FTN and certificate details ready before moving from Step 1 to Step 2 to finish faster.'
-              : 'Prepare holder details in advance (name, DOB, FAA certificate, FTN) to complete team registration in one pass.'}
-          </p>
-        </div>
-      </div>
-      )}
-      </div>
+          <div className="pb-3 mb-3 border-b border-white/10">
+            <p className="text-sm font-black text-white mb-2.5">FAA Portals</p>
+            <PortalCards regType={regType} />
+          </div>
+
+          {!isIndividual && (
+          <div>
+            <p className="text-sm font-black text-white mb-2.5">Agent Details</p>
+            <div className="divide-y divide-white/10 rounded-2xl border border-white/10">
+              {SERVICE_CONTACT.map((row) => (
+                <div key={row.label} className="grid grid-cols-[100px_1fr] gap-3 px-3 py-2.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{row.label}</p>
+                  {row.href ? (
+                    <a href={row.href} className="text-sm font-semibold text-slate-200 hover:underline">{row.value}</a>
+                  ) : (
+                    <p className="text-sm font-medium text-slate-200">{row.value}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className={`mt-3 p-3 ${isIndividual ? '' : 'mb-8'}`}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Quick Tip</p>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {isIndividual
+                  ? 'Keep your FTN and certificate details ready before moving from Step 1 to Step 2 to finish faster.'
+                  : 'Prepare holder details in advance (name, DOB, FAA certificate, FTN) to complete team registration in one pass.'}
+              </p>
+            </div>
+          </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
@@ -247,11 +256,48 @@ function WrongRoleBanner({ type }) {
   )
 }
 
+// ── Existing Form Banner ─────────────────────────────────────────────────────
+function ExistingFormBanner({ regType }) {
+  const isIndividual = regType === 'individual'
+  return (
+    <div className="rounded-3xl border px-6 py-5" style={{ background: BM, borderColor: BXL }}>
+      <div className="flex items-start gap-3.5">
+        <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: '#bfdbfe' }}>
+          <svg className="w-4 h-4" style={{ color: B }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6m7 4H5a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l6.414 6.414a1 1 0 01.293.707V17a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-black mb-1" style={{ color: '#1e3a8a' }}>
+            {isIndividual ? 'You already submitted your Individual form' : 'You already submitted your Company form'}
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: '#1d4ed8' }}>
+            You cannot submit a new registration again. Please edit your submitted form from your Subscription dashboard.
+          </p>
+          <div className="mt-4">
+            <Link
+              to="/dashboard/subscription"
+              className="inline-flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl text-white transition-all"
+              style={{ background: B }}
+              onMouseEnter={e => e.currentTarget.style.background = BD}
+              onMouseLeave={e => e.currentTarget.style.background = B}
+            >
+              Go to Subscription
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RegisterPage() {
   const { user, linkRegistration, addSubscription } = useAuth()
 
   const [regType, setRegType] = useState('individual')
+  const [switchDirection, setSwitchDirection] = useState(1)
+  const [transitionMode, setTransitionMode] = useState('step')
 
   const [indStep, setIndStep] = useState(1)
   const [indData, setIndData] = useState(INDIVIDUAL_INIT)
@@ -266,15 +312,88 @@ export default function RegisterPage() {
   const [airError, setAirError] = useState('')
 
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const scrollContainerRef = useRef(null)
   const formRef = useRef(null)
 
   const isIndBlocked = user?.role === 'airline'
   const isAirBlocked = user?.role === 'individual'
+  const [hasIndividualSubmission, setHasIndividualSubmission] = useState(false)
+  const [hasAirlineSubmission, setHasAirlineSubmission] = useState(false)
+  const hasExistingSubmissionForType = regType === 'individual' ? hasIndividualSubmission : hasAirlineSubmission
 
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+  const checkExistingSubmission = async (type) => {
+    if (!user) return false
 
-  const goIndStep = (n) => { setIndStep(n); scrollToTop() }
-  const goAirStep = (n) => { setAirStep(n); scrollToTop() }
+    const targetModel = type === 'individual' ? 'Individual' : 'Airlines'
+    const endpointBase = type === 'individual' ? 'individuals' : 'airlines'
+
+    const ids = [
+      ...(user?.registrationId ? [String(user.registrationId)] : []),
+      ...((user?.subscriptionIds || []).map((id) => String(id))),
+    ]
+    const uniqueIds = [...new Set(ids)]
+
+    // Prefer direct id checks so deleted records are detected immediately.
+    if (uniqueIds.length > 0) {
+      const checks = await Promise.allSettled(
+        uniqueIds.map((id) => axios.get(`${BASE_URL}/${endpointBase}/${id}`)),
+      )
+      const existsById = checks.some((r) => r.status === 'fulfilled' && r?.value?.data?.data)
+      if (existsById) return true
+    }
+
+    // If the account is currently linked to another model, do not block this form type.
+    if (user?.registrationModel && user.registrationModel !== targetModel) {
+      return false
+    }
+
+    // Fallback by email for older accounts that may not have linked ids.
+    if (!user?.email) return false
+    try {
+      const byEmail = await axios.get(`${BASE_URL}/${endpointBase}/by-email`, {
+        params: { email: user.email },
+      })
+      return Boolean(byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) && byEmail.data.all.length > 0))
+    } catch {
+      return false
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      if (!user) {
+        if (!cancelled) {
+          setHasIndividualSubmission(false)
+          setHasAirlineSubmission(false)
+        }
+        return
+      }
+
+      if (user.role === 'individual') {
+        const exists = await checkExistingSubmission('individual')
+        if (!cancelled) setHasIndividualSubmission(exists)
+      } else if (user.role === 'airline') {
+        const exists = await checkExistingSubmission('airline')
+        if (!cancelled) setHasAirlineSubmission(exists)
+      }
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [user])
+
+  const scrollToTop = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const goIndStep = (n) => { setTransitionMode('step'); setIndStep(n); scrollToTop() }
+  const goAirStep = (n) => { setTransitionMode('step'); setAirStep(n); scrollToTop() }
 
   const requireAuth = () => {
     if (!user) { setShowAuthModal(true); return false }
@@ -285,6 +404,15 @@ export default function RegisterPage() {
   const updateAir = (fields) => setAirData(prev => ({ ...prev, ...fields }))
 
   const handleIndSubmit = async (opts = {}) => {
+    if (await checkExistingSubmission('individual')) {
+      setHasIndividualSubmission(true)
+      setIndError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
+      return null
+    }
+    if (hasIndividualSubmission) {
+      setIndError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
+      return null
+    }
     if (!user) { setShowAuthModal(true); return null }
     setIndSubmitting(true); setIndError('')
     try {
@@ -313,6 +441,15 @@ export default function RegisterPage() {
   }
 
   const handleAirSubmit = async (opts = {}) => {
+    if (await checkExistingSubmission('airline')) {
+      setHasAirlineSubmission(true)
+      setAirError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
+      return null
+    }
+    if (hasAirlineSubmission) {
+      setAirError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
+      return null
+    }
     if (!user) { setShowAuthModal(true); return }
     setAirSubmitting(true); setAirError('')
     try {
@@ -349,12 +486,16 @@ export default function RegisterPage() {
   const activeStep = STEPS[step - 1]
   const progress  = Math.round((step / STEPS.length) * 100)
 
-  const handleNextToStep2 = () => { if (regType === 'individual' ? isIndBlocked : isAirBlocked) return; if (regType === 'individual') goIndStep(2); else goAirStep(2) }
+  const handleNextToStep2 = () => {
+    if (regType === 'individual' ? isIndBlocked : isAirBlocked) return
+    if (hasExistingSubmissionForType) return
+    if (regType === 'individual') goIndStep(2); else goAirStep(2)
+  }
   const handleNextToStep3 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(3); else goAirStep(3) }
   const handleNextToStep4 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(4); else goAirStep(4) }
   const handleBack = (n)  => { if (regType === 'individual') goIndStep(n); else goAirStep(n) }
 
-  const isBlocked = regType === 'individual' ? isIndBlocked : isAirBlocked
+  const isBlocked = (regType === 'individual' ? isIndBlocked : isAirBlocked) || hasExistingSubmissionForType
 
   return (
     <>
@@ -366,11 +507,11 @@ export default function RegisterPage() {
       <div className="flex min-h-screen" style={{ background: '#f8fafc' }}>
 
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+        <div ref={scrollContainerRef} className="flex-1 h-screen flex flex-col overflow-y-auto">
 
           {/* Top nav bar */}
-          <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between"
-            style={{ boxShadow: '0 1px 6px rgba(15,23,42,0.06)' }}>
+          <div className="sticky top-0 z-40 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between"
+            style={{ boxShadow: '0 1px 6px rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)' }}>
             <Link to="/">
               <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
             </Link>
@@ -419,7 +560,13 @@ export default function RegisterPage() {
               {/* Type toggle — Company / Individual */}
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button
-                  onClick={() => { setRegType('airline'); setAirStep(1) }}
+                  onClick={() => {
+                    setTransitionMode('type')
+                    setSwitchDirection(1)
+                    setRegType('airline')
+                    setAirStep(1)
+                    scrollToTop()
+                  }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
                   style={{
                     borderColor: regType === 'airline' ? B : '#e5e7eb',
@@ -444,7 +591,13 @@ export default function RegisterPage() {
                 </button>
 
                 <button
-                  onClick={() => { setRegType('individual'); setIndStep(1) }}
+                  onClick={() => {
+                    setTransitionMode('type')
+                    setSwitchDirection(-1)
+                    setRegType('individual')
+                    setIndStep(1)
+                    scrollToTop()
+                  }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
                   style={{
                     borderColor: regType === 'individual' ? B : '#e5e7eb',
@@ -495,7 +648,7 @@ export default function RegisterPage() {
               transition={{ duration: 0.4 }}
               className="rounded-3xl bg-white overflow-hidden mb-6"
               style={{ border: '1.5px solid #e5e7eb', boxShadow: '0 8px 40px -12px rgba(15,23,42,0.10)' }}>
-              {isBlocked && <WrongRoleBanner type={regType} />}
+              {(regType === 'individual' ? isIndBlocked : isAirBlocked) && <WrongRoleBanner type={regType} />}
 
               {/* Card header */}
               <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: '#f3f4f6' }}>
@@ -522,39 +675,51 @@ export default function RegisterPage() {
 
               {/* Form body */}
               <div className="px-8 py-8">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={`${regType}-${step}`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}>
-                    {regType === 'individual' && (
-                      <>
-                        {indStep === 1 && <Step1PersonalInfo data={indData} update={updateInd} onNext={handleNextToStep2} />}
-                        {indStep === 2 && <Step2Certificates data={indData} update={updateInd} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                        {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
-                        {indStep === 4 && (
-                          <Step4Payment data={indData} update={updateInd} onBack={() => handleBack(3)}
-                            onSubmit={handleIndSubmit} onMarkPaidAndFinish={handleIndMarkPaid}
-                            submitting={indSubmitting} error={indError} isBlocked={isBlocked} />
-                        )}
-                      </>
-                    )}
-                    {regType === 'airline' && (
-                      <>
-                        {airStep === 1 && <AirlinesStep1PlanAndDetails data={airData} update={updateAir} onNext={handleNextToStep2} />}
-                        {airStep === 2 && <AirlinesStep2Holders data={airData} update={updateAir} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                        {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
-                        {airStep === 4 && (
-                          <AirlinesStep4Payment data={airData} update={updateAir} onBack={() => handleBack(3)}
-                            onSubmit={handleAirSubmit} onMarkPaidAndFinish={handleAirMarkPaid}
-                            submitting={airSubmitting} error={airError} isBlocked={isBlocked} />
-                        )}
-                      </>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                {hasExistingSubmissionForType ? (
+                  <ExistingFormBanner regType={regType} />
+                ) : (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={`${regType}-${step}`}
+                      initial={{
+                        opacity: 0,
+                        x: transitionMode === 'type' ? 28 * switchDirection : 0,
+                        y: transitionMode === 'step' ? 8 : 0,
+                      }}
+                      animate={{ opacity: 1, x: 0, y: 0 }}
+                      exit={{
+                        opacity: 0,
+                        x: transitionMode === 'type' ? -28 * switchDirection : 0,
+                        y: transitionMode === 'step' ? -8 : 0,
+                      }}
+                      transition={{ duration: transitionMode === 'type' ? 0.4 : 0.28, ease: [0.22, 1, 0.36, 1] }}>
+                      {regType === 'individual' && (
+                        <>
+                          {indStep === 1 && <Step1PersonalInfo data={indData} update={updateInd} onNext={handleNextToStep2} />}
+                          {indStep === 2 && <Step2Certificates data={indData} update={updateInd} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
+                          {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                          {indStep === 4 && (
+                            <Step4Payment data={indData} update={updateInd} onBack={() => handleBack(3)}
+                              onSubmit={handleIndSubmit} onMarkPaidAndFinish={handleIndMarkPaid}
+                              submitting={indSubmitting} error={indError} isBlocked={isBlocked} />
+                          )}
+                        </>
+                      )}
+                      {regType === 'airline' && (
+                        <>
+                          {airStep === 1 && <AirlinesStep1PlanAndDetails data={airData} update={updateAir} onNext={handleNextToStep2} />}
+                          {airStep === 2 && <AirlinesStep2Holders data={airData} update={updateAir} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
+                          {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                          {airStep === 4 && (
+                            <AirlinesStep4Payment data={airData} update={updateAir} onBack={() => handleBack(3)}
+                              onSubmit={handleAirSubmit} onMarkPaidAndFinish={handleAirMarkPaid}
+                              submitting={airSubmitting} error={airError} isBlocked={isBlocked} />
+                          )}
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                )}
               </div>
             </motion.div>
 

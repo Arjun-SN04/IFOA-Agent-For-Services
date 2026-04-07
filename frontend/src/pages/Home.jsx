@@ -77,22 +77,22 @@ const HOW_STEPS = [
   {
     num: 1,
     title: 'Create Your Account',
-    desc: 'Create your account and get instant access to your secure personal dashboard, where you can monitor any FAA correspondence received. We will provide you with a dedicated U.S. address.',
+    desc: 'Create your account and get instant access to your secure dashboard, where you can track FAA correspondence with your dedicated U.S. address.',
   },
   {
     num: 2,
-    title: 'Assign Your Agent for Service',
-    desc: 'Designate IFOA USA as your official U.S. Registered Agent on the FAA website. You will receive a dedicated U.S. address, which you can use to update your FAA records and ensure all official documents reach you.',
+    title: 'Assign Your Agent',
+    desc: 'Designate IFOA USA as your U.S. Registered Agent on the FAA website and use your dedicated U.S. address to keep records current.',
   },
   {
     num: 3,
-    title: 'Receive & Manage Mails',
-    desc: 'Any FAA correspondence sent to your assigned U.S. address will be scanned and digitally forwarded to your dashboard or email, keeping you informed in real-time, no matter where you are.',
+    title: 'Receive & Manage Mail',
+    desc: 'FAA correspondence sent to your assigned U.S. address is scanned and forwarded to your dashboard or email with real-time updates.',
   },
   {
     num: 4,
-    title: 'Decide How to Handle Your Mails',
-    desc: 'You decide what you would like us to do with your FAA correspondence. We can securely shred it for you or forward the physical mail for you (extra costs), which is critical for items such as FAA certificates.',
+    title: 'Stay FAA Compliant',
+    desc: 'Choose how your FAA mail is handled, including secure shredding or physical forwarding for critical documents such as certificates.',
   },
 ]
 
@@ -351,14 +351,14 @@ export default function Home() {
               Our <strong className="text-gray-900">Daytona Beach</strong> team ensures your FAA correspondence and regulatory notices are handled promptly and professionally.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link to="/individual/register"
+              <Link to="/register"
                 className="inline-flex items-center gap-2 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200 shadow-sm"
                 style={{ background: '#000021' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#000000'}
                 onMouseLeave={e => e.currentTarget.style.background = '#000021'}>
                 Register as Individual
               </Link>
-              <Link to="/airlines/register"
+              <Link to="/register"
                 className="inline-flex items-center gap-2 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
                 style={{ background: '#000021' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#000000'}
@@ -393,15 +393,21 @@ export default function Home() {
             <h2 className="text-3xl sm:text-4xl font-black mb-2" style={{ color: C.dark }}>HOW TO APPOINT YOUR FAA AGENT FOR SERVICE</h2>
             <p className="text-sm" style={{ color: C.gray400 }}>Fast, digital, reliable &amp; safe</p>
           </motion.div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {HOW_STEPS.map((s, i) => (
-              <motion.div key={s.num} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="rounded-2xl p-6 flex flex-col" style={{ background: C.white, border: `1px solid ${C.gray200}`, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-                <div className="inline-flex items-center rounded-lg px-3 py-1 text-white text-xs font-black uppercase tracking-wider mb-4 self-start" style={{ background: C.blue }}>
-                  Step {s.num}
-                </div>
-                <h3 className="text-base font-bold mb-3" style={{ color: C.dark }}>{s.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: C.gray600 }}>{s.desc}</p>
+              <motion.div key={s.num} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.45 }}
+                whileHover={{ y: -6, scale: 1.012 }}
+                className="group relative rounded-2xl p-5 flex flex-col min-h-[300px]"
+                style={{ background: C.white, border: `1px solid ${C.gray200}`, boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
+                <div
+                  className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  style={{ background: `linear-gradient(90deg, ${C.blue} 0%, ${C.blueLight} 100%)` }}
+                />
+                <p className="text-6xl font-black leading-none mb-4" style={{ color: '#c7dbf7' }}>
+                  {String(s.num).padStart(2, '0')}
+                </p>
+                <h3 className="text-[28px] leading-[1.12] font-black mb-3" style={{ color: C.dark }}>{s.title}</h3>
+                <p className="text-[17px] leading-[1.55]" style={{ color: C.gray600 }}>{s.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -455,13 +461,13 @@ export default function Home() {
                 ))}
               </ul>
               <div className="flex flex-wrap gap-3">
-                <Link to="/airlines/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
                   style={{ background: C.blue }}
                   onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
                   onMouseLeave={e => e.currentTarget.style.background = C.blue}>
                   Register as Airline
                 </Link>
-                <Link to="/individual/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                <Link to="/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
                   style={{ color: C.dark, border: `1px solid ${C.gray200}` }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = C.gray400; e.currentTarget.style.background = C.gray50 }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.background = '' }}>

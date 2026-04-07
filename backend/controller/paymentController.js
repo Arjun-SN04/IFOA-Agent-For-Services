@@ -127,6 +127,8 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   // For Airlines, also track the total amount paid
   if (registrationModel !== 'Individual') {
     update.amountPaid = doc.totalAmount || 0;
+    update.wirePaymentRequested = false;
+    update.wirePaymentRequestedAt = null;
   }
 
   return Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
@@ -167,7 +169,7 @@ exports.createPaymentIntent = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount:   amountCents,
       currency: 'usd',
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
       description: `Subscription — ${registrationModel} ${registrationId}`,
       metadata: {
         registrationId:    String(registrationId),

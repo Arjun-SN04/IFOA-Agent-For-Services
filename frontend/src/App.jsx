@@ -73,6 +73,11 @@ function App() {
             <AdminDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/admin/add-individual" element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        } />
         <Route path="/admin/profile" element={
           <ProtectedRoute roles={['admin']}>
             <AdminProfilePage />

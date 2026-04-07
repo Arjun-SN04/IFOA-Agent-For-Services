@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import axios from 'axios'
+import { importAirlinesFromExcel } from '../../services/api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
@@ -77,6 +78,10 @@ export default function AdminAirlineForm() {
   const [success, setSuccess] = useState(null)
   const [error, setError] = useState(null)
   const [errors, setErrors] = useState({})
+  const [excelFile, setExcelFile] = useState(null)
+  const [excelLoading, setExcelLoading] = useState(false)
+  const [excelResult, setExcelResult] = useState(null)
+  const [excelError, setExcelError] = useState('')
 
   const [formData, setFormData] = useState({
     subscriptionPlan: '1 Year Subscription Plan',
@@ -265,6 +270,29 @@ export default function AdminAirlineForm() {
     }
   }
 
+  const handleExcelImport = async () => {
+    if (!excelFile) {
+      setExcelError('Please choose an Excel file first.')
+      return
+    }
+
+    setExcelLoading(true)
+    setExcelError('')
+    setExcelResult(null)
+
+    try {
+      const fd = new FormData()
+      fd.append('file', excelFile)
+      const res = await importAirlinesFromExcel(fd)
+      setExcelResult(res.data?.data || null)
+      setSuccess({ message: `Imported ${res.data?.data?.importedCount || 0} airline rows from Excel.` })
+    } catch (err) {
+      setExcelError(err?.response?.data?.message || 'Excel import failed.')
+    } finally {
+      setExcelLoading(false)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -285,10 +313,12 @@ export default function AdminAirlineForm() {
           <p style={{ color: '#166534' }} className="font-bold mb-2">
             ✓ {success.message}
           </p>
-          <div className="text-sm" style={{ color: '#166534' }}>
-            <p className="mb-1"><strong>Login Email:</strong> {success.credentials.email}</p>
-            <p><strong>Password:</strong> {success.credentials.password}</p>
-          </div>
+          {success?.credentials && (
+            <div className="text-sm" style={{ color: '#166534' }}>
+              <p className="mb-1"><strong>Login Email:</strong> {success.credentials.email}</p>
+              <p><strong>Password:</strong> {success.credentials.password}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -297,6 +327,48 @@ export default function AdminAirlineForm() {
           <p style={{ color: '#991b1b' }} className="font-bold">✗ {error}</p>
         </div>
       )}
+
+      <div className="mb-8 rounded-xl border p-5" style={{ borderColor: C.gray300, background: '#f8fafc' }}>
+        <p className="text-sm font-black mb-3" style={{ color: C.dark }}>Bulk Import Airlines From Excel</p>
+        <p className="text-xs mb-3" style={{ color: C.gray600 }}>
+          You can upload a sheet that contains both Individual and Airline rows. In this page, only airline/company rows will be imported.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+            className="text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleExcelImport}
+            disabled={excelLoading}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition"
+            style={{ background: C.blue }}
+          >
+            {excelLoading ? 'Importing...' : 'Import Excel'}
+          </button>
+        </div>
+
+        {excelError && <p className="text-xs mt-3" style={{ color: C.red }}>{excelError}</p>}
+
+        {excelResult && (
+          <div className="mt-3 text-xs" style={{ color: '#166534' }}>
+            <p className="font-bold">Imported: {excelResult.importedCount} row(s)</p>
+            <p className="font-bold">Skipped: {excelResult.skippedCount} row(s)</p>
+            <p className="font-bold">Failed: {excelResult.failedCount} row(s)</p>
+            {Array.isArray(excelResult.failed) && excelResult.failed.length > 0 && (
+              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">
+                {excelResult.failed.slice(0, 10).map((f, idx) => (
+                  <p key={`air-failed-${f.row || 'row'}-${idx}`}>Row {f.row}: {f.error}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* ═══ SECTION 1: AIRLINE SELECTION ═══ */}

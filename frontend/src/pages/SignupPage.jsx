@@ -69,7 +69,7 @@ export default function SignupPage() {
           {/* Simple white header */}
           <div className="px-8 py-7 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-12 w-auto mx-auto" />
+              <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
             </Link>
             <p className="text-slate-500 text-sm mt-2 font-medium">Create Your Free Account</p>
           </div>

@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
+import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import {
   deleteAirlinesSubscription,
   deleteIndividual,
@@ -90,7 +91,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -184,7 +185,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -209,6 +210,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
                 <div className="flex flex-col gap-1"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment Confirmed</span><Badge type="isPaid" isPaid={record.isPaid} /></div>
                 <div className="flex flex-col gap-1"><span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Payment</span><Badge value={record.paymentStatus} isPaid={record.isPaid} /></div>
                 <ViewField label="Invoice" value={record.invoiceStatus} />
+                <ViewField label="Wire Request" value={record.wirePaymentRequested ? `Requested${record.wirePaymentRequestedAt ? ` on ${fmtDate(record.wirePaymentRequestedAt)}` : ''}` : 'No'} />
                 <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
                 <ViewField label="Holder Count" value={record.holderCount} />
@@ -290,7 +292,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8"
@@ -403,7 +405,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8"
@@ -732,9 +734,10 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
 
   // Prefer saved invoiceDraft payment method; otherwise infer from payment record.
-  // Stripe-paid airline records should default to card, not wire.
+  // For airlines, default to wire only when a wire request exists.
   const paidByCard = record?.paymentMethodType === 'card' || Boolean(record?.stripePaymentIntentId)
-  const defaultPaymentMethod = record?.invoiceDraft?.paymentMethod || (isAirline ? (paidByCard ? 'card' : 'wire') : 'card')
+  const wireRequested = Boolean(record?.wirePaymentRequested || record?.invoiceStatus === 'Wire Requested')
+  const defaultPaymentMethod = record?.invoiceDraft?.paymentMethod || (isAirline ? (wireRequested ? 'wire' : 'card') : 'card')
 
   const [paymentMethodSel, setPaymentMethodSel] = useState(
     initialStep === 'edit' ? defaultPaymentMethod : ''
@@ -910,7 +913,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
               className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-6"
@@ -1107,7 +1110,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
         <AnimatePresence>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm" onClick={closePreviewModal} />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-16 sm:pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }} transition={{ duration: 0.2 }}
               className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -1288,19 +1291,19 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="overflow-x-hidden">
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Name & Certificate</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Contact</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Country</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Price</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Name & Certificate</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Price</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Status</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Submitted</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1348,7 +1351,16 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                     <td className="px-4 py-4"><span className="text-xs text-slate-700 font-medium">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(primary.price)}</td>
                     <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
-                    <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col gap-1">
+                        <Badge value={primary.paymentStatus} isPaid={primary.isPaid} />
+                        {primary.wirePaymentRequested && (
+                          <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700 w-fit">
+                            Wire Requested
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
                       <RowActions
@@ -1384,7 +1396,16 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
-                      <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <Badge value={sub.paymentStatus} isPaid={sub.isPaid} />
+                          {sub.wirePaymentRequested && (
+                            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700 w-fit">
+                              Wire Requested
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
                       <td className="px-4 py-3">
                         <RowActions
@@ -1431,7 +1452,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="overflow-x-hidden">
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
@@ -1627,7 +1648,15 @@ function OverviewPanel({ individuals, airlines }) {
 export default function AdminDashboard() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const tabFromPath = pathname.endsWith('/individuals') ? 'individuals' : pathname.endsWith('/airlines') ? 'airlines' : pathname.endsWith('/add-airline') ? 'add-airline' : 'overview'
+  const tabFromPath = pathname.endsWith('/individuals')
+    ? 'individuals'
+    : pathname.endsWith('/airlines')
+      ? 'airlines'
+      : pathname.endsWith('/add-airline')
+        ? 'add-airline'
+        : pathname.endsWith('/add-individual')
+          ? 'add-individual'
+          : 'overview'
   const [tab, setTab] = useState(tabFromPath)
   useEffect(() => { setTab(tabFromPath) }, [pathname])
 
@@ -1831,9 +1860,10 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab !== 'add-airline' && tab !== 'add-individual' && (
       <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          {tab !== 'overview' && tab !== 'add-airline' && (
+          {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
             <>
             <div className="relative">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
@@ -1856,16 +1886,29 @@ export default function AdminDashboard() {
           )}
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            {hasActiveFilters && tab !== 'overview' && tab !== 'add-airline' && (
+            {hasActiveFilters && tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
               <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
             )}
 
-            {tab !== 'overview' && tab !== 'add-airline' && (
+            {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
               <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()}
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
                 Export Excel
               </a>
+            )}
+
+            {tab === 'individuals' && (
+              <button
+                onClick={() => navigate('/admin/add-individual')}
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition"
+                style={{ background: '#000021' }}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+                </svg>
+                Add Individual
+              </button>
             )}
 
             {tab === 'airlines' && (
@@ -1890,8 +1933,9 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+      )}
 
-      {tab !== 'overview' && tab !== 'add-airline' && !loading && (
+      {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && !loading && (
         <div className="flex items-center gap-3 mb-4 px-1">
           <p className="text-sm text-slate-500">
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
@@ -1910,6 +1954,10 @@ export default function AdminDashboard() {
       ) : tab === 'add-airline' ? (
         <div className="px-4">
           <AdminAirlineForm />
+        </div>
+      ) : tab === 'add-individual' ? (
+        <div className="px-4">
+          <AdminIndividualForm />
         </div>
       ) : tab === 'individuals' ? (
         <IndividualsTable

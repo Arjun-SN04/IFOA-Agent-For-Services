@@ -226,8 +226,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
       <div>
         <PaymentElement
           options={{
-            layout: { type: 'tabs', defaultCollapsed: false },
-            wallets: { applePay: 'auto', googlePay: 'auto' },
+            layout: { type: 'accordion', defaultCollapsed: false },
           }}
         />
       </div>
@@ -273,7 +272,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
           <rect x="3" y="11" width="18" height="11" rx="2" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        Secured by SSL · Card · Apple Pay · Google Pay · Link — all supported
+        Secured by SSL · Card payments only
       </div>
     </form>
   )

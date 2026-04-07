@@ -39,7 +39,7 @@ async function fetchPaymentRecord(registrationId, token) {
 
 function PlanBadge({ plan }) {
   const map = {
-    '1 Year Subscription Plan': 'bg-red-50 border-red-200 text-red-700',
+    '1 Year Subscription Plan': 'bg-blue-50 border-blue-200 text-blue-700',
     'Multiple Years Subscription Plan': 'bg-slate-100 border-slate-300 text-slate-700',
     'Unlimited Plan': 'bg-emerald-50 border-emerald-200 text-emerald-700',
   }
@@ -73,6 +73,325 @@ function Row({ label, value }) {
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
 const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
+
+const INDIVIDUAL_CERT_TYPES = [
+  'Part 65 - Aircraft Dispatcher',
+  'Part 61 - Pilot',
+  'Part 61 - Flight or Ground Instructor',
+]
+
+const AIRLINE_CERT_TYPES = [
+  'Part 61 - Pilot',
+  'Part 61 - Flight or Ground Instructor',
+  'Part 65 - Aircraft Dispatcher',
+]
+
+function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
+  const isAirline = role === 'airline'
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [limitWarning, setLimitWarning] = useState('')
+  const maxHolders = isAirline
+    ? Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
+    : 0
+
+  const [form, setForm] = useState(() => {
+    if (isAirline) {
+      return {
+        airlineName: sub.airlineName || '',
+        firstName: sub.firstName || '',
+        lastName: sub.lastName || '',
+        middleName: sub.middleName || '',
+        dateOfBirth: sub.dateOfBirth ? String(sub.dateOfBirth).slice(0, 10) : '',
+        email: sub.email || '',
+        phone: sub.phone || '',
+        addressLine1: sub.addressLine1 || '',
+        addressLine2: sub.addressLine2 || '',
+        city: sub.city || '',
+        state: sub.state || '',
+        postalCode: sub.postalCode || '',
+        country: sub.country || '',
+        pointOfContact: sub.pointOfContact || '',
+        pointOfContactEmail: sub.pointOfContactEmail || '',
+        pointOfContactPhone: sub.pointOfContactPhone || '',
+        certificateHolders: (sub.certificateHolders || []).map((h) => ({
+          ...h,
+          fullName: h.fullName || '',
+          dateOfBirth: h.dateOfBirth ? String(h.dateOfBirth).slice(0, 10) : '',
+          certificateType: h.certificateType || '',
+          certificateStatus: h.certificateStatus || 'EXISTING',
+          faaCertificateNumber: h.faaCertificateNumber || '',
+          iacraFtnNumber: h.iacraFtnNumber || '',
+          email: h.email || '',
+        })),
+      }
+    }
+
+    return {
+      firstName: sub.firstName || '',
+      lastName: sub.lastName || '',
+      middleName: sub.middleName || '',
+      dateOfBirth: sub.dateOfBirth ? String(sub.dateOfBirth).slice(0, 10) : '',
+      addressLine1: sub.addressLine1 || '',
+      city: sub.city || '',
+      state: sub.state || '',
+      postalCode: sub.postalCode || '',
+      country: sub.country || '',
+      phone: sub.phone || '',
+      email: sub.email || '',
+      primaryAirmanCertificate: sub.primaryAirmanCertificate || 'EXISTING',
+      primaryCertificate: sub.primaryCertificate || '',
+      faaCertificateNumber: sub.faaCertificateNumber || '',
+      iacraTrackingNumber: sub.iacraTrackingNumber || '',
+      hasSecondaryCertificate: !!sub.hasSecondaryCertificate,
+      secondaryCertificate: sub.secondaryCertificate || '',
+      secondaryFaaCertificateNumber: sub.secondaryFaaCertificateNumber || '',
+      secondaryIacraTrackingNumber: sub.secondaryIacraTrackingNumber || '',
+    }
+  })
+
+  const setField = (name, value) => setForm((prev) => ({ ...prev, [name]: value }))
+
+  const setHolder = (index, field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      certificateHolders: prev.certificateHolders.map((h, i) => i === index ? { ...h, [field]: value } : h),
+    }))
+  }
+
+  const addHolder = () => {
+    const current = form.certificateHolders?.length || 0
+    if (maxHolders > 0 && current >= maxHolders) {
+      setLimitWarning(`You selected an exact count of ${maxHolders}. You cannot add more holders.`)
+      setError('')
+      return
+    }
+    setError('')
+    setLimitWarning('')
+    setForm((prev) => ({
+      ...prev,
+      certificateHolders: [
+        ...(prev.certificateHolders || []),
+        {
+          fullName: '',
+          dateOfBirth: '',
+          certificateType: '',
+          certificateStatus: 'EXISTING',
+          faaCertificateNumber: '',
+          iacraFtnNumber: '',
+          email: '',
+          hasSecondaryCertificate: false,
+          secondaryCertificateType: '',
+          secondaryFaaCertificateNumber: '',
+          secondaryIacraFtnNumber: '',
+        },
+      ],
+    }))
+  }
+
+  const removeHolder = (index) => {
+    setLimitWarning('')
+    setForm((prev) => ({
+      ...prev,
+      certificateHolders: prev.certificateHolders.filter((_, i) => i !== index),
+    }))
+  }
+
+  const handleSave = async () => {
+    if (isAirline && maxHolders > 0 && (form.certificateHolders?.length || 0) > maxHolders) {
+      setError(`Holder count cannot exceed the selected exact count (${maxHolders}).`)
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const payload = isAirline
+        ? {
+            airlineName: form.airlineName,
+            firstName: form.firstName,
+            lastName: form.lastName,
+            middleName: form.middleName,
+            dateOfBirth: form.dateOfBirth || null,
+            email: form.email,
+            phone: form.phone,
+            addressLine1: form.addressLine1,
+            addressLine2: form.addressLine2,
+            city: form.city,
+            state: form.state,
+            postalCode: form.postalCode,
+            country: form.country,
+            pointOfContact: form.pointOfContact,
+            pointOfContactEmail: form.pointOfContactEmail,
+            pointOfContactPhone: form.pointOfContactPhone,
+            certificateHolders: (form.certificateHolders || []).map((h) => ({
+              ...h,
+              dateOfBirth: h.dateOfBirth || null,
+            })),
+          }
+        : {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            middleName: form.middleName,
+            dateOfBirth: form.dateOfBirth || null,
+            addressLine1: form.addressLine1,
+            city: form.city,
+            state: form.state,
+            postalCode: form.postalCode,
+            country: form.country,
+            phone: form.phone,
+            email: form.email,
+            primaryAirmanCertificate: form.primaryAirmanCertificate,
+            primaryCertificate: form.primaryCertificate,
+            faaCertificateNumber: form.faaCertificateNumber,
+            iacraTrackingNumber: form.iacraTrackingNumber,
+            hasSecondaryCertificate: !!form.hasSecondaryCertificate,
+            secondaryCertificate: form.hasSecondaryCertificate ? form.secondaryCertificate : '',
+            secondaryFaaCertificateNumber: form.hasSecondaryCertificate ? form.secondaryFaaCertificateNumber : '',
+            secondaryIacraTrackingNumber: form.hasSecondaryCertificate ? form.secondaryIacraTrackingNumber : '',
+          }
+
+      const endpoint = isAirline ? `/airlines/${sub._id}` : `/individuals/${sub._id}`
+      const res = await API.put(endpoint, payload)
+      onSaved(res.data.data)
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to update details.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Edit Form Details</p>
+            <h3 className="text-lg font-black text-slate-900">{isAirline ? 'Airline Registration Data' : 'Individual Registration Data'}</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100">✕</button>
+        </div>
+
+        <div className="p-6 overflow-y-auto space-y-4">
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+          {isAirline ? (
+            <>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Airline Name" value={form.airlineName} onChange={(e) => setField('airlineName', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="First Name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Last Name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                <input type="date" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 1" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 2" value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Postal Code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Certificate Holders</p>
+                  <button
+                    onClick={addHolder}
+                    className="text-xs font-bold text-blue-600 hover:underline"
+                  >
+                    + Add Holder
+                  </button>
+                </div>
+                {maxHolders > 0 && (
+                  <p className="text-[11px] text-slate-500 mb-2">
+                    Exact holder count selected: <span className="font-bold text-slate-700">{maxHolders}</span> · current: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
+                  </p>
+                )}
+                {limitWarning && (
+                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    {limitWarning}
+                  </div>
+                )}
+                <div className="space-y-3">
+                  {(form.certificateHolders || []).map((h, i) => (
+                    <div key={i} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-slate-700">Holder #{i + 1}</p>
+                        <button onClick={() => removeHolder(i)} className="text-xs text-red-600 hover:underline">Remove</button>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Full Name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
+                        <input type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
+                        <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
+                          <option value="">Certificate Type</option>
+                          {AIRLINE_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
+                          <option value="EXISTING">EXISTING</option>
+                          <option value="NEW">NEW</option>
+                        </select>
+                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
+                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="IACRA FTN #" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="First Name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Last Name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Middle Name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
+                <input type="date" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 1" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Postal Code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.primaryAirmanCertificate} onChange={(e) => setField('primaryAirmanCertificate', e.target.value)}>
+                  <option value="EXISTING">EXISTING</option>
+                  <option value="NEW">NEW</option>
+                </select>
+                <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.primaryCertificate} onChange={(e) => setField('primaryCertificate', e.target.value)}>
+                  <option value="">Primary Certificate</option>
+                  {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="FAA Certificate #" value={form.faaCertificateNumber} onChange={(e) => setField('faaCertificateNumber', e.target.value)} />
+                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="IACRA Tracking #" value={form.iacraTrackingNumber} onChange={(e) => setField('iacraTrackingNumber', e.target.value)} />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 pt-1">
+                <input type="checkbox" checked={form.hasSecondaryCertificate} onChange={(e) => setField('hasSecondaryCertificate', e.target.checked)} />
+                Has secondary certificate
+              </label>
+              {form.hasSecondaryCertificate && (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.secondaryCertificate} onChange={(e) => setField('secondaryCertificate', e.target.value)}>
+                    <option value="">Secondary Certificate</option>
+                    {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Secondary FAA Certificate #" value={form.secondaryFaaCertificateNumber} onChange={(e) => setField('secondaryFaaCertificateNumber', e.target.value)} />
+                  <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm sm:col-span-2" placeholder="Secondary IACRA Tracking #" value={form.secondaryIacraTrackingNumber} onChange={(e) => setField('secondaryIacraTrackingNumber', e.target.value)} />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white">
+            {saving ? 'Saving...' : 'Save Form Data'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
@@ -298,6 +617,7 @@ export default function SubscriptionPage() {
   const [payTarget,     setPayTarget]     = useState(null)
   const [showAddHolders, setShowAddHolders] = useState(false)
   const [viewInvoice,   setViewInvoice]   = useState(null)  // invoice to preview
+  const [editTarget, setEditTarget] = useState(null)
 
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
@@ -427,8 +747,8 @@ export default function SubscriptionPage() {
   return (
     <DashboardLayout>
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">My Account</p>
+        <div className="mb-8 text-center">
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">My Account</p>
           <h1 className="text-2xl font-black text-slate-900">Subscription</h1>
           <p className="text-slate-500 text-sm mt-1">Your current plan and subscription details.</p>
         </div>
@@ -456,16 +776,16 @@ export default function SubscriptionPage() {
                 <p className="text-slate-700 font-bold mb-1">No active subscription</p>
                 <p className="text-slate-400 text-sm mb-5">Register to activate your FAA compliance service.</p>
                 <Link to={user?.role === 'airline' ? '/register' : '/register'}
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all">
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all">
                   Register Now
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                 </Link>
               </div>
             </div>
-            <div className="bg-black rounded-2xl p-6 text-center">
+            <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 text-center">
               <p className="text-white font-black text-lg mb-2">Choose a Plan</p>
-              <p className="text-slate-400 text-sm mb-5">Starting from just $69/year for individuals.</p>
-              <Link to="/#pricing" className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all">
+              <p className="text-slate-300 text-sm mb-5">Starting from just $69/year for individuals.</p>
+              <Link to="/#pricing" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all">
                 View Plans
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
               </Link>
@@ -491,6 +811,7 @@ export default function SubscriptionPage() {
                 onPay={() => { setSub(s); setPayTarget(s); setShowPayModal(true) }}
                 onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
+                onEditForm={() => setEditTarget(s)}
               />
             ))}
           </div>
@@ -553,12 +874,25 @@ export default function SubscriptionPage() {
           }}
         />
       )}
+
+      {editTarget && (
+        <EditSubscriptionFormModal
+          sub={editTarget}
+          role={user?.role}
+          onClose={() => setEditTarget(null)}
+          onSaved={(updated) => {
+            setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
+            setSub((prev) => (prev?._id === updated._id ? updated : prev))
+            setEditTarget(null)
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }
 
 // ── Per-subscription card ────────────────────────────────────────────────────
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm }) {
   const isAirline = user?.role === 'airline'
   // Source of truth: isPaid field (set only after Payment record is saved in DB)
   // Fall back to legacy paymentStatus/status for records that predate this change
@@ -593,7 +927,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
   }
 
   const bannerCls = active
-    ? 'bg-gradient-to-r from-red-700 to-red-600'
+    ? 'bg-gradient-to-r from-slate-900 to-slate-700'
     : inactive
     ? 'bg-gradient-to-r from-slate-700 to-slate-600'
     : 'bg-gradient-to-r from-blue-700 to-blue-600'
@@ -628,7 +962,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
           </div>
           <button
             onClick={onPay}
-            className="flex-shrink-0 inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-200 whitespace-nowrap"
+            className="flex-shrink-0 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 whitespace-nowrap"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
@@ -661,10 +995,19 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan Details</p>
           <div className="flex items-center gap-2">
+            <button
+              onClick={onEditForm}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+              </svg>
+              Edit Form
+            </button>
             {active && (
               <button
                 onClick={handleInvoiceClick}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-red-300 hover:text-red-600 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -719,7 +1062,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               <Row label="Submitted" value={fmt(s.submittedAt || s.createdAt)} />
               {s.certificateHolders?.length > 0 && (
                 <div className="mt-4 mb-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-3">Certificate Holders</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-3">Certificate Holders</p>
                   <div className="space-y-2">
                     {s.certificateHolders.map((h, i) => (
                       <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 flex items-start justify-between gap-3">
@@ -730,7 +1073,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
                           {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
                         </div>
                         <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border flex-shrink-0 ${
-                          h.certificateStatus === 'EXISTING' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-100 border-slate-300 text-slate-600'
+                          h.certificateStatus === 'EXISTING' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-300 text-slate-600'
                         }`}>{h.certificateStatus}</span>
                       </div>
                     ))}

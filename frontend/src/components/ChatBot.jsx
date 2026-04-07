@@ -355,6 +355,7 @@ export default function ChatBot() {
 
   const { pathname } = useLocation()
   const [heroVisible, setHeroVisible] = useState(true)
+  const isRegisterPage = pathname === '/register'
 
   const isAuthPage =
     pathname === '/login' ||
@@ -457,8 +458,13 @@ export default function ChatBot() {
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.93 }}
             onClick={() => setOpen(true)}
-            className="relative w-14 h-14 rounded-full text-white shadow-2xl flex items-center justify-center"
-            style={{ background: '#000', boxShadow: '0 8px 32px rgba(0,0,0,0.35)' }}
+            className="relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center"
+            style={{
+              background: isRegisterPage ? '#ffffff' : '#000',
+              color: isRegisterPage ? '#000000' : '#ffffff',
+              border: isRegisterPage ? '1px solid #d1d5db' : 'none',
+              boxShadow: isRegisterPage ? '0 8px 30px rgba(0,0,0,0.22)' : '0 8px 32px rgba(0,0,0,0.35)'
+            }}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />

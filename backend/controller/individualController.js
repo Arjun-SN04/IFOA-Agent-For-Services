@@ -1,5 +1,204 @@
 const Individual = require('../models/Individual');
+const User = require('../models/User');
 const ExcelJS = require('exceljs');
+const XLSX = require('xlsx');
+
+function toBool(v, defaultValue = false) {
+  if (v === undefined || v === null || v === '') return defaultValue;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v === 1;
+  const s = String(v).trim().toLowerCase();
+  return ['true', '1', 'yes', 'y', 'paid', 'active'].includes(s);
+}
+
+function toDateOrNull(v) {
+  if (!v) return null;
+  let parsed = v;
+  if (typeof v === 'number') {
+    // Excel serial date (days since 1899-12-30)
+    parsed = new Date(Math.round((v - 25569) * 86400 * 1000));
+  } else if (typeof v === 'string') {
+    const s = v.trim();
+    if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(s)) {
+      const parts = s.replace(/[.-]/g, '/').split('/');
+      const mm = parts[0].padStart(2, '0');
+      const dd = parts[1].padStart(2, '0');
+      const yyyy = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      parsed = `${yyyy}-${mm}-${dd}`;
+    } else {
+      parsed = s;
+    }
+  }
+
+  const d = new Date(parsed);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function pick(row, keys, fallback = '') {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined && row[key] !== null && row[key] !== '') {
+      return row[key];
+    }
+  }
+  return fallback;
+}
+
+function toNumberOrUndefined(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  const cleaned = String(v).replace(/[$,\s]/g, '').trim();
+  if (!cleaned) return undefined;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizePlanPrice(plan, multiYearCount, explicitPrice) {
+  if (explicitPrice !== undefined && explicitPrice !== null && explicitPrice !== '') {
+    return Number(explicitPrice);
+  }
+  if (plan === 'Unlimited Plan') return 299;
+  if (plan === 'Multiple Years Subscription Plan') {
+    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : 2;
+    return 55 * years;
+  }
+  return 69;
+}
+
+function computeExpiration(plan, subscriptionDate, multiYearCount) {
+  if (!subscriptionDate) return null;
+  const d = new Date(subscriptionDate);
+  if (plan === '1 Year Subscription Plan') {
+    d.setFullYear(d.getFullYear() + 1);
+    return d;
+  }
+  if (plan === 'Multiple Years Subscription Plan') {
+    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : 3;
+    d.setFullYear(d.getFullYear() + years);
+    return d;
+  }
+  return null;
+}
+
+function buildIndividualPayload(raw) {
+  const src = { ...raw };
+
+  const subscriptionPlan =
+    pick(src, ['subscriptionPlan', 'plan', 'Subscription Plan']) ||
+    '1 Year Subscription Plan';
+
+  const multiYearCount = Number(pick(src, ['multiYearCount', 'years'], 3));
+
+  const firstName = String(pick(src, ['firstName', 'First Name'])).trim();
+  const lastName = String(pick(src, ['lastName', 'Last Name'])).trim();
+  const email = String(pick(src, ['email', 'Email'])).toLowerCase().trim();
+  const phone = String(pick(src, ['phone', 'Phone'])).trim();
+
+  if (!firstName || !lastName || !email || !phone) {
+    throw new Error('firstName, lastName, email, and phone are required.');
+  }
+
+  const paymentStatusRaw = String(pick(src, ['paymentStatus', 'Invoice', 'invoiceStatus'], 'pending')).toLowerCase();
+  const paid = toBool(src.isPaid, paymentStatusRaw === 'paid');
+  const paymentStatus = paid ? 'paid' : (paymentStatusRaw === 'failed' ? 'failed' : 'pending');
+  const status = paid ? 'Active' : (pick(src, ['status', 'Status'], 'Pending'));
+  const subscriptionDate = paid ? (toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date()) : toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date']));
+
+  const payload = {
+    status,
+    subscriptionPlan,
+    price: normalizePlanPrice(subscriptionPlan, multiYearCount, toNumberOrUndefined(pick(src, ['price', 'TOTAL', 'Total', 'total']))),
+    subscriptionDate,
+    expirationDate: toDateOrNull(pick(src, ['expirationDate', 'Expiration Date'])),
+    totalServiceFees: toNumberOrUndefined(pick(src, ['totalServiceFees', 'Total Service Fees'])),
+
+    firstName,
+    lastName,
+    middleName: String(pick(src, ['middleName', 'Middle Name'])).trim(),
+    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])) || toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date('1990-01-01'),
+
+    addressLine1: String(pick(src, ['addressLine1', 'Address Line 1'])).trim(),
+    city: String(pick(src, ['city', 'City'])).trim(),
+    state: String(pick(src, ['state', 'State'])).trim(),
+    postalCode: String(pick(src, ['postalCode', 'Zip/Postal Code', 'Postal Code'])).trim(),
+    country: String(pick(src, ['country', 'Country'])).trim(),
+
+    phone,
+    email,
+
+    primaryAirmanCertificate: pick(src, ['primaryAirmanCertificate', 'Primary Airman Certificate', 'airmanCertificate'], 'EXISTING'),
+    primaryCertificate: pick(src, ['primaryCertificate', 'Primary Certificate', 'certificateType'], 'Part 65 - Aircraft Dispatcher'),
+    faaCertificateNumber: String(pick(src, ['faaCertificateNumber', 'FAA Certificate Number'])).trim(),
+    iacraTrackingNumber: String(pick(src, ['iacraTrackingNumber', 'IACRA Tracking Number (FTN)', 'ftn'])).trim(),
+    hasSecondaryCertificate: toBool(
+      pick(src, ['hasSecondaryCertificate', 'Do you have a Secondary Airman Certificate?'], false),
+      false,
+    ),
+    secondaryCertificate: String(pick(src, ['secondaryCertificate', 'Secondary Certificate'])).trim(),
+    secondaryFaaCertificateNumber: String(pick(src, ['secondaryFaaCertificateNumber', 'Secondary FAA Certificate Number'])).trim(),
+    secondaryIacraTrackingNumber: String(pick(src, ['secondaryIacraTrackingNumber', 'Secondary IACRA Tracking Number (FTN)'])).trim(),
+
+    multiYearCount,
+
+    paymentEmail: String(pick(src, ['paymentEmail', 'Email'], email)).toLowerCase().trim(),
+    paymentStatus,
+    isPaid: paid,
+    invoiceStatus: pick(src, ['invoiceStatus', 'Invoice'], paid ? 'Paid' : 'Pending'),
+    invoiceNumber: pick(src, ['invoiceNumber', 'Invoice Number'], ''),
+
+    agreedToTerms: src.agreedToTerms === undefined ? true : toBool(src.agreedToTerms, true),
+  };
+
+  if (!payload.expirationDate) {
+    payload.expirationDate = computeExpiration(payload.subscriptionPlan, payload.subscriptionDate, payload.multiYearCount);
+  }
+
+  return payload;
+}
+
+function inferRowKind(row) {
+  const marker = String(
+    row?.type || row?.role || row?.accountType || row?.registrationType || row?.entity || ''
+  ).toLowerCase().trim();
+
+  if (marker.includes('airline') || marker.includes('company') || marker.includes('operator')) return 'airline';
+  if (marker.includes('individual') || marker.includes('pilot') || marker.includes('dispatcher')) return 'individual';
+
+  if (row?.airlineName || row?.holderCount || row?.holderCountValue || row?.certificateHolders) return 'airline';
+  return 'individual';
+}
+
+async function linkOrCreateIndividualUser(individual, payload) {
+  let user = await User.findOne({ email: payload.email });
+  if (!user) {
+    const generatedPassword = (payload.firstName || 'ifoa12345').trim();
+    user = await User.create({
+      email: payload.email,
+      password: generatedPassword,
+      role: 'individual',
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      registrationId: individual._id,
+      registrationModel: 'Individual',
+      subscriptionIds: [individual._id],
+    });
+    return {
+      user,
+      loginCredentials: { email: payload.email, password: generatedPassword },
+    };
+  }
+
+  user.firstName = payload.firstName || user.firstName;
+  user.lastName = payload.lastName || user.lastName;
+  user.registrationId = individual._id;
+  user.registrationModel = 'Individual';
+  if (!Array.isArray(user.subscriptionIds)) user.subscriptionIds = [];
+  if (!user.subscriptionIds.some((id) => String(id) === String(individual._id))) {
+    user.subscriptionIds.push(individual._id);
+  }
+  await user.save();
+
+  return { user, loginCredentials: null };
+}
 
 // ── Create ────────────────────────────────────────────────────────────────────
 exports.createIndividual = async (req, res) => {
@@ -7,9 +206,114 @@ exports.createIndividual = async (req, res) => {
     const body = { ...req.body };
     // Normalize email to lowercase so all lookups match regardless of case
     if (body.email) body.email = body.email.toLowerCase().trim();
+
+    if (body.email) {
+      const existing = await Individual.findOne({ email: body.email });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: 'You have already submitted this form. Please edit your submitted form from the Subscription dashboard.',
+          data: existing,
+        });
+      }
+    }
+
     const individual = new Individual(body);
     await individual.save();
     res.status(201).json({ success: true, data: individual });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: Create individual form with user account linkage ───────────────────
+exports.adminCreateIndividualForm = async (req, res) => {
+  try {
+    const payload = buildIndividualPayload(req.body || {});
+    const individual = await Individual.create(payload);
+    const linked = await linkOrCreateIndividualUser(individual, payload);
+
+    res.status(201).json({
+      success: true,
+      message: 'Individual form created successfully.',
+      data: {
+        individual,
+        user: {
+          email: linked.user.email,
+          role: linked.user.role,
+          firstName: linked.user.firstName,
+          lastName: linked.user.lastName,
+        },
+        loginCredentials: linked.loginCredentials,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: Bulk import individuals from Excel ─────────────────────────────────
+exports.adminImportIndividualsFromExcel = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, message: 'Excel file is required.' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return res.status(400).json({ success: false, message: 'No worksheet found in the uploaded file.' });
+    }
+
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    if (!rows.length) {
+      return res.status(400).json({ success: false, message: 'The uploaded sheet is empty.' });
+    }
+
+    const created = [];
+    const failed = [];
+    const skipped = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowKind = inferRowKind(row);
+      if (rowKind !== 'individual') {
+        skipped.push({ row: i + 2, reason: `Skipped ${rowKind} row during individual import.` });
+        continue;
+      }
+
+      try {
+        const payload = buildIndividualPayload(row);
+        const existing = await Individual.findOne({ email: payload.email });
+        if (existing) {
+          skipped.push({ row: i + 2, reason: `Email already exists: ${payload.email}` });
+          continue;
+        }
+        const individual = await Individual.create(payload);
+        await linkOrCreateIndividualUser(individual, payload);
+        created.push({
+          row: i + 2,
+          id: individual._id,
+          email: individual.email,
+          name: `${individual.firstName} ${individual.lastName}`.trim(),
+        });
+      } catch (rowErr) {
+        failed.push({ row: i + 2, error: rowErr.message });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Imported ${created.length} individual(s) from Excel.`,
+      data: {
+        importedCount: created.length,
+        failedCount: failed.length,
+        skippedCount: skipped.length,
+        created,
+        failed,
+        skipped,
+      },
+    });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -65,9 +369,28 @@ exports.getIndividualById = async (req, res) => {
 // ── Update ────────────────────────────────────────────────────────────────────
 exports.updateIndividual = async (req, res) => {
   try {
+    const allowedFields = [
+      'firstName', 'lastName', 'middleName', 'dateOfBirth',
+      'addressLine1', 'city', 'state', 'postalCode', 'country',
+      'phone', 'email',
+      'primaryAirmanCertificate', 'primaryCertificate',
+      'faaCertificateNumber', 'iacraTrackingNumber',
+      'hasSecondaryCertificate', 'secondaryCertificate',
+      'secondaryFaaCertificateNumber', 'secondaryIacraTrackingNumber',
+    ];
+
+    const payload = {};
+    allowedFields.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        payload[field] = req.body[field];
+      }
+    });
+
+    if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
+
     const individual = await Individual.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      payload,
       { new: true, runValidators: false },
     );
     if (!individual)
@@ -84,6 +407,18 @@ exports.deleteIndividual = async (req, res) => {
     const individual = await Individual.findByIdAndDelete(req.params.id);
     if (!individual)
       return res.status(404).json({ success: false, message: 'Not found' });
+
+    // Unlink deleted subscription from any linked user account.
+    await User.updateMany(
+      { subscriptionIds: individual._id },
+      { $pull: { subscriptionIds: individual._id } },
+    );
+
+    await User.updateMany(
+      { registrationId: individual._id },
+      { $set: { registrationId: null, registrationModel: null } },
+    );
+
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

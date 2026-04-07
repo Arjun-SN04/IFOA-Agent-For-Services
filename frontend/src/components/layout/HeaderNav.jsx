@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
@@ -24,20 +25,28 @@ function NavLink({ item }) {
   return (
     <Link
       to={item.to}
-      className={`relative px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200 whitespace-nowrap
+      className={`relative inline-flex h-9 min-w-[98px] items-center justify-center px-4 text-center text-sm font-semibold rounded-full transition-all duration-300 ease-out whitespace-nowrap transform-gpu overflow-hidden
         ${active
           ? 'text-white shadow-sm'
-          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 hover:-translate-y-px'
         }`}
-      style={active ? { background: '#000021' } : undefined}
     >
-      {item.label}
+      {active && (
+        <motion.span
+          layoutId="dashboard-nav-active-pill"
+          transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.9 }}
+          className="absolute inset-0 rounded-full"
+          style={{ background: '#000021' }}
+        />
+      )}
+      <span className="relative z-10">{item.label}</span>
     </Link>
   )
 }
 
 export default function HeaderNav() {
   const { user, logout } = useAuth()
+  const { pathname } = useLocation()
   const navigate = useNavigate()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -63,6 +72,11 @@ export default function HeaderNav() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  useEffect(() => {
+    setDropdownOpen(false)
+    setMobileOpen(false)
+  }, [pathname])
+
   const handleLogout = () => {
     setDropdownOpen(false)
     setMobileOpen(false)
@@ -80,7 +94,7 @@ export default function HeaderNav() {
       `}</style>
 
       {/* ── Main header bar ── */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-[68px] bg-white border-b border-slate-100"
+      <header className="fixed top-0 left-0 right-0 z-50 h-[72px] bg-white border-b border-slate-100"
         style={{ boxShadow: '0 1px 12px rgba(0,0,0,0.06)' }}>
         <div className="h-full max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
 
@@ -90,7 +104,7 @@ export default function HeaderNav() {
           </Link>
 
           {/* Centre nav — pills */}
-          <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2 py-1.5 border border-slate-100">
+          <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100 transition-all duration-300">
             {nav.map(item => <NavLink key={item.to} item={item} />)}
           </nav>
 
@@ -110,7 +124,7 @@ export default function HeaderNav() {
               <span className={`hidden sm:inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider border ${
                 user.role === 'admin'
                   ? 'bg-slate-900 text-white border-slate-800'
-                  : 'bg-red-50 text-red-700 border-red-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
               }`}>
                 {user.role}
               </span>
@@ -126,7 +140,6 @@ export default function HeaderNav() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-800 to-slate-700 flex items-center justify-center text-white text-xs font-black">
                     {initials}
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-white" />
                 </div>
                 <span className="hidden sm:block text-sm font-semibold text-slate-700 group-hover:text-slate-900 max-w-[120px] truncate">
                   {fullName}
@@ -153,7 +166,7 @@ export default function HeaderNav() {
                     <span className={`inline-flex items-center mt-2.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border ${
                       user?.role === 'admin'
                         ? 'bg-slate-900 text-white border-slate-800'
-                        : 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
                     }`}>
                       {user?.role ?? 'user'}
                     </span>
@@ -222,7 +235,7 @@ export default function HeaderNav() {
             className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:hidden"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="mob-in fixed top-[68px] left-0 right-0 z-40 bg-white border-b border-slate-100 shadow-xl md:hidden">
+          <div className="mob-in fixed top-[72px] left-0 right-0 z-40 bg-white border-b border-slate-100 shadow-xl md:hidden">
             <nav className="p-3 space-y-0.5">
               {nav.map(item => {
                 const { pathname } = window.location

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
 import { downloadInvoicePDF } from '../payment/InvoiceModal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
@@ -290,6 +291,7 @@ function WireTransferSuccess({ onClose }) {
 }
 
 export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, onMarkPaidAndFinish, submitting, error, isBlocked }) {
+  const navigate = useNavigate()
   const [errors, setErrors]             = useState({})
   const [paymentMethod, setPaymentMethod] = useState('') // '' | 'card' | 'wire'
   const [showCardModal, setShowCardModal] = useState(false)
@@ -389,7 +391,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   if (wireSuccess) {
     return (
       <div className="rounded-2xl border border-blue-200 bg-white overflow-hidden">
-        <WireTransferSuccess onClose={() => {}} />
+        <WireTransferSuccess onClose={() => navigate('/dashboard/subscription')} />
       </div>
     )
   }

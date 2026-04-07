@@ -79,7 +79,7 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-8 text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
           <h1 className="text-2xl font-black text-slate-900">Settings</h1>
           <p className="text-slate-500 text-sm mt-1">Update your login credentials.</p>
@@ -99,8 +99,7 @@ export default function SettingsPage() {
                 {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'}
               </p>
               <p className="text-sm text-slate-500">{user?.email}</p>
-              <span className="inline-flex items-center gap-1.5 mt-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-blue-600 capitalize">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span className="inline-flex items-center gap-1.5 mt-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-blue-600">
                 {user?.role}
               </span>
             </div>

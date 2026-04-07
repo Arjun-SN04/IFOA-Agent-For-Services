@@ -17,6 +17,10 @@ export const register = (type, data) => API.post('/register', { type, ...data })
 
 // ── Individual ──────────────────────────────────────────────────────────────
 export const createIndividual         = (data)        => API.post('/individuals', data)
+export const createAdminIndividualForm = (data)       => API.post('/individuals/admin/create-form', data)
+export const importIndividualsFromExcel = (formData)  => API.post('/individuals/admin/import-excel', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+})
 export const getAllIndividuals         = ()            => API.get('/individuals')
 export const getIndividualById        = (id)          => API.get(`/individuals/${id}`)
 export const getIndividualByEmail     = (email)       => API.get('/individuals/by-email', { params: { email } })
@@ -28,6 +32,9 @@ export const exportIndividualsExcel   = ()            => `${BASE_URL}/individual
 
 // ── Airlines ────────────────────────────────────────────────────────────────
 export const createAirlinesSubscription     = (data)     => API.post('/airlines', data)
+export const importAirlinesFromExcel        = (formData) => API.post('/airlines/admin/import-excel', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+})
 export const getAllAirlinesSubscriptions     = ()         => API.get('/airlines')
 export const getAirlinesSubscriptionById    = (id)       => API.get(`/airlines/${id}`)
 export const getAirlinesSubscriptionByEmail = (email)    => API.get('/airlines/by-email', { params: { email } })
