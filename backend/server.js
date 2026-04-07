@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 
 dotenv.config();
 
@@ -23,6 +24,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// ── Serve backend assets (logo, etc.) publicly ──────────────────────────────────────────
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));

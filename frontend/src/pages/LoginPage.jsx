@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import logo from '../assets/IFOA_USA_blanc_V.png'
+import logo from '../assets/IFOA_USA_white.png'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -39,12 +39,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12" style={{ background: '#f0f4ff' }}>
-      {/* Background subtle pattern */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-10" style={{ background: '#1d4ed8' }} />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-10" style={{ background: '#1d4ed8' }} />
-      </div>
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-white">
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -53,13 +48,13 @@ export default function LoginPage() {
         className="relative w-full max-w-md"
       >
         {/* Card */}
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden" style={{ border: '1px solid #dbeafe' }}>
-          {/* Blue header strip with logo */}
-          <div className="px-8 py-8 text-center" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' }}>
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+          {/* Simple white header with logo */}
+          <div className="px-8 py-8 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-14 w-auto mx-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+              <img src={logo} alt="IFOA USA" className="h-14 w-auto mx-auto" />
             </Link>
-            <p className="text-blue-200 text-sm mt-3 font-medium">FAA U.S. Agent for Service Platform</p>
+            <p className="text-slate-500 text-sm mt-3 font-medium">FAA U.S. Agent for Service Platform</p>
           </div>
 
           {/* Form area */}
@@ -93,7 +88,7 @@ export default function LoginPage() {
                     background: '#f8fafc',
                     color: '#0f172a',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#1d4ed8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,78,216,0.1)' }}
+                  onFocus={e => { e.target.style.borderColor = '#0000ff'; e.target.style.boxShadow = '0 0 0 3px rgba(0,0,255,0.12)' }}
                   onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none' }}
                 />
               </div>
@@ -113,7 +108,7 @@ export default function LoginPage() {
                       background: '#f8fafc',
                       color: '#0f172a',
                     }}
-                    onFocus={e => { e.target.style.borderColor = '#1d4ed8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,78,216,0.1)' }}
+                    onFocus={e => { e.target.style.borderColor = '#0000ff'; e.target.style.boxShadow = '0 0 0 3px rgba(0,0,255,0.12)' }}
                     onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none' }}
                   />
                   <button
@@ -134,9 +129,9 @@ export default function LoginPage() {
                 type="submit"
                 disabled={loading}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-bold text-white transition-all duration-200 flex items-center justify-center gap-2 mt-2"
-                style={{ background: loading ? '#93c5fd' : '#1d4ed8' }}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#1e40af' }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#1d4ed8' }}
+                style={{ background: loading ? '#8080ff' : '#0000ff' }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#0000e6' }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#0000ff' }}
               >
                 {loading ? (
                   <>
@@ -153,9 +148,9 @@ export default function LoginPage() {
             <div className="mt-6 text-center space-y-3">
               <p className="text-sm" style={{ color: '#64748b' }}>
                 Don't have an account?{' '}
-                <Link to="/signup" className="font-semibold transition-colors" style={{ color: '#1d4ed8' }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#1e40af'}
-                  onMouseLeave={e => e.currentTarget.style.color = '#1d4ed8'}>
+                <Link to="/signup" className="font-semibold transition-colors" style={{ color: '#0000ff' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#0000e6'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#0000ff'}>
                   Create one
                 </Link>
               </p>

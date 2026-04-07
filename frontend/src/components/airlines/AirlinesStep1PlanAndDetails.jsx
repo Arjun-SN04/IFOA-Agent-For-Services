@@ -397,8 +397,8 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                     outline: none !important; box-shadow: none !important;
                   }
                   .airlines-phone .react-tel-input .form-control:focus {
-                    border-color: #2563eb !important;
-                    box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important;
+                    border-color: #1a1aff !important;
+                    box-shadow: 0 0 0 3px rgba(0,0,255,0.12) !important;
                   }
                   .airlines-phone .react-tel-input .flag-dropdown {
                     background: #f9fafb !important; border: 1px solid #e5e7eb !important;
@@ -409,7 +409,7 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                     background: transparent !important; border-radius: 0.75rem 0 0 0.75rem !important; padding-left: 10px !important;
                   }
                   .airlines-phone .react-tel-input .country-list {
-                    background: #ffffff !important; border: 1.5px solid #2563eb !important;
+                    background: #ffffff !important; border: 1.5px solid #1a1aff !important;
                     border-radius: 0.875rem !important; box-shadow: 0 32px 80px rgba(15,23,42,0.22) !important;
                     max-height: 420px !important; min-width: 360px !important; width: 360px !important;
                     margin-top: 4px !important; overflow-y: auto !important; z-index: 9999 !important;
@@ -432,7 +432,7 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                     padding: 8px 12px !important; width: 100% !important; font-size: 13px !important;
                     outline: none !important; box-sizing: border-box !important;
                   }
-                  .airlines-phone .react-tel-input .search-box:focus { border-color: #2563eb !important; background: #ffffff !important; }
+                  .airlines-phone .react-tel-input .search-box:focus { border-color: #1a1aff !important; background: #ffffff !important; }
                   .airlines-phone .react-tel-input .search-emoji { display: none !important; }
                 `}</style>
                 <div className="airlines-phone">

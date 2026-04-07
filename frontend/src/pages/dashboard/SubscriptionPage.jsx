@@ -55,17 +55,8 @@ function PayBadge({ status }) {
     Pending: 'bg-blue-50 border-blue-200 text-blue-700',
     Inactive: 'bg-slate-100 border-slate-200 text-slate-500'
   }
-  const dot = {
-    paid: 'bg-emerald-500',
-    pending: 'bg-blue-500',
-    failed: 'bg-red-500',
-    Active: 'bg-emerald-500',
-    Pending: 'bg-blue-500',
-    Inactive: 'bg-slate-400'
-  }
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || 'bg-slate-400'}`} />
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
       {status || 'Pending'}
     </span>
   )
@@ -464,7 +455,7 @@ export default function SubscriptionPage() {
                 </div>
                 <p className="text-slate-700 font-bold mb-1">No active subscription</p>
                 <p className="text-slate-400 text-sm mb-5">Register to activate your FAA compliance service.</p>
-                <Link to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
+                <Link to={user?.role === 'airline' ? '/register' : '/register'}
                   className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all">
                   Register Now
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -485,15 +476,8 @@ export default function SubscriptionPage() {
             {/* Add another plan CTA when user already has subscriptions */}
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                {subs.length} subscription{subs.length !== 1 ? 's' : ''} found
+              {subs.length} subscription{subs.length !== 1 ? 's' : ''} found
               </p>
-              <Link
-                to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
-                className="inline-flex items-center gap-2 border border-red-200 text-red-700 font-bold px-4 py-2 rounded-xl text-xs hover:bg-red-50 transition-all"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                Add Another Plan
-              </Link>
             </div>
 
             {subs.map((s, idx) => (

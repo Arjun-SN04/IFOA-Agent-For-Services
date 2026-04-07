@@ -41,12 +41,7 @@ function StatusBadge({ status }) {
     Inactive:'bg-slate-100 border-slate-200 text-slate-600',
   }
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${
-        (status === 'paid' || status === 'Active') ? 'bg-emerald-500' :
-        (status === 'pending' || status === 'Pending') ? 'bg-blue-500' :
-        status === 'failed' ? 'bg-red-500' : 'bg-slate-400'
-      }`} />
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
       {status}
     </span>
   )
@@ -127,7 +122,7 @@ function EditNameModal({ user, onClose, onSave }) {
             onClick={handleSave}
             disabled={saving}
             className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}
           >
             {saving && (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -325,17 +320,16 @@ export default function ProfilePage() {
           style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)' }}
         >
           <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20"
-            style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
+            style={{ background: 'radial-gradient(circle, #3333ff, transparent 70%)' }} />
           {/* Avatar circle */}
           <div className="w-16 h-16 rounded-2xl text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md relative z-10"
-            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', boxShadow: '0 4px 16px rgba(37,99,235,0.35)' }}>
+            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)', boxShadow: '0 4px 16px rgba(0,0,255,0.30)' }}>
             {initials}
           </div>
           <div className="relative z-10 flex-1 min-w-0">
             <h2 className="text-xl font-black text-slate-900">{fullName}</h2>
             <p className="text-slate-500 text-sm">{user?.email}</p>
-            <span className="inline-flex items-center gap-1.5 mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span className="inline-flex items-center mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
               {user?.role}
             </span>
           </div>
@@ -449,9 +443,9 @@ export default function ProfilePage() {
               <p className="text-slate-700 font-bold mb-1">No active subscription</p>
               <p className="text-slate-500 text-sm mb-4">Register to activate your FAA compliance service.</p>
               <Link
-                to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
+                to={user?.role === 'airline' ? '/register' : '/register'}
                 className="inline-flex items-center gap-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
-                style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}
               >
                 Register Now
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

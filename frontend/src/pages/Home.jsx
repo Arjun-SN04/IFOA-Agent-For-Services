@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import Footer from '../components/layout/footer'
 import classicStamp from '../assets/Classic-Stamp.png'
 import dgrCrewImg from '../assets/DGR-Crew.jpg'
-import faaHeroImg from '../assets/FAA_hero.png'
-import cockpitImg from '../assets/cokpit.png'
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const C = {
-  blue:      '#1d4ed8',
-  blueDark:  '#1e40af',
-  blueLight: '#3b82f6',
+  blue:      '#0000ff',
+  blueDark:  '#0000e6',
+  blueLight: '#3333ff',
   blueXLight:'#dbeafe',
   blueMuted: '#eff6ff',
   red:       '#dc2626',
@@ -117,7 +116,7 @@ function PlanCard({ plan, index }) {
       style={{
         background: C.white,
         border: plan.bestValue ? `2px solid ${C.blue}` : `1px solid ${C.gray200}`,
-        boxShadow: plan.bestValue ? '0 8px 40px rgba(29,78,216,0.10)' : '0 1px 6px rgba(15,23,42,0.06)',
+        boxShadow: plan.bestValue ? '0 8px 40px rgba(0,0,255,0.12)' : '0 1px 6px rgba(15,23,42,0.06)',
       }}
     >
       {plan.bestValue && (
@@ -246,128 +245,75 @@ function FAQSection() {
 }
 
 export default function Home() {
+  const { user } = useAuth()
+
   return (
     <div className="min-h-screen font-sans" style={{ background: C.white }}>
       <Navbar />
 
-      {/* ══════════════════════════════════════════════════════════════════
-          HERO — Gray background, clean editorial layout like reference image
-      ══════════════════════════════════════════════════════════════════ */}
-      <section data-hero className="relative overflow-hidden" style={{ minHeight: 620, background: C.gray50 }}>
-        <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 w-full py-16 lg:py-24 grid lg:grid-cols-2 gap-10 lg:gap-0 items-center">
+      {/* ── HERO ── */}
+      <section data-hero className="relative overflow-hidden" style={{ background: C.white, borderBottom: `1px solid ${C.gray200}` }}>
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: 'radial-gradient(circle at 20% 10%, rgba(59,130,246,0.09) 0%, rgba(59,130,246,0) 45%), radial-gradient(circle at 90% 0%, rgba(220,38,38,0.06) 0%, rgba(220,38,38,0) 40%)',
+        }} />
 
-          {/* Left: text */}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 sm:px-10 lg:px-16 py-24 lg:py-28 text-center">
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="relative z-10 pr-0 lg:pr-12"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="mx-auto"
           >
-            {/* Eyebrow */}
-            <p
-              className="text-xs font-bold uppercase tracking-[0.2em] mb-5"
-              style={{ color: '#b8973a' }}
-            >
-              FAA U.S. AGENT FOR SERVICE
-            </p>
-
-            {/* Main headline */}
-            <h1
-              className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[1.0] tracking-tight mb-6"
-              style={{ color: C.dark }}
-            >
-              YOUR U.S AGENT FOR <br />
-              SERVICE<br />
-            </h1>
-
-            {/* Subtext */}
-            <p className="text-base leading-relaxed mb-8 max-w-md" style={{ color: C.gray600 }}>
-              You focus on flying and flight planning — we handle compliance & documentation.
-            </p>
-
-            {/* Pricing + CTA row */}
-            <div className="flex flex-col sm:flex-row sm:items-end gap-6 mb-3">
-              {/* Price badge and button */}
-              <div className="relative inline-flex flex-col gap-3">
-                <span
-                  className="text-[11px] font-bold text-white px-3 py-0.5 rounded-full z-10 w-fit"
-                  style={{ background: C.blue }}
-                >
-                  only $69/Year
-                </span>
-                <Link
-                  to="/register"
-                  className="relative inline-flex items-center justify-center font-black px-7 py-4 rounded-xl text-sm text-white transition-all duration-200"
-                  style={{ background: C.blue, minWidth: 280 }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
-                  onMouseLeave={e => e.currentTarget.style.background = C.blue}
-                >
-                  Get Your U.S. Agent for Service – Sign Up Now
-                </Link>
-              </div>
-
-              {/* Login */}
-              <Link
-                to="/login"
-                className="inline-flex items-center justify-center font-bold px-7 py-4 rounded-xl text-sm transition-all duration-200"
-                style={{
-                  background: C.white,
-                  border: `2px solid ${C.gray300}`,
-                  color: C.dark,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = C.dark; e.currentTarget.style.color = C.white }}
-                onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.color = C.dark }}
-              >
-                Login
-              </Link>
+            <div className="inline-flex items-center rounded-full px-4 py-1.5 mb-7 text-xs font-bold uppercase tracking-widest"
+              style={{ background: C.blueMuted, border: `1px solid ${C.blueXLight}`, color: C.blue }}>
+              FAA U.S. Agent for Service
             </div>
 
-           
+            <h1 className="font-black leading-[1.05] tracking-tight mb-5"
+              style={{ fontSize: 'clamp(2.4rem, 5vw, 4rem)', color: C.dark }}>
+              Your U.S. Agent
+              <br />
+              for Service.
+            </h1>
 
-            {/* Trust badges */}
-            <div className="flex flex-wrap gap-2 mt-6">
-              {[
-                { icon: '✅', text: '100% FAA Compliant' },
-                { icon: '⚡', text: '24hr Activation' },
-                { icon: '🔒', text: 'Secure & Encrypted' },
-                { icon: '🇺🇸', text: 'Daytona Beach, FL' },
-              ].map(b => (
-                <div key={b.text} className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium"
-                  style={{ background: C.gray50, border: `1px solid ${C.gray200}`, color: C.gray600 }}>
-                 {b.text}
+            <p className="text-base leading-relaxed mb-9 max-w-2xl mx-auto" style={{ color: C.gray600 }}>
+              FAA compliance for international aviators with a dedicated U.S. address,
+              secure mail handling, and real-time updates. Simple, fast, and professional.
+            </p>
+
+            <div className="flex flex-wrap justify-center gap-3 mb-10">
+              <Link to="/register"
+                className="inline-flex items-center gap-2 font-bold px-6 py-3.5 rounded-xl text-sm text-white transition-all duration-200"
+                style={{ background: C.blue }}
+                onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+                onMouseLeave={e => e.currentTarget.style.background = C.blue}>
+                Get Started - $69/yr
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" /></svg>
+              </Link>
+              {!user && (
+                <Link to="/login"
+                  className="inline-flex items-center gap-2 font-semibold px-6 py-3.5 rounded-xl text-sm transition-all duration-200"
+                  style={{ border: `1px solid ${C.gray300}`, color: C.gray700, background: C.white }}
+                  onMouseEnter={e => { e.currentTarget.style.background = C.gray50; e.currentTarget.style.borderColor = C.gray400 }}
+                  onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.borderColor = C.gray300 }}>
+                  Sign In
+                </Link>
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+              {['100% FAA Compliant', '24h Activation', 'Daytona Beach, FL', 'Encrypted & Secure'].map(t => (
+                <div key={t} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.gray600 }}>
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C.blue }}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  {t}
                 </div>
               ))}
             </div>
           </motion.div>
-
-          {/* Right: Pilot image — professional cockpit/pilot image */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="relative flex items-center justify-center lg:justify-end h-full"
-            style={{ minHeight: 700, background: `linear-gradient(to left, transparent 0%, ${C.gray50} 100%)` }}
-          >
-            <img
-              src="https://cdn.prod.website-files.com/63b2c1af8b66abbf8b197d6e/678e03f5b040319ac8887390_144fe1744b8fc13cb120a0e235f1ee77_agent-hero-img.png"
-              alt="Professional Pilot"
-              className="w-full object-contain"
-              style={{
-                maxHeight: 750,
-                maxWidth: 550,
-                filter: 'drop-shadow(0 4px 16px rgba(29,78,216,0.12))',
-              }}
-            />
-          </motion.div>
         </div>
-
-        {/* Subtle bottom border / separator */}
-        <div className="absolute bottom-0 left-0 right-0 h-px" style={{ background: C.gray100 }} />
       </section>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          COMPLIANCE ALERT
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── COMPLIANCE ALERT ── */}
       <section className="py-6 px-6" style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -390,15 +336,11 @@ export default function Home() {
         </div>
       </section>
 
-
-
-        {/* ── WHO WE ARE ── */}
+      {/* ── WHO WE ARE ── */}
       <section className="py-20 px-6 bg-white">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <p className="ext-xs font-bold uppercase tracking-widest mb-3" 
-            style={{ color: C.blue }}
-            >About Our Service</p>
+            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>About Our Service</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-snug mb-6">
               Effortless FAA Compliance<br />for Pilots &amp; Dispatchers Worldwide
             </h2>
@@ -409,12 +351,18 @@ export default function Home() {
               Our <strong className="text-gray-900">Daytona Beach</strong> team ensures your FAA correspondence and regulatory notices are handled promptly and professionally.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link to="/register"
-                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200 shadow-sm">
-                 Register
+              <Link to="/individual/register"
+                className="inline-flex items-center gap-2 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200 shadow-sm"
+                style={{ background: '#000021' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#000000'}
+                onMouseLeave={e => e.currentTarget.style.background = '#000021'}>
+                Register as Individual
               </Link>
-              <Link to="/register"
-                className="inline-flex items-center gap-2  bg-red-600 hover:bg-red-700 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200">
+              <Link to="/airlines/register"
+                className="inline-flex items-center gap-2 text-white font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                style={{ background: '#000021' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#000000'}
+                onMouseLeave={e => e.currentTarget.style.background = '#000021'}>
                 ✈ Airlines Register
               </Link>
             </div>
@@ -438,18 +386,13 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          HOW IT WORKS — 4 steps
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-14 text-center">
             <h2 className="text-3xl sm:text-4xl font-black mb-2" style={{ color: C.dark }}>HOW TO APPOINT YOUR FAA AGENT FOR SERVICE</h2>
             <p className="text-sm" style={{ color: C.gray400 }}>Fast, digital, reliable &amp; safe</p>
           </motion.div>
-
-       
-
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {HOW_STEPS.map((s, i) => (
               <motion.div key={s.num} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
@@ -465,10 +408,7 @@ export default function Home() {
         </div>
       </section>
 
-
-   {/* ══════════════════════════════════════════════════════════════════
-          STAMP / ABOUT
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── STAMP / ABOUT ── */}
       <section className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-16">
           <div className="flex-shrink-0 w-full md:w-[420px]">
@@ -490,12 +430,7 @@ export default function Home() {
         </div>
       </section>
 
-
-
-
-      {/* ══════════════════════════════════════════════════════════════════
-          WHO NEEDS IT
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── WHO NEEDS IT ── */}
       <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="grid lg:grid-cols-2 gap-14 items-center">
@@ -520,17 +455,17 @@ export default function Home() {
                 ))}
               </ul>
               <div className="flex flex-wrap gap-3">
-                <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                <Link to="/airlines/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
                   style={{ background: C.blue }}
                   onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
                   onMouseLeave={e => e.currentTarget.style.background = C.blue}>
                   Register as Airline
                 </Link>
-                <Link to="/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
+                <Link to="/individual/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
                   style={{ color: C.dark, border: `1px solid ${C.gray200}` }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = C.gray400; e.currentTarget.style.background = C.gray50 }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.background = '' }}>
-                  Airlines Plan
+                  Individual Plan
                 </Link>
               </div>
             </div>
@@ -557,9 +492,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          SUBSCRIPTION PLANS
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── SUBSCRIPTION PLANS ── */}
       <section id="pricing" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-12 text-center">
@@ -573,11 +506,7 @@ export default function Home() {
         </div>
       </section>
 
-   
-
-      {/* ══════════════════════════════════════════════════════════════════
-          PRICING HIGHLIGHT + VIDEO
-      ══════════════════════════════════════════════════════════════════ */}
+      {/* ── PRICING HIGHLIGHT + VIDEO ── */}
       <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-14 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>

@@ -104,7 +104,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                     key={value}
                     className={`cursor-pointer rounded-3xl border p-5 transition-all ${
                       selected
-                        ? 'border-blue-600 bg-white shadow-[0_16px_45px_-30px_rgba(37,99,235,0.55)]'
+                        ? 'border-blue-600 bg-white shadow-[0_16px_45px_-30px_rgba(0,0,255,0.55)]'
                         : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40'
                     }`}
                   >

@@ -81,7 +81,7 @@ function EditNameModal({ user, onClose, onSave }) {
             onClick={handleSave}
             disabled={saving}
             className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}
           >
             {saving && (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -144,10 +144,10 @@ export default function AdminProfilePage() {
           style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)' }}
         >
           <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20"
-            style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }} />
+            style={{ background: 'radial-gradient(circle, #3333ff, transparent 70%)' }} />
           <div
             className="w-16 h-16 rounded-2xl text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md relative z-10"
-            style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%)', boxShadow: '0 4px 16px rgba(30,64,175,0.35)' }}
+            style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #0000e6 100%)', boxShadow: '0 4px 16px rgba(0,0,230,0.30)' }}
           >
             {initials}
           </div>

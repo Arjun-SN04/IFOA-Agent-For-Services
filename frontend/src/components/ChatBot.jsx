@@ -281,11 +281,7 @@ function ChatView({ messages, setMessages, loading, setLoading, initialQuestion 
               <img src={ifoaLogo} alt="" className="h-4 w-auto object-contain" />
             </div>
             <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3.5 shadow-sm">
-              <div className="flex gap-1.5 items-center">
-                {[0, 150, 300].map(delay => (
-                  <span key={delay} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-                ))}
-              </div>
+              <p className="text-xs font-semibold text-gray-500">Typing...</p>
             </div>
           </motion.div>
         )}

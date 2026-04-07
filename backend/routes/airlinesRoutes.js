@@ -12,6 +12,7 @@ const {
   markAirlinesPaid,
   getSignUpAirlines,
   adminCreateAirlineForm,
+  markAirlinesInvoiceGenerated,
 } = require('../controller/airlinesController');
 
 // Public
@@ -27,6 +28,9 @@ router.get('/by-email', getAirlinesSubscriptionByEmail);
 
 // Mark as paid immediately after Stripe payment completes on the frontend
 router.patch('/:id/mark-paid', markAirlinesPaid);
+
+// Mark invoice as generated (admin only)
+router.patch('/:id/mark-invoice-generated', markAirlinesInvoiceGenerated);
 
 // Admin CRUD
 router.get('/', getAllAirlinesSubscriptions);

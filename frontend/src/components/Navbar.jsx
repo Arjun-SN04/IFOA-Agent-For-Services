@@ -93,7 +93,7 @@ export default function Navbar() {
                 >
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black"
-                    style={{ background: '#1d4ed8' }}
+                    style={{ background: '#0000ff' }}
                   >
                     {initials}
                   </div>
@@ -164,9 +164,9 @@ export default function Navbar() {
                 <Link
                   to="/signup"
                   className="rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all duration-200"
-                  style={{ background: '#1d4ed8' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#1e40af' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#1d4ed8' }}
+                  style={{ background: '#0000ff' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#0000e6' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#0000ff' }}
                 >
                   Sign Up
                 </Link>
@@ -229,7 +229,7 @@ export default function Navbar() {
                 </Link>
                 <Link to="/signup" onClick={() => setMenuOpen(false)}
                   className="rounded-xl px-4 py-3 text-center text-sm font-bold text-white transition-all"
-                  style={{ background: '#1d4ed8' }}>
+                  style={{ background: '#0000ff' }}>
                   Sign Up
                 </Link>
               </>

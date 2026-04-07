@@ -111,11 +111,11 @@ export default function UserDashboard() {
             </div>
             {!subLoading && !sub && (
               <Link
-                to={user?.role === 'airline' ? '/airlines/register' : '/individual/register'}
+                to={user?.role === 'airline' ? '/register' : '/register'}
                 className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all"
-                style={{ background: '#1d4ed8' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1e40af'}
-                onMouseLeave={e => e.currentTarget.style.background = '#1d4ed8'}
+                style={{ background: '#0000ff' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
+                onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}
               >
                 {user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

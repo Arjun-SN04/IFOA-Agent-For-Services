@@ -295,6 +295,7 @@ export function serverPaymentToInvoice(payment) {
     phone:            snap.phone   || '—',
     address:          snap.address || '—',
     isAirline:        snap.isAirline || false,
+    airlineName:      snap.airlineName || null,
     pricePerCert:     snap.pricePerCert  || null,
     holderCount:      snap.holderCount   || null,
     primaryCertificate:   snap.primaryCertificate   || null,

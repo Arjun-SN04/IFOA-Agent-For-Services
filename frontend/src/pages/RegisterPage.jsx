@@ -21,13 +21,12 @@ import { register } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
 import logo from '../assets/IFOA_USA_white.png'
-import dgrCrewImg from '../assets/DGR-Crew.jpg'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const B   = '#1d4ed8'
-const BD  = '#1e40af'
-const BL  = '#3b82f6'
+const B   = '#0000ff'
+const BD  = '#0000e6'
+const BL  = '#3333ff'
 const BXL = '#dbeafe'
 const BM  = '#eff6ff'
 const R   = '#dc2626'
@@ -77,58 +76,33 @@ const AIRLINES_INIT = {
   paymentEmail: '', paymentStatus: 'pending', agreedToTerms: false,
 }
 
-// ── Sidebar testimonials & trust content ─────────────────────────────────────
-const TESTIMONIALS = [
-  {
-    quote: 'IFOA USA made compliance with the Agent for Service requirement effortless. Fast, reliable & professional.',
-    name: 'Bogdan Skutkiewicz',
-    role: 'CEO & Jet Pilot',
-    img: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=80&h=80&fit=crop&crop=face',
-    stars: 5,
-  },
-  {
-    quote: 'With IFOA USA handling my FAA correspondence, I have complete peace of mind. Highly recommended!',
-    name: 'Lukas Wickart',
-    role: 'CFO & Commercial Pilot',
-    img: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face',
-    stars: 5,
-  },
-  {
-    quote: 'The 24-hour activation and document scanning make this the best compliance solution for international pilots.',
-    name: 'Sarah Mitchell',
-    role: 'ATP & Flight Instructor',
-    img: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop&crop=face',
-    stars: 5,
-  },
+const SERVICE_CONTACT = [
+  { label: 'Company', value: 'IFOA USA Corp' },
+  { label: 'Address', value: '1616 Concierge Blvd Suite 100, Daytona Beach, FL 32117, USA' },
+  { label: 'Email', value: 'agent@theifoa.com', href: 'mailto:agent@theifoa.com' },
+  { label: 'Phone', value: '+1 508 838 5880', href: 'tel:+15088385880' },
 ]
 
-const TRUST_ITEMS = [
-  { icon: '✅', label: '100% Compliance Guarantee', sub: '— or your money back' },
-  { icon: '✅', label: 'Risk-Free Registration', sub: '— cancel anytime within 30 days' },
-  { icon: '✅', label: 'Fully Compliant', sub: 'with FAA Regulations' },
-]
-
-const MEMBER_LOGOS = [
-  { name: 'NBAA', abbr: 'NBAA' },
-  { name: 'EBAA', abbr: 'EBAA' },
-  { name: 'ACAMS', abbr: 'ACAMS' },
-]
-
-// ── Stars ─────────────────────────────────────────────────────────────────────
-function Stars({ count = 5 }) {
+function PortalCards({ regType }) {
   return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: count }).map((_, i) => (
-        <svg key={i} className="w-4 h-4" viewBox="0 0 20 20" fill="#f59e0b">
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      ))}
+    <div className="grid sm:grid-cols-2 gap-3">
+      <div className="p-2">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">FAA IACRA</p>
+        <p className="text-xs text-slate-300 leading-relaxed mb-2">Retrieve your FTN as a <strong>NEW</strong> or <strong>EXISTING</strong> certificate holder.</p>
+        <a href="https://iacra.faa.gov/IACRA/Default.aspx" target="_blank" rel="noreferrer" className="text-sm font-bold text-slate-200 hover:underline">Access FAA IACRA Portal →</a>
+      </div>
+      <div className="p-2">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">FAA USAS</p>
+        <p className="text-xs text-slate-300 leading-relaxed mb-2">Register IFOA as your official U.S. Agent for Service on FAA USAS.{regType === 'airline' ? ' Repeat for each holder.' : ''}</p>
+        <a href="https://usas.faa.gov/signin" target="_blank" rel="noreferrer" className="text-sm font-bold text-slate-200 hover:underline">Access FAA USAS Portal →</a>
+      </div>
     </div>
   )
 }
 
 // ── Right Sidebar (Fixed) ─────────────────────────────────────────────────────
-function RightSidebar() {
+function RightSidebar({ regType }) {
+  const isIndividual = regType === 'individual'
   return (
     <div
       className="hidden lg:flex flex-col"
@@ -136,103 +110,68 @@ function RightSidebar() {
         position: 'sticky',
         top: 0,
         height: '100vh',
-        overflowY: 'auto',
-        background: 'linear-gradient(160deg, #0f172a 0%, #1e3a5f 55%, #1d4ed8 100%)',
-        padding: '2.5rem 2rem',
-        minWidth: 380,
-        maxWidth: 440,
+        overflowY: 'hidden',
+        background: 'linear-gradient(170deg, #020617 0%, #0f172a 60%, #111827 100%)',
+        minWidth: 360,
+        maxWidth: 420,
         scrollbarWidth: 'none',
       }}
     >
-      <style>{`.sidebar-scroll::-webkit-scrollbar{display:none}`}</style>
-
-      {/* Top tagline */}
-      <div className="mb-8">
-        <p className="text-2xl font-black text-white leading-snug">
-          Trusted by thousands of aviation professionals worldwide.
+      <div className="flex-1 p-3">
+      <div className="pb-3 mb-3 border-b border-white/10">
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-300 mb-2">Guided Help</p>
+        <h3 className="text-lg font-black text-white leading-tight">{isIndividual ? 'Individual Registration Support' : 'Airline Registration Support'}</h3>
+        <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+          {isIndividual ? 'Follow these steps and complete the form quickly.' : 'Use this checklist to onboard your team smoothly.'}
         </p>
       </div>
 
-      {/* Testimonials */}
-      <div className="flex flex-col gap-6 mb-8">
-        {TESTIMONIALS.map((t) => (
-          <div
-            key={t.name}
-            className="rounded-2xl p-5"
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            <p className="text-sm italic leading-relaxed text-blue-100 mb-4">
-              "{t.quote}"
-            </p>
-            <div className="flex items-center gap-3">
-              <img
-                src={t.img}
-                alt={t.name}
-                className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-                style={{ border: '2px solid rgba(255,255,255,0.25)' }}
-                onError={e => { e.target.style.display = 'none' }}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-white truncate">{t.name}</p>
-                <p className="text-xs text-blue-300 truncate">{t.role}</p>
-              </div>
-              <Stars count={t.stars} />
-            </div>
+      {isIndividual && (
+        <div className="pb-3 mb-3 border-b border-white/10">
+          <p className="text-sm font-black text-white mb-2">Video Guide (Live)</p>
+          <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black/30">
+            <iframe
+              className="w-full h-full"
+              src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1"
+              title="IFOA Registration Walkthrough"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
           </div>
-        ))}
+        </div>
+      )}
+
+      <div className="pb-3 mb-3 border-b border-white/10">
+        <p className="text-sm font-black text-white mb-2.5">FAA Portals</p>
+        <PortalCards regType={regType} />
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-white/10 mb-6" />
-
-      {/* Trust items */}
-      <div className="flex flex-col gap-3 mb-8">
-        {TRUST_ITEMS.map((item) => (
-          <div key={item.label} className="flex items-start gap-3">
-            <span className="text-green-400 text-base mt-0.5 flex-shrink-0">{item.icon}</span>
-            <p className="text-sm text-blue-100 leading-snug">
-              <span className="font-black text-white">{item.label}</span>
-              {item.sub}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div className="border-t border-white/10 mb-6" />
-
-      {/* Member of */}
+      {!isIndividual && (
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">Member of</p>
-        <div className="flex flex-wrap gap-3">
-          {MEMBER_LOGOS.map((m) => (
-            <div
-              key={m.name}
-              className="px-4 py-2 rounded-xl text-xs font-black text-white"
-              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.15)' }}
-            >
-              {m.abbr}
+        <p className="text-sm font-black text-white mb-2.5">Agent Details</p>
+        <div className="divide-y divide-white/10 rounded-2xl border border-white/10">
+          {SERVICE_CONTACT.map((row) => (
+            <div key={row.label} className="grid grid-cols-[100px_1fr] gap-3 px-3 py-2.5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{row.label}</p>
+              {row.href ? (
+                <a href={row.href} className="text-sm font-semibold text-slate-200 hover:underline">{row.value}</a>
+              ) : (
+                <p className="text-sm font-medium text-slate-200">{row.value}</p>
+              )}
             </div>
           ))}
         </div>
-      </div>
 
-      {/* Bottom stats */}
-      <div className="mt-auto pt-8 grid grid-cols-3 gap-3">
-        {[
-          { val: '5,000+', label: 'Pilots Served' },
-          { val: '14 CFR', label: 'Part 3 Compliant' },
-          { val: '24hr', label: 'Activation' },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl p-3 text-center"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
-          >
-            <p className="text-base font-black text-white">{s.val}</p>
-            <p className="text-[10px] text-blue-300 mt-0.5 leading-tight">{s.label}</p>
-          </div>
-        ))}
+        <div className="mt-3 p-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Quick Tip</p>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            {isIndividual
+              ? 'Keep your FTN and certificate details ready before moving from Step 1 to Step 2 to finish faster.'
+              : 'Prepare holder details in advance (name, DOB, FAA certificate, FTN) to complete team registration in one pass.'}
+          </p>
+        </div>
+      </div>
+      )}
       </div>
     </div>
   )
@@ -311,7 +250,6 @@ function WrongRoleBanner({ type }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RegisterPage() {
   const { user, linkRegistration, addSubscription } = useAuth()
-  const location = useLocation()
 
   const [regType, setRegType] = useState('individual')
 
@@ -460,7 +398,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Form content */}
-          <div ref={formRef} className="flex-1 px-6 sm:px-10 lg:px-14 py-10 max-w-2xl mx-auto w-full">
+          <div ref={formRef} className="flex-1 px-6 sm:px-10 lg:px-14 py-10 max-w-4xl mx-auto w-full">
 
             {/* Page heading */}
             <div className="mb-8">
@@ -583,7 +521,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Form body */}
-              <div className="px-6 py-6">
+              <div className="px-8 py-8">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={`${regType}-${step}`}
@@ -639,7 +577,7 @@ export default function RegisterPage() {
         </div>
 
         {/* ── RIGHT: Fixed sidebar (desktop only) ──────────────────────────── */}
-        <RightSidebar />
+        <RightSidebar regType={regType} />
       </div>
     </>
   )

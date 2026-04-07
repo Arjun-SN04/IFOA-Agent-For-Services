@@ -9,6 +9,7 @@ const {
   deleteIndividual,
   exportToExcel,
   markIndividualPaid,
+  markInvoiceGenerated,
 } = require('../controller/individualController');
 
 // Public
@@ -22,6 +23,9 @@ router.get('/by-email', getIndividualByEmail);
 
 // Mark as paid immediately after Stripe payment completes on the frontend
 router.patch('/:id/mark-paid', markIndividualPaid);
+
+// Mark invoice as generated (admin only)
+router.patch('/:id/mark-invoice-generated', markInvoiceGenerated);
 
 // Admin CRUD
 router.get('/', getAllIndividuals);

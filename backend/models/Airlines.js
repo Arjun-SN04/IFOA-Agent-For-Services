@@ -85,7 +85,11 @@ const AirlinesSchema = new mongoose.Schema({
   paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }, // link to Payment doc
   invoiceStatus: { type: String },
   invoiceNumber: { type: String },
+  invoiceDraft:  { type: mongoose.Schema.Types.Mixed, default: null },
   stripePaymentIntentId: { type: String, default: '' },
+
+  // Invoice generation tracking — set to true by admin after first PDF download
+  invoiceGenerated: { type: Boolean, default: false, index: true },
 
   agreedToTerms: { type: Boolean, required: true },
   submittedAt:   { type: Date, default: Date.now },

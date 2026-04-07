@@ -23,6 +23,7 @@ export const getIndividualByEmail     = (email)       => API.get('/individuals/b
 export const updateIndividual         = (id, data)    => API.put(`/individuals/${id}`, data)
 export const deleteIndividual         = (id)          => API.delete(`/individuals/${id}`)
 export const markIndividualPaid       = (id)          => API.patch(`/individuals/${id}/mark-paid`)
+export const markIndividualInvoiceGenerated = (id)    => API.patch(`/individuals/${id}/mark-invoice-generated`)
 export const exportIndividualsExcel   = ()            => `${BASE_URL}/individuals/export/excel`
 
 // ── Airlines ────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export const getAirlinesSubscriptionByEmail = (email)    => API.get('/airlines/b
 export const updateAirlinesSubscription     = (id, data) => API.put(`/airlines/${id}`, data)
 export const deleteAirlinesSubscription     = (id)       => API.delete(`/airlines/${id}`)
 export const markAirlinesPaid               = (id)       => API.patch(`/airlines/${id}/mark-paid`)
+export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
 export const exportAirlinesExcel            = ()         => `${BASE_URL}/airlines/export/excel`
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────

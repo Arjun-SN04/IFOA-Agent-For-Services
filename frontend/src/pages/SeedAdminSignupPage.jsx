@@ -57,38 +57,31 @@ export default function SeedAdminSignupPage() {
   return (
     <div className="h-screen bg-white flex overflow-hidden">
       {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden flex-col justify-between p-12">
-        <img
-          src="https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=1400&q=85&auto=format&fit=crop"
-          alt="Aviation"
-          className="absolute inset-0 w-full h-full object-cover object-center"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
+      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden flex-col justify-between p-12 bg-white border-r border-slate-100">
 
         <div className="relative z-10">
           <Link to="/">
-            <img src={logo} alt="IFOA USA" className="h-10 w-auto brightness-0 invert" />
+            <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
           </Link>
         </div>
 
         <div className="relative z-10">
-          <div className="inline-flex items-center rounded-lg border border-gray-500 px-4 py-1.5 mb-6">
-            <span className="text-white text-xs font-semibold tracking-wide">
+          <div className="inline-flex items-center rounded-lg border border-slate-200 px-4 py-1.5 mb-6 bg-slate-50">
+            <span className="text-slate-700 text-xs font-semibold tracking-wide">
               Administrator Access
             </span>
           </div>
-          <h1 className="text-4xl font-black text-white leading-tight mb-4">
+          <h1 className="text-4xl font-black text-slate-900 leading-tight mb-4">
             Create Admin<br />
-            <span className="text-red-400">Account</span>
+            <span className="text-red-600">Account</span>
           </h1>
-          <p className="text-white/70 leading-relaxed text-sm max-w-sm">
+          <p className="text-slate-600 leading-relaxed text-sm max-w-sm">
             Register a new administrator account. This page is only accessible by typing the URL directly — it is not linked anywhere on the site.
           </p>
         </div>
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <p className="text-white/60 text-sm">Restricted — Admin only</p>
+          <p className="text-slate-500 text-sm">Restricted - Admin only</p>
         </div>
       </div>
 

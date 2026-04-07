@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import {
@@ -22,6 +23,11 @@ const fmtMoney = (v) =>
     ? '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '—'
 
+const hasExistingInvoice = (record) => {
+  const paid = record?.isPaid === true || record?.paymentStatus === 'paid'
+  return Boolean(record?.invoiceGenerated || paid)
+}
+
 const inputCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
 
@@ -29,36 +35,30 @@ const selectCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
 
 function Badge({ value, type = 'payment', isPaid }) {
-  let cls = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
-  let dot = 'w-1.5 h-1.5 rounded-full flex-shrink-0 '
+  let cls = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
   let label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'
 
   if (type === 'status') {
     const trulyActive = value === 'Active' && isPaid !== false
-    if (trulyActive)              { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
-    else if (value === 'Pending') { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400' }
-    else                          { cls += 'bg-slate-100 border-slate-200 text-slate-500'; dot += 'bg-slate-400' }
+    if (trulyActive)              { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700' }
+    else if (value === 'Pending') { cls += 'bg-amber-50 border-amber-200 text-amber-700' }
+    else                          { cls += 'bg-slate-100 border-slate-200 text-slate-500' }
     if (value === 'Active' && isPaid === false) label = 'Pending'
   } else if (type === 'plan') {
-    if (value?.includes('Unlimited'))     { cls += 'bg-indigo-50 border-indigo-200 text-indigo-700'; dot += 'bg-indigo-500' }
-    else if (value?.includes('Multiple')) { cls += 'bg-slate-100 border-slate-200 text-slate-700'; dot += 'bg-slate-500' }
-    else                                  { cls += 'bg-slate-50 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
+    if (value?.includes('Unlimited'))     { cls += 'bg-indigo-50 border-indigo-200 text-indigo-700' }
+    else if (value?.includes('Multiple')) { cls += 'bg-slate-100 border-slate-200 text-slate-700' }
+    else                                  { cls += 'bg-slate-50 border-slate-200 text-slate-600' }
   } else if (type === 'isPaid') {
-    if (isPaid === true) { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500'; label = 'Paid' }
-    else                 { cls += 'bg-amber-50 border-amber-200 text-amber-700'; dot += 'bg-amber-400'; label = 'Unpaid' }
+    if (isPaid === true) { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; label = 'Paid' }
+    else                 { cls += 'bg-amber-50 border-amber-200 text-amber-700'; label = 'Unpaid' }
   } else {
     const confirmedPaid = value === 'paid' && isPaid !== false
-    if (confirmedPaid)           { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700'; dot += 'bg-emerald-500' }
-    else if (value === 'failed') { cls += 'bg-red-50 border-red-200 text-red-600'; dot += 'bg-red-500' }
-    else                         { cls += 'bg-slate-100 border-slate-200 text-slate-600'; dot += 'bg-slate-400' }
+    if (confirmedPaid)           { cls += 'bg-emerald-50 border-emerald-200 text-emerald-700' }
+    else if (value === 'failed') { cls += 'bg-red-50 border-red-200 text-red-600' }
+    else                         { cls += 'bg-slate-100 border-slate-200 text-slate-600' }
     if (value === 'paid' && isPaid === false) label = 'Pending'
   }
-  return (
-    <span className={cls}>
-      <span className={dot} />
-      {label}
-    </span>
-  )
+  return <span className={cls}>{label}</span>
 }
 
 function Field({ label, children }) {
@@ -90,7 +90,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -184,7 +184,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -290,7 +290,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8"
@@ -403,7 +403,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8"
@@ -519,8 +519,662 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
   )
 }
 
+// ─── IFOA PDF Invoice Generator ────────────────────────────────────────────────
+function hex(h) {
+  const n = parseInt(h.replace('#', ''), 16)
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
+
+const BACKEND_LOGO_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api')
+  .replace('/api', '') + '/assets/IFOA_USA_white.png'
+
+// Returns { url, filename } — caller decides whether to preview or download
+async function generateIFOAInvoicePDF(inv) {
+  const RED    = hex('#c0392b')
+  const DARK   = hex('#0f172a')
+  const MID    = hex('#475569')
+  const MUTED  = hex('#94a3b8')
+  const LGRAY  = hex('#f1f5f9')
+  const BORDER = hex('#cbd5e1')
+  const WHITE  = rgb(1, 1, 1)
+
+  const pdfDoc = await PDFDocument.create()
+  const page   = pdfDoc.addPage([595.28, 841.89])
+  const { width, height } = page.getSize()
+  const fontReg  = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+  const ML = 50, MR = 50
+  const W  = width - ML - MR
+  let Y    = height - 40
+
+  const txt = (str, x, y, { size = 9, font = fontReg, color = DARK, maxWidth } = {}) => {
+    const opts = { x, y, size, font, color }
+    if (maxWidth) opts.maxWidth = maxWidth
+    page.drawText(String(str ?? '—'), opts)
+  }
+  const txtR = (str, rx, y, { size = 9, font = fontReg, color = DARK } = {}) => {
+    const w = font.widthOfTextAtSize(String(str ?? ''), size)
+    page.drawText(String(str ?? ''), { x: rx - w, y, size, font, color })
+  }
+  const line = (x1, y1, x2, y2, color = BORDER, thickness = 0.5) =>
+    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color })
+  const rect = (x, y, w, h, color) =>
+    page.drawRectangle({ x, y, width: w, height: h, color })
+
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.') : '—'
+  const fmtM = (n) => n != null ? Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+
+  const LOGO_H       = 52
+  const LOGO_AREA_W  = 130
+  const BAND_H       = LOGO_H + 20
+  const BAND_W       = LOGO_AREA_W + 28
+  const BAND_X       = width - MR - BAND_W
+  const BAND_Y       = height - BAND_H - 8
+
+  let logoImage = null
+  let logoDims  = { width: 0, height: 0 }
+  try {
+    const resp = await fetch(BACKEND_LOGO_URL, { cache: 'no-store' })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const arrBuf = await resp.arrayBuffer()
+    logoImage    = await pdfDoc.embedPng(arrBuf)
+    const raw    = logoImage.scale(1)
+    const scale  = Math.min(LOGO_H / raw.height, LOGO_AREA_W / raw.width)
+    logoDims     = { width: raw.width * scale, height: raw.height * scale }
+  } catch (_) {}
+
+  if (logoImage) {
+    const logoX = BAND_X + (BAND_W - logoDims.width) / 2
+    const logoY = BAND_Y + (BAND_H - logoDims.height) / 2
+    page.drawImage(logoImage, { x: logoX, y: logoY, width: logoDims.width, height: logoDims.height })
+  } else {
+    txt('IFOA', BAND_X + 18, BAND_Y + BAND_H - 28, { size: 22, font: fontBold, color: DARK })
+    txt('* USA *', BAND_X + 18, BAND_Y + BAND_H - 44, { size: 10, font: fontBold, color: RED })
+  }
+
+  Y -= 60
+  txt('IFOA USA Corporation, 1616 Concierge Blvd, Suite 100 (1st Floor), Daytona Beach, FL 32117, USA', ML, Y, { size: 7.5, color: MID, maxWidth: W })
+  Y -= 8
+  line(ML, Y, ML + W, Y, BORDER, 0.5)
+  Y -= 20
+
+  txt(inv.recipientCompany || inv.recipientName, ML, Y, { size: 10, font: fontBold })
+  Y -= 14
+  txt(inv.recipientContact || '', ML, Y, { size: 9, color: MID })
+  Y -= 12
+  txt(inv.recipientAddress1 || '', ML, Y, { size: 9, color: MID })
+  Y -= 12
+  txt(inv.recipientAddress2 || '', ML, Y, { size: 9, color: MID })
+  Y -= 12
+  txt(inv.recipientCountry || '', ML, Y, { size: 9, color: MID })
+  Y -= 26
+
+  txt('Invoice ' + inv.invoiceNumber, ML, Y, { size: 12, font: fontBold })
+  Y -= 8
+  line(ML, Y, ML + W, Y, RED, 1.5)
+  Y -= 14
+
+  txt('US Agent for Service', ML, Y, { size: 10, font: fontBold })
+  Y -= 7
+  line(ML, Y, ML + W, Y, BORDER, 0.4)
+  Y -= 14
+
+  txt('date:', ML, Y, { size: 8, color: MID })
+  txt(fmtD(inv.issueDate), ML + 60, Y, { size: 8 })
+  txt('payable by:', ML + 220, Y, { size: 8, color: MID })
+  txt(fmtD(inv.payableBy), ML + 300, Y, { size: 8 })
+  Y -= 6
+  line(ML, Y, ML + W, Y, BORDER, 0.4)
+  Y -= 26
+
+  txt('Dear ' + (inv.recipientContact || inv.recipientName) + ',', ML, Y, { size: 9 })
+  Y -= 16
+  txt('Thank you for your Business. Your invoice is as follows:', ML, Y, { size: 9 })
+  Y -= 28
+
+  const C = { pos: ML, desc: ML + 28, qty: ML + W - 170, unit: ML + W - 100, total: ML + W }
+  const TH_Y = Y
+  const TH_H = 16
+  rect(ML, TH_Y - TH_H + 4, W, TH_H, LGRAY)
+  txt('Pos.',          C.pos,  TH_Y - 8, { size: 8, font: fontBold })
+  txt('Description',  C.desc, TH_Y - 8, { size: 8, font: fontBold })
+  txt('Quantity',     C.qty,  TH_Y - 8, { size: 8, font: fontBold })
+  txt('Unit Price',   C.unit, TH_Y - 8, { size: 8, font: fontBold })
+  txtR('Total Price USD', C.total, TH_Y - 8, { size: 8, font: fontBold })
+  Y = TH_Y - TH_H - 2
+  line(ML, Y, ML + W, Y, BORDER, 0.4)
+  Y -= 12
+
+  const items = inv.lineItems || []
+  items.forEach((item, i) => {
+    const rowY = Y
+    txt(String(i + 1), C.pos, rowY, { size: 9 })
+    txt(item.description, C.desc, rowY, { size: 9, maxWidth: C.qty - C.desc - 10 })
+    txt(String(item.quantity), C.qty, rowY, { size: 9 })
+    txtR(fmtM(item.unitPrice), C.unit + 50, rowY, { size: 9 })
+    txtR(fmtM(item.totalPrice), C.total, rowY, { size: 9 })
+    Y -= 18
+  })
+
+  Y -= 8
+  line(ML, Y, ML + W, Y, RED, 1.5)
+  Y -= 14
+
+  const totalAmt = items.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0)
+  txt('Invoice Sum Tax-Exempt', C.desc, Y, { size: 9, font: fontBold })
+  txtR(fmtM(totalAmt), C.total, Y, { size: 9, font: fontBold })
+  Y -= 8
+  line(ML, Y, ML + W, Y, RED, 1.5)
+  Y -= 30
+
+  const notes = [
+    '1. Payment is due within 30 days',
+    '2. Please note the invoice number in your payment method',
+    '3. Please make a payment into our Bank Account, as mentioned in the Footer.',
+  ]
+  notes.forEach(note => { txt(note, ML, Y, { size: 8.5, color: DARK }); Y -= 14 })
+  Y -= 14
+
+  txt('Do you have any questions? Get in touch with us.', ML, Y, { size: 9 })
+  Y -= 22
+  txt('Kind regards', ML, Y, { size: 9 })
+  Y -= 13
+  txt('Your Agent for Service Team', ML, Y, { size: 9 })
+
+  const FY = 48
+  line(ML, FY + 18, ML + W, FY + 18, BORDER, 0.5)
+  const footerText = 'Bank:  Bank of America     Account owner:  IFOA USA Corp     SWIFT:  BOFAUS3N     Account:  8981 5632 1560'
+  const ftw = fontReg.widthOfTextAtSize(footerText, 7.5)
+  page.drawText(footerText, { x: (width - ftw) / 2, y: FY + 8, size: 7.5, font: fontReg, color: MID })
+  const footer2 = 'Email:  agent@theifoa.com     Mobile:  +1 508 838 5880     Website:  theifoa.com'
+  const ft2w = fontReg.widthOfTextAtSize(footer2, 7)
+  page.drawText(footer2, { x: (width - ft2w) / 2, y: FY - 3, size: 7, font: fontReg, color: MUTED })
+
+  const pdfBytes = await pdfDoc.save()
+  const blob     = new Blob([pdfBytes], { type: 'application/pdf' })
+  const url      = URL.createObjectURL(blob)
+  return { url, filename: `Invoice-${inv.invoiceNumber}.pdf` }
+}
+
+// ─── Helper: download a blob URL ───────────────────────────────────────────────
+function triggerDownload({ url, filename }) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+
+// ─── Helper: open blob URL as preview in new tab ───────────────────────────────
+// Note: No longer used — preview shown in modal instead
+// function openPreview({ url }) {
+//   window.open(url, '_blank', 'noopener,noreferrer')
+//   setTimeout(() => URL.revokeObjectURL(url), 30000)
+// }
+
+// ─── Admin Invoice Modal ───────────────────────────────────────────────────────
+// initialStep: 'select' (default) | 'edit'  — which step to open at
+// autoPreview: if true, generates and opens the PDF preview immediately on mount
+// previewOnly: if true, only shows preview modal (for existing invoices)
+function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep = 'select', autoPreview = false, previewOnly = false }) {
+  const isAirline = type === 'airline'
+  const today = new Date()
+  const payable = new Date(today); payable.setDate(payable.getDate() + 30)
+  const fmtInput = (d) => d ? new Date(d).toISOString().slice(0, 10) : ''
+
+  const defaultInvoiceNumber = record.invoiceNumber || `US-${String(Math.floor(Math.random() * 900) + 100).padStart(3,'0')}-${String(today.getFullYear()).slice(2)}`
+  const holderCount  = record.certificateHolders?.length || record.holderCountValue || 1
+  const pricePerCert = record.pricePerCertificate || record.pricePerCert || (isAirline ? 49 : 0)
+  const totalAmt     = isAirline ? (pricePerCert * holderCount) : (record.price || record.totalServiceFees || 0)
+  const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
+
+  // Prefer saved invoiceDraft payment method; otherwise infer from payment record.
+  // Stripe-paid airline records should default to card, not wire.
+  const paidByCard = record?.paymentMethodType === 'card' || Boolean(record?.stripePaymentIntentId)
+  const defaultPaymentMethod = record?.invoiceDraft?.paymentMethod || (isAirline ? (paidByCard ? 'card' : 'wire') : 'card')
+
+  const [paymentMethodSel, setPaymentMethodSel] = useState(
+    initialStep === 'edit' ? defaultPaymentMethod : ''
+  )
+  const [step, setStep] = useState(initialStep)
+  const autoPreviewFired = useRef(false)
+  const [savingInvoice, setSavingInvoice] = useState(false)
+
+  // ── State for preview modal ────────────────────────────────────────────────────
+  const [previewData, setPreviewData] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  const initialInvoice = {
+    invoiceNumber:     defaultInvoiceNumber,
+    issueDate:         fmtInput(today),
+    payableBy:         fmtInput(payable),
+    recipientCompany:  isAirline ? (record.airlineName || '') : '',
+    recipientName:     [record.firstName, record.lastName].filter(Boolean).join(' ') || record.airlineName || '',
+    recipientContact:  [record.firstName, record.lastName].filter(Boolean).join(' '),
+    recipientAddress1: record.addressLine1 || '',
+    recipientAddress2: [record.city, record.state, record.postalCode].filter(Boolean).join(' '),
+    recipientCountry:  record.country || '',
+    paymentMethod:     initialStep === 'edit' ? defaultPaymentMethod : '',
+    lineItems: [
+      {
+        description: planDesc,
+        quantity:    isAirline ? holderCount : 1,
+        unitPrice:   isAirline ? pricePerCert : totalAmt,
+        totalPrice:  totalAmt,
+      }
+    ],
+  }
+
+  const mergedInvoice = {
+    ...initialInvoice,
+    ...(record.invoiceDraft || {}),
+    lineItems: Array.isArray(record.invoiceDraft?.lineItems) && record.invoiceDraft.lineItems.length
+      ? record.invoiceDraft.lineItems
+      : initialInvoice.lineItems,
+  }
+
+  const [inv, setInv] = useState(mergedInvoice)
+
+  const serializeInvoice = (data) => JSON.stringify({
+    invoiceNumber: data.invoiceNumber || '',
+    issueDate: data.issueDate || '',
+    payableBy: data.payableBy || '',
+    recipientCompany: data.recipientCompany || '',
+    recipientName: data.recipientName || '',
+    recipientContact: data.recipientContact || '',
+    recipientAddress1: data.recipientAddress1 || '',
+    recipientAddress2: data.recipientAddress2 || '',
+    recipientCountry: data.recipientCountry || '',
+    paymentMethod: data.paymentMethod || '',
+    lineItems: (data.lineItems || []).map((it) => ({
+      description: it.description || '',
+      quantity: Number(it.quantity) || 0,
+      unitPrice: Number(it.unitPrice) || 0,
+      totalPrice: Number(it.totalPrice) || 0,
+    })),
+  })
+
+  const [savedSnapshot, setSavedSnapshot] = useState(() => serializeInvoice(mergedInvoice))
+
+  const hasInvoiceChanges = serializeInvoice(inv) !== savedSnapshot
+
+  // ── Auto-preview on mount when triggered from the eye button ────────────────
+  useEffect(() => {
+    if (autoPreview && step === 'edit' && !autoPreviewFired.current) {
+      autoPreviewFired.current = true
+      // Small delay so the modal renders first
+      const timer = setTimeout(async () => {
+        setPreviewLoading(true)
+        try {
+          const result = await generateIFOAInvoicePDF(inv)
+          setPreviewData(result)
+        } catch (err) {
+          console.error('Auto-preview failed:', err)
+        } finally {
+          setPreviewLoading(false)
+        }
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Preview-only mode (eye button): show existing invoice preview immediately ──
+  useEffect(() => {
+    if (previewOnly && !previewData && !previewLoading) {
+      const timer = setTimeout(async () => {
+        setPreviewLoading(true)
+        try {
+          const result = await generateIFOAInvoicePDF(inv)
+          setPreviewData(result)
+        } catch (err) {
+          console.error('Preview generation failed:', err)
+        } finally {
+          setPreviewLoading(false)
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [previewOnly, previewData, previewLoading, inv])
+
+  const set = (f, v) => setInv(p => ({ ...p, [f]: v }))
+  const setItem = (i, f, v) => setInv(p => ({
+    ...p,
+    lineItems: p.lineItems.map((it, idx) => {
+      if (idx !== i) return it
+      const updated = { ...it, [f]: v }
+      if (f === 'quantity' || f === 'unitPrice') updated.totalPrice = (Number(f === 'quantity' ? v : updated.quantity) || 0) * (Number(f === 'unitPrice' ? v : updated.unitPrice) || 0)
+      return updated
+    }),
+  }))
+  const addItem    = () => setInv(p => ({ ...p, lineItems: [...p.lineItems, { description: '', quantity: 1, unitPrice: 0, totalPrice: 0 }] }))
+  const removeItem = (i) => setInv(p => ({ ...p, lineItems: p.lineItems.filter((_, idx) => idx !== i) }))
+
+  const totalSum = inv.lineItems.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0)
+
+  const handleProceed = () => {
+    if (!paymentMethodSel) return
+    setInv(p => ({ ...p, paymentMethod: paymentMethodSel }))
+    setStep('edit')
+  }
+
+  // ── Save invoice changes first, then ask whether to show preview ──────────────
+  const handleSaveInvoice = async () => {
+    setSavingInvoice(true)
+    try {
+      await onSaveInvoice(record._id, type, {
+        invoiceNumber: inv.invoiceNumber,
+        invoiceGenerated: true,
+        invoiceDraft: inv,
+      })
+
+      // Keep local modal state in sync so edit mode knows there are no unsaved changes.
+      setSavedSnapshot(serializeInvoice(inv))
+
+      const wantsPreview = window.confirm('Invoice updated successfully. Do you want to see the preview?')
+      if (wantsPreview) {
+        setPreviewLoading(true)
+        const result = await generateIFOAInvoicePDF(inv)
+        setPreviewData(result)
+      } else {
+        onClose()
+      }
+    } catch (err) {
+      console.error('Invoice save failed:', err)
+      alert('Could not save invoice changes. Please try again.')
+    } finally {
+      setSavingInvoice(false)
+      setPreviewLoading(false)
+    }
+  }
+
+  // ── Download PDF from preview (invoice already saved) ────────────────────────
+  const handleDownloadFromPreview = async () => {
+    if (!previewData) return
+    triggerDownload(previewData)
+  }
+
+  // ── Close preview modal ────────────────────────────────────────────────────────
+  const closePreviewModal = () => {
+    setPreviewData(null)
+    if (previewOnly) onClose()
+  }
+
+  const iCls = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition'
+
+  return (
+    <AnimatePresence>
+      {!previewOnly && (
+        <>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
+              className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-6"
+              onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">
+                Admin — {record.invoiceGenerated ? 'Edit Invoice' : 'Invoice Generator'}
+              </p>
+              <h2 className="text-lg font-extrabold text-slate-900">
+                {record.airlineName || [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Record'}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {record.invoiceGenerated && (
+                <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+                  Invoice Generated
+                </span>
+              )}
+              {step === 'edit' && initialStep !== 'edit' && (
+                <button onClick={() => setStep('select')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+                  ← Back
+                </button>
+              )}
+              <button onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+            </div>
+          </div>
+
+          {/* ── Step 1: Payment method selection ── */}
+          {step === 'select' && (
+            <div className="px-6 py-8">
+              <p className="text-sm font-bold text-slate-700 mb-6">Select the payment method to generate the invoice accordingly:</p>
+              <div className="grid sm:grid-cols-2 gap-4 mb-8">
+                {[
+                  { val: 'card',  label: 'Credit / Debit Card',  sub: 'Stripe / instant payment',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>, accent: 'red' },
+                  ...(isAirline ? [{ val: 'wire',  label: 'Wire Transfer',         sub: 'Bank transfer — BOFAUS3N',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>, accent: 'blue' }] : []),
+                ].map(opt => (
+                  <button key={opt.val} onClick={() => setPaymentMethodSel(opt.val)}
+                    className={`rounded-2xl border-2 p-5 text-left transition-all ${
+                      paymentMethodSel === opt.val
+                        ? opt.accent === 'red' ? 'border-red-500 bg-red-50/60' : 'border-blue-500 bg-blue-50/60'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                      paymentMethodSel === opt.val
+                        ? opt.accent === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>{opt.icon}</div>
+                    <p className={`font-black text-sm mb-0.5 ${paymentMethodSel === opt.val ? opt.accent === 'red' ? 'text-red-700' : 'text-blue-700' : 'text-slate-900'}`}>{opt.label}</p>
+                    <p className="text-xs text-slate-400">{opt.sub}</p>
+                  </button>
+                ))}
+              </div>
+              {isAirline && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-6">
+                  <span className="font-bold">Wire Transfer recommended</span> — this is an airline/company account. Wire details will appear in the invoice footer automatically.
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button onClick={handleProceed} disabled={!paymentMethodSel}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition disabled:opacity-40">
+                  {record.invoiceGenerated ? 'Edit Invoice →' : 'Generate Invoice →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: Edit Invoice ── */}
+          {step === 'edit' && (
+            <div className="px-6 py-5 space-y-5 max-h-[72vh] overflow-y-auto">
+              {/* Auto-preview loading banner */}
+              {autoPreview && previewLoading && (
+                <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+                  Generating invoice preview…
+                </div>
+              )}
+
+              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border ${
+                inv.paymentMethod === 'wire'
+                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
+                {inv.paymentMethod === 'wire' ? 'Wire Transfer Invoice' : 'Card Payment Invoice'}
+              </div>
+
+              {/* Invoice meta */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Invoice Details</p>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Number</label><input className={iCls} value={inv.invoiceNumber} onChange={e => set('invoiceNumber', e.target.value)} /></div>
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Issue Date</label><input className={iCls} type="date" value={inv.issueDate} onChange={e => set('issueDate', e.target.value)} /></div>
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Payable By</label><input className={iCls} type="date" value={inv.payableBy} onChange={e => set('payableBy', e.target.value)} /></div>
+                </div>
+              </div>
+
+              {/* Recipient */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Recipient</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {isAirline && <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Company Name</label><input className={iCls} value={inv.recipientCompany} onChange={e => set('recipientCompany', e.target.value)} /></div>}
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Contact Name</label><input className={iCls} value={inv.recipientContact} onChange={e => set('recipientContact', e.target.value)} /></div>
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Address Line 1</label><input className={iCls} value={inv.recipientAddress1} onChange={e => set('recipientAddress1', e.target.value)} /></div>
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Address Line 2 (City/State/Zip)</label><input className={iCls} value={inv.recipientAddress2} onChange={e => set('recipientAddress2', e.target.value)} /></div>
+                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Country</label><input className={iCls} value={inv.recipientCountry} onChange={e => set('recipientCountry', e.target.value)} /></div>
+                </div>
+              </div>
+
+              {/* Line items */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Line Items</p>
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="grid grid-cols-12 gap-0 bg-slate-50 border-b border-slate-200 px-3 py-2">
+                    <span className="col-span-5 text-[9px] font-black uppercase tracking-widest text-slate-400">Description</span>
+                    <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center">Qty</span>
+                    <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Unit Price</span>
+                    <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Total</span>
+                    <span className="col-span-1" />
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {inv.lineItems.map((item, i) => (
+                      <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2 items-center">
+                        <input className="col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500" value={item.description} onChange={e => setItem(i, 'description', e.target.value)} placeholder="Service description" />
+                        <input className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500 text-center" type="number" min="1" value={item.quantity} onChange={e => setItem(i, 'quantity', e.target.value)} />
+                        <input className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500 text-right" type="number" step="0.01" min="0" value={item.unitPrice} onChange={e => setItem(i, 'unitPrice', e.target.value)} />
+                        <div className="col-span-2 text-xs font-bold text-slate-900 text-right">{Number(item.totalPrice).toFixed(2)}</div>
+                        <button onClick={() => removeItem(i)} disabled={inv.lineItems.length <= 1}
+                          className="col-span-1 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20 mx-auto">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-slate-200 px-3 py-2 flex items-center justify-between bg-slate-50">
+                    <button onClick={addItem} className="text-xs font-semibold text-blue-600 hover:underline">+ Add Line Item</button>
+                    <div className="text-sm font-black text-slate-900">Total: <span className="text-red-600">${totalSum.toFixed(2)} USD</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice preview summary */}
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-5 py-4 text-xs text-slate-500 space-y-1">
+                <p className="font-black text-[9px] uppercase tracking-widest text-slate-400 mb-2">Invoice Summary</p>
+                <div className="flex justify-between"><span>Invoice #</span><span className="font-bold text-slate-800">{inv.invoiceNumber}</span></div>
+                <div className="flex justify-between"><span>Date</span><span className="font-bold text-slate-800">{inv.issueDate}</span></div>
+                <div className="flex justify-between"><span>Payable By</span><span className="font-bold text-slate-800">{inv.payableBy}</span></div>
+                <div className="flex justify-between"><span>Recipient</span><span className="font-bold text-slate-800 text-right max-w-[55%]">{inv.recipientCompany || inv.recipientName}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-2 mt-2"><span className="font-bold">Invoice Sum Tax-Exempt</span><span className="font-black text-red-600">${totalSum.toFixed(2)}</span></div>
+                {inv.paymentMethod === 'wire' && (
+                  <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] text-slate-400">
+                    Footer will include: <span className="font-semibold text-slate-600">Bank of America · IFOA USA Corp · SWIFT: BOFAUS3N · Account: 8981 5632 1560</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Footer actions ── */}
+          {step === 'edit' && (
+            <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 flex justify-between items-center">
+              <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <div className="flex items-center gap-2">
+                {/* Save is the source of truth; preview is optional after save */}
+                {(!record.invoiceGenerated || hasInvoiceChanges) && (
+                  <button
+                    onClick={handleSaveInvoice}
+                    disabled={savingInvoice || previewLoading}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition disabled:opacity-60 shadow-md shadow-red-200"
+                  >
+                    {(savingInvoice || previewLoading)
+                      ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Saving…</>
+                      : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        {record.invoiceGenerated ? 'Save Changes' : 'Generate Invoice'}
+                      </>
+                    }
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+        </>
+      )}
+
+      {/* ── Invoice Preview Modal ── */}
+      {previewData && (
+        <AnimatePresence>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm" onClick={closePreviewModal} />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }} transition={{ duration: 0.2 }}
+              className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}>
+              
+              {/* Header */}
+              <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Invoice {previewOnly ? 'Preview' : 'Saved'} ✓</p>
+                  <h2 className="text-lg font-extrabold text-slate-900">Preview — {previewData.filename}</h2>
+                </div>
+                <button onClick={closePreviewModal}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+              </div>
+
+              {/* PDF Viewer or Loading */}
+              <div className="bg-slate-100 p-4 h-[72vh] max-h-[820px] min-h-[520px] overflow-hidden">
+                {previewLoading ? (
+                  <div className="h-full flex flex-col items-center justify-center gap-3">
+                    <svg className="w-8 h-8 animate-spin text-slate-500" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+                    <p className="text-sm text-slate-400">Generating preview…</p>
+                  </div>
+                ) : (
+                  <iframe
+                    src={previewData.url}
+                    className="w-full h-full rounded-lg border border-slate-200 bg-white"
+                    title="Invoice Preview"
+                    style={{ display: 'block' }}
+                  />
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 flex justify-between items-center">
+                <p className="text-xs text-slate-500">Invoice has been {previewOnly ? 'generated' : 'saved'} successfully</p>
+                <div className="flex items-center gap-3">
+                  <button onClick={closePreviewModal}
+                    className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                    Close
+                  </button>
+                  <button
+                    onClick={handleDownloadFromPreview}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition shadow-md shadow-red-200"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </AnimatePresence>
+      )}
+    </AnimatePresence>
+  )
+}
+
+
+const accents = {
+  blue:    'border-blue-100 bg-blue-50/40',
+  emerald: 'border-emerald-100 bg-emerald-50/40',
+  violet:  'border-violet-100 bg-violet-50/40',
+  amber:   'border-amber-100 bg-amber-50/40',
+  default: 'border-slate-200 bg-white',
+}
+
 function StatCard({ label, value, sub, icon, accent = 'default' }) {
-  const accents = { blue: 'bg-blue-50 border-blue-100', emerald: 'bg-emerald-50 border-emerald-100', violet: 'bg-violet-50 border-violet-100', amber: 'bg-amber-50 border-amber-100', default: 'bg-white border-slate-200' }
   const iconColors = { blue: 'text-blue-600', emerald: 'text-emerald-600', violet: 'text-violet-600', amber: 'text-amber-600', default: 'text-slate-500' }
   return (
     <div className={`rounded-2xl border p-5 ${accents[accent]}`}>
@@ -544,17 +1198,64 @@ function EmptyState({ message = 'No records found' }) {
   )
 }
 
-function RowActions({ onView, onEdit, onDelete, isDeleting }) {
+// ─── RowActions ────────────────────────────────────────────────────────────────
+// Invoice buttons behaviour:
+//   invoiceGenerated = false → single red "Generate" button (opens modal at step 1)
+//   invoiceGenerated = true  → eye icon (opens modal at step 'edit' + auto-previews)
+//                            + emerald "Edit Invoice" button (opens modal at step 'edit', no auto-preview)
+function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGenerated, isDeleting }) {
   return (
-    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-      <button onClick={onView} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
+    <div className="flex flex-nowrap items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+      {/* View */}
+      <button onClick={onView}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /></svg>
         View
       </button>
-      <button onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
-        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
-        Edit
-      </button>
+
+      {/* Invoice buttons */}
+      {onInvoice && (
+        invoiceGenerated ? (
+          <>
+            {/* Eye icon — immediately previews the invoice PDF in a new tab */}
+            <button
+              onClick={onInvoicePreview}
+              title="Preview Invoice PDF"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300 transition"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="3" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+              </svg>
+            </button>
+            {/* Edit invoice — opens edit form directly */}
+            <button
+              onClick={onInvoice}
+              title="Edit Invoice"
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap"
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+              </svg>
+              Invoice
+            </button>
+          </>
+        ) : (
+          /* Generate new invoice — opens payment method selector (step 1) */
+          <button
+            onClick={onInvoice}
+            title="Generate Invoice"
+            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition whitespace-nowrap"
+          >
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Generate
+          </button>
+        )
+      )}
+
+      {/* Delete */}
       <button onClick={onDelete} disabled={isDeleting}
         className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
@@ -565,7 +1266,7 @@ function RowActions({ onView, onEdit, onDelete, isDeleting }) {
 }
 
 // ─── Grouped Individuals Table ─────────────────────────────────────────────────
-function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
+function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting }) {
   const [expanded, setExpanded] = useState({})
 
   const groups = useMemo(() => {
@@ -587,8 +1288,8 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 920 }}>
+      <div className="overflow-x-hidden">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Name & Certificate</th>
@@ -599,13 +1300,13 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
             </tr>
           </thead>
           <tbody>
             {groups.map(group => {
               const primary = group[0]
-              const key = (primary.email || '').toLowerCase().trim() || primary._id
+              const key = ((primary.email || '').toLowerCase().trim() || primary._id) + '-' + primary._id
               const isOpen = !!expanded[key]
               const hasMany = group.length > 1
               const initials = ((primary.firstName?.[0] || '') + (primary.lastName?.[0] || '')).toUpperCase() || 'I'
@@ -650,7 +1351,14 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                     <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
-                      <RowActions onView={() => onView(primary)} onEdit={() => onEdit(primary)} onDelete={() => onDelete(primary._id, 'individual')} isDeleting={deleting === primary._id} />
+                      <RowActions
+                        onView={() => onView(primary)}
+                        onDelete={() => onDelete(primary._id, 'individual')}
+                        onInvoice={() => onInvoice(primary)}
+                        onInvoicePreview={() => onInvoicePreview(primary)}
+                        invoiceGenerated={hasExistingInvoice(primary)}
+                        isDeleting={deleting === primary._id}
+                      />
                     </td>
                   </tr>
 
@@ -662,7 +1370,7 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                         <div className="flex items-center gap-3 pl-4">
                           <div className="flex flex-col items-center flex-shrink-0">
                             <div className="w-px h-2 bg-amber-300" />
-                            <div className="w-2 h-2 rounded-full bg-amber-400 border-2 border-white" />
+                            <div className="w-2 h-2 rounded-sm bg-amber-300 border border-white" />
                           </div>
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
@@ -678,7 +1386,16 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
-                      <td className="px-4 py-3"><RowActions onView={() => onView(sub)} onEdit={() => onEdit(sub)} onDelete={() => onDelete(sub._id, 'individual')} isDeleting={deleting === sub._id} /></td>
+                      <td className="px-4 py-3">
+                        <RowActions
+                          onView={() => onView(sub)}
+                          onDelete={() => onDelete(sub._id, 'individual')}
+                          onInvoice={() => onInvoice(sub)}
+                          onInvoicePreview={() => onInvoicePreview(sub)}
+                          invoiceGenerated={hasExistingInvoice(sub)}
+                          isDeleting={deleting === sub._id}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </React.Fragment>
@@ -692,7 +1409,7 @@ function IndividualsTable({ data, onView, onEdit, onDelete, deleting }) {
 }
 
 // ─── Grouped Airlines Table ────────────────────────────────────────────────────
-function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
+function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting }) {
   const [expanded, setExpanded] = useState({})
 
   const groups = useMemo(() => {
@@ -714,8 +1431,8 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: 920 }}>
+      <div className="overflow-x-hidden">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Airline & Contact</th>
@@ -726,13 +1443,13 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
             </tr>
           </thead>
           <tbody>
             {groups.map(group => {
               const primary = group[0]
-              const key = (primary.airlineName || '').toLowerCase().trim() || primary._id
+              const key = ((primary.airlineName || '').toLowerCase().trim() || primary._id) + '-' + primary._id
               const isOpen = !!expanded[key]
               const hasMany = group.length > 1
               const contactName = [primary.firstName, primary.lastName].filter(Boolean).join(' ') ||
@@ -773,7 +1490,16 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                     <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
-                    <td className="px-4 py-4"><RowActions onView={() => onView(primary)} onEdit={() => onEdit(primary)} onDelete={() => onDelete(primary._id, 'airline')} isDeleting={deleting === primary._id} /></td>
+                    <td className="px-4 py-4">
+                      <RowActions
+                        onView={() => onView(primary)}
+                        onDelete={() => onDelete(primary._id, 'airline')}
+                        onInvoice={() => onInvoice(primary)}
+                        onInvoicePreview={() => onInvoicePreview(primary)}
+                        invoiceGenerated={hasExistingInvoice(primary)}
+                        isDeleting={deleting === primary._id}
+                      />
+                    </td>
                   </tr>
 
                   {hasMany && isOpen && group.map((sub, si) => (
@@ -784,7 +1510,7 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                         <div className="flex items-center gap-3 pl-4">
                           <div className="flex flex-col items-center flex-shrink-0">
                             <div className="w-px h-2 bg-amber-300" />
-                            <div className="w-2 h-2 rounded-full bg-amber-400 border-2 border-white" />
+                            <div className="w-2 h-2 rounded-sm bg-amber-300 border border-white" />
                           </div>
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
@@ -804,7 +1530,16 @@ function AirlinesTable({ data, onView, onEdit, onDelete, deleting }) {
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
-                      <td className="px-4 py-3"><RowActions onView={() => onView(sub)} onEdit={() => onEdit(sub)} onDelete={() => onDelete(sub._id, 'airline')} isDeleting={deleting === sub._id} /></td>
+                      <td className="px-4 py-3">
+                        <RowActions
+                          onView={() => onView(sub)}
+                          onDelete={() => onDelete(sub._id, 'airline')}
+                          onInvoice={() => onInvoice(sub)}
+                          onInvoicePreview={() => onInvoicePreview(sub)}
+                          invoiceGenerated={hasExistingInvoice(sub)}
+                          isDeleting={deleting === sub._id}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </React.Fragment>
@@ -823,13 +1558,14 @@ function OverviewPanel({ individuals, airlines }) {
   const indPaid    = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const airPaid    = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const allHolders = airlines.reduce((s, r) => s + (r.certificateHolders?.length || 0), 0)
+  const allRegs = [...individuals, ...airlines]
   const planCounts = {
-    '1 Year':     individuals.filter(r => r.subscriptionPlan === '1 Year Subscription Plan').length,
-    'Multi-Year': individuals.filter(r => r.subscriptionPlan === 'Multiple Years Subscription Plan').length,
-    'Unlimited':  individuals.filter(r => r.subscriptionPlan === 'Unlimited Plan').length,
+    '1 Year':     allRegs.filter(r => r.subscriptionPlan === '1 Year Subscription Plan').length,
+    'Multi-Year': allRegs.filter(r => r.subscriptionPlan === 'Multiple Years Subscription Plan').length,
+    'Unlimited':  allRegs.filter(r => r.subscriptionPlan === 'Unlimited Plan').length,
   }
   const countryCounts = {}
-  individuals.forEach(r => { if (r.country) countryCounts[r.country] = (countryCounts[r.country] || 0) + 1 })
+  allRegs.forEach(r => { if (r.country) countryCounts[r.country] = (countryCounts[r.country] || 0) + 1 })
   const topCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
   return (
     <div className="space-y-6">
@@ -849,10 +1585,10 @@ function OverviewPanel({ individuals, airlines }) {
       </div>
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Individual Plan Distribution</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Plan Distribution</p>
           <div className="space-y-4">
             {Object.entries(planCounts).map(([plan, count]) => {
-              const pct = individuals.length ? Math.round((count / individuals.length) * 100) : 0
+              const pct = allRegs.length ? Math.round((count / allRegs.length) * 100) : 0
               return (
                 <div key={plan}>
                   <div className="flex justify-between text-xs mb-1.5">
@@ -860,7 +1596,7 @@ function OverviewPanel({ individuals, airlines }) {
                     <span className="font-bold text-slate-900">{count} <span className="text-slate-400 font-normal">({pct}%)</span></span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
+                    <motion.div className="h-full bg-slate-700 rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
                   </div>
                 </div>
               )
@@ -868,14 +1604,14 @@ function OverviewPanel({ individuals, airlines }) {
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries — Individuals</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries — All Registrations</p>
           <div className="space-y-2">
             {topCountries.length === 0 ? <p className="text-sm text-slate-400">No data yet.</p> : topCountries.map(([country, count]) => (
               <div key={country} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
                 <span className="text-sm text-slate-700 font-medium">{country}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.round((count / individuals.length) * 100)}%` }} />
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round((count / allRegs.length) * 100)}%` }} />
                   </div>
                   <span className="text-xs font-bold text-slate-600 w-4 text-right">{count}</span>
                 </div>
@@ -903,7 +1639,6 @@ export default function AdminDashboard() {
   const [filterPlan, setFilterPlan]   = useState('All')
   const [filterPayment, setFilterPayment] = useState('All')
   const [filterStatus, setFilterStatus]   = useState('All')
-  const [filterSubType, setFilterSubType] = useState('all')
 
   const [viewRec, setViewRec]   = useState(null)
   const [viewType, setViewType] = useState(null)
@@ -912,6 +1647,9 @@ export default function AdminDashboard() {
   const [saving, setSaving]     = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [toast, setToast]       = useState(null)
+
+  // invoiceModal state: { record, type, initialStep, autoPreview }
+  const [invoiceModal, setInvoiceModal] = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -931,26 +1669,25 @@ export default function AdminDashboard() {
     } finally { setLoading(false) }
   }
 
-  const multiKeySet = useMemo(() => {
-    const src = tab === 'individuals' ? individuals : airlines
-    const map = {}
-    src.forEach(r => {
-      const key = tab === 'airlines'
-        ? (r.airlineName || '').toLowerCase().trim() || r._id
-        : (r.email || '').toLowerCase().trim() || r._id
-      map[key] = (map[key] || 0) + 1
-    })
-    return new Set(Object.entries(map).filter(([, c]) => c > 1).map(([k]) => k))
-  }, [individuals, airlines, tab])
-
   const handleSave = async (id, data, type) => {
     setSaving(true)
     try {
-      if (type === 'airline') { await updateAirlinesSubscription(id, data); setAirlines(p => p.map(x => x._id === id ? { ...x, ...data } : x)) }
-      else { await updateIndividual(id, data); setIndividuals(p => p.map(x => x._id === id ? { ...x, ...data } : x)) }
+      if (type === 'airline') {
+        const res = await updateAirlinesSubscription(id, data)
+        const saved = res.data?.data || data
+        setAirlines(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+      } else {
+        const res = await updateIndividual(id, data)
+        const saved = res.data?.data || data
+        setIndividuals(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+      }
       showToast('Record updated successfully')
-    } catch (e) { showToast(e?.response?.data?.message || 'Save failed', 'error'); throw e }
-    finally { setSaving(false) }
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Save failed', 'error')
+      throw e
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id, type) => {
@@ -964,12 +1701,54 @@ export default function AdminDashboard() {
     finally { setDeleting(null) }
   }
 
+  const handleSaveInvoice = async (id, type, payload) => {
+    try {
+      if (type === 'airline') {
+        const res = await updateAirlinesSubscription(id, payload)
+        const saved = res.data?.data || payload
+        setAirlines(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+        setInvoiceModal(prev => prev && prev.record._id === id ? { ...prev, record: { ...prev.record, ...saved } } : prev)
+      } else {
+        const res = await updateIndividual(id, payload)
+        const saved = res.data?.data || payload
+        setIndividuals(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+        setInvoiceModal(prev => prev && prev.record._id === id ? { ...prev, record: { ...prev.record, ...saved } } : prev)
+      }
+      showToast('Invoice updated successfully')
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Could not save invoice changes', 'error')
+      throw e
+    }
+  }
+
   const openView = (r, type) => { setViewRec(r); setViewType(type) }
   const closeView = () => { setViewRec(null); setViewType(null) }
   const openEditFromView = () => {
-    const r = viewRec; const t = viewType; closeView()
-    setTimeout(() => { setEditRec(r); setEditType(t) }, 50)
+    const r = viewRec
+    const t = viewType
+    closeView()
+    setTimeout(() => {
+      setEditRec(r)
+      setEditType(t)
+    }, 50)
   }
+
+  // Open invoice modal at step 1 (generate new invoice)
+  const openInvoiceGenerate = (record, type) => {
+    setInvoiceModal({ record, type, initialStep: 'select', autoPreview: false, previewOnly: false })
+  }
+
+  // Open invoice modal directly at edit form, no auto-preview (Edit Invoice button)
+  const openInvoiceEdit = (record, type) => {
+    setInvoiceModal({ record, type, initialStep: 'edit', autoPreview: false, previewOnly: false })
+  }
+
+  // Preview existing invoice (Eye button) — shows preview only
+  const openInvoicePreview = (record, type) => {
+    setInvoiceModal({ record, type, initialStep: 'edit', autoPreview: false, previewOnly: true })
+  }
+
+  const closeInvoiceModal = () => setInvoiceModal(null)
 
   const src = tab === 'individuals' ? individuals : airlines
 
@@ -980,18 +1759,12 @@ export default function AdminDashboard() {
         ? [`${r.firstName || ''} ${r.lastName || ''}`, r.email, r.country, r.faaCertificateNumber, r.phone].some(v => String(v || '').toLowerCase().includes(q))
         : [r.airlineName, r.email || r.contactEmail, r.country, `${r.firstName || ''} ${r.lastName || ''}`].some(v => String(v || '').toLowerCase().includes(q))
     )
-    const groupKey = tab === 'airlines'
-      ? (r.airlineName || '').toLowerCase().trim() || r._id
-      : (r.email || '').toLowerCase().trim() || r._id
-    const isMulti = multiKeySet.has(groupKey)
-    const matchSubType = filterSubType === 'all' || (filterSubType === 'multi' && isMulti) || (filterSubType === 'single' && !isMulti)
 
     return matchSearch
       && (filterPlan === 'All' || r.subscriptionPlan === filterPlan)
       && (filterPayment === 'All' || r.paymentStatus === filterPayment)
       && (filterStatus === 'All' || r.status === filterStatus)
-      && matchSubType
-  }), [src, search, filterPlan, filterPayment, filterStatus, filterSubType, tab, multiKeySet])
+  }), [src, search, filterPlan, filterPayment, filterStatus, tab])
 
   const uniqueAccountCount = useMemo(() => {
     if (tab === 'overview') return 0
@@ -1005,21 +1778,12 @@ export default function AdminDashboard() {
     return keys.size
   }, [filtered, tab])
 
-  const multiAccountCount = useMemo(() => multiKeySet.size, [multiKeySet])
-
   const PLANS    = ['All', '1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
 
-  const TAB_CONFIG = [
-    { key: 'overview',    label: 'Overview',      count: null },
-    { key: 'individuals', label: 'Individuals',   count: individuals.length },
-    { key: 'airlines',    label: 'Airlines',      count: airlines.length },
-    { key: 'add-airline', label: '+ Add Airline', count: null },
-  ]
-
-  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterSubType('all') }
-  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || filterSubType !== 'all'
+  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All') }
+  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All'
 
   return (
     <DashboardLayout>
@@ -1040,10 +1804,23 @@ export default function AdminDashboard() {
       {editRec && editType === 'individual' && <IndividualEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'individual')} />}
       {editRec && editType === 'airline'    && <AirlineEditModal    record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
 
-      <div className="mb-6">
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Admin Control Center</p>
-        <h1 className="text-2xl font-black text-slate-900">Registrations Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage all pilot and airline operator registrations.</p>
+      {invoiceModal && (
+        <AdminInvoiceModal
+          key={`${invoiceModal.record._id}-${invoiceModal.initialStep}-${invoiceModal.autoPreview}-${invoiceModal.previewOnly}`}
+          record={invoiceModal.record}
+          type={invoiceModal.type}
+          initialStep={invoiceModal.initialStep}
+          autoPreview={invoiceModal.autoPreview}
+          previewOnly={invoiceModal.previewOnly}
+          onClose={closeInvoiceModal}
+          onSaveInvoice={handleSaveInvoice}
+        />
+      )}
+
+      <div className="mb-4 text-center">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Admin Control Center</p>
+        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wide text-slate-900">Registrations Dashboard</h1>
+        <p className="text-slate-500 text-sm mt-2 capitalize">Manage all pilot and airline operator registrations.</p>
       </div>
 
       {loadErr && (
@@ -1054,39 +1831,10 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-6 shadow-sm">
-        {/* Tab bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-100">
-          <div className="flex flex-wrap gap-2">
-            {TAB_CONFIG.map(t => (
-              <button key={t.key}
-                onClick={() => {
-                  let path = '/admin'
-                  if (t.key === 'individuals') path = '/admin/individuals'
-                  else if (t.key === 'airlines') path = '/admin/airlines'
-                  else if (t.key === 'add-airline') path = '/admin/add-airline'
-                  navigate(path)
-                  clearFilters()
-                }}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${tab === t.key ? 'bg-blue-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                {t.label}
-                {t.count !== null && (
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${tab === t.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{t.count}</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <button onClick={loadData} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
-            </svg>
-            Refresh
-          </button>
-        </div>
-
-        {/* Filter bar */}
-        {tab !== 'overview' && tab !== 'add-airline' && (
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          {tab !== 'overview' && tab !== 'add-airline' && (
+            <>
             <div className="relative">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
               <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
@@ -1104,28 +1852,43 @@ export default function AdminDashboard() {
               className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
-            <div className="flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden text-xs font-semibold">
-              {[
-                { val: 'all',    label: 'All Accounts' },
-                { val: 'multi',  label: `Multiple Subs${multiAccountCount > 0 ? ` (${multiAccountCount})` : ''}` },
-                { val: 'single', label: 'Single Sub' },
-              ].map(opt => (
-                <button key={opt.val} onClick={() => setFilterSubType(opt.val)}
-                  className={`px-3 py-2 transition-colors whitespace-nowrap ${filterSubType === opt.val ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition ml-auto">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
-              Export Excel
-            </a>
-            {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-xs text-blue-600 font-semibold hover:underline px-1">Clear filters</button>
+            </>
+          )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {hasActiveFilters && tab !== 'overview' && tab !== 'add-airline' && (
+              <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
             )}
+
+            {tab !== 'overview' && tab !== 'add-airline' && (
+              <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
+                Export Excel
+              </a>
+            )}
+
+            {tab === 'airlines' && (
+              <button
+                onClick={() => navigate('/admin/add-airline')}
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition"
+                style={{ background: '#000021' }}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+                </svg>
+                Add Airline
+              </button>
+            )}
+
+            <button onClick={loadData} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+              <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
+              </svg>
+              Refresh
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {tab !== 'overview' && tab !== 'add-airline' && !loading && (
@@ -1134,11 +1897,6 @@ export default function AdminDashboard() {
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
             <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
           </p>
-          {filterSubType === 'multi' && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-300 px-3 py-1 text-[11px] font-bold text-amber-700">
-              Showing accounts with multiple subscriptions only
-            </span>
-          )}
         </div>
       )}
 
@@ -1154,9 +1912,23 @@ export default function AdminDashboard() {
           <AdminAirlineForm />
         </div>
       ) : tab === 'individuals' ? (
-        <IndividualsTable data={filtered} onView={r => openView(r, 'individual')} onEdit={r => { setEditRec(r); setEditType('individual') }} onDelete={handleDelete} deleting={deleting} />
+        <IndividualsTable
+          data={filtered}
+          onView={r => openView(r, 'individual')}
+          onDelete={handleDelete}
+          deleting={deleting}
+          onInvoice={r => hasExistingInvoice(r) ? openInvoiceEdit(r, 'individual') : openInvoiceGenerate(r, 'individual')}
+          onInvoicePreview={r => openInvoicePreview(r, 'individual')}
+        />
       ) : (
-        <AirlinesTable data={filtered} onView={r => openView(r, 'airline')} onEdit={r => { setEditRec(r); setEditType('airline') }} onDelete={handleDelete} deleting={deleting} />
+        <AirlinesTable
+          data={filtered}
+          onView={r => openView(r, 'airline')}
+          onDelete={handleDelete}
+          deleting={deleting}
+          onInvoice={r => hasExistingInvoice(r) ? openInvoiceEdit(r, 'airline') : openInvoiceGenerate(r, 'airline')}
+          onInvoicePreview={r => openInvoicePreview(r, 'airline')}
+        />
       )}
     </DashboardLayout>
   )

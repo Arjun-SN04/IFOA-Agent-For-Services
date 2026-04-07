@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import logo from '../assets/IFOA_USA_blanc_V.png'
+import logo from '../assets/IFOA_USA_white.png'
 
 const roles = [
   { value: 'individual', label: 'Individual Pilot / Dispatcher', desc: 'Part 61/65 certificate holders' },
@@ -31,7 +31,7 @@ export default function SignupPage() {
     background: '#f8fafc',
     color: '#0f172a',
   }
-  const focusStyle = (e) => { e.target.style.borderColor = '#1d4ed8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,78,216,0.1)' }
+  const focusStyle = (e) => { e.target.style.borderColor = '#0000ff'; e.target.style.boxShadow = '0 0 0 3px rgba(0,0,255,0.12)' }
   const blurStyle = (e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none' }
 
   const handleSubmit = async (e) => {
@@ -56,12 +56,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: '#f0f4ff' }}>
-      {/* Background decorations */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-10" style={{ background: '#1d4ed8' }} />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-10" style={{ background: '#1d4ed8' }} />
-      </div>
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-white">
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -70,13 +65,13 @@ export default function SignupPage() {
         className="relative w-full max-w-lg"
       >
         {/* Card */}
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden" style={{ border: '1px solid #dbeafe' }}>
-          {/* Blue header */}
-          <div className="px-8 py-7 text-center" style={{ background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' }}>
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+          {/* Simple white header */}
+          <div className="px-8 py-7 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-12 w-auto mx-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+              <img src={logo} alt="IFOA USA" className="h-12 w-auto mx-auto" />
             </Link>
-            <p className="text-blue-200 text-sm mt-2 font-medium">Create Your Free Account</p>
+            <p className="text-slate-500 text-sm mt-2 font-medium">Create Your Free Account</p>
           </div>
 
           {/* Form */}
@@ -104,12 +99,12 @@ export default function SignupPage() {
                     <button key={r.value} type="button" onClick={() => setRole(r.value)}
                       className="rounded-xl border p-3 text-left transition-all"
                       style={{
-                        borderColor: role === r.value ? '#1d4ed8' : '#e2e8f0',
+                        borderColor: role === r.value ? '#0000ff' : '#e2e8f0',
                         background: role === r.value ? '#eff6ff' : '#f8fafc',
-                        boxShadow: role === r.value ? '0 0 0 3px rgba(29,78,216,0.1)' : 'none',
+                        boxShadow: role === r.value ? '0 0 0 3px rgba(0,0,255,0.12)' : 'none',
                       }}>
-                      <p className="text-xs font-bold leading-tight" style={{ color: role === r.value ? '#1d4ed8' : '#475569' }}>{r.label}</p>
-                      <p className="text-[9px] mt-0.5" style={{ color: role === r.value ? '#3b82f6' : '#94a3b8' }}>{r.desc}</p>
+                      <p className="text-xs font-bold leading-tight" style={{ color: role === r.value ? '#0000ff' : '#475569' }}>{r.label}</p>
+                      <p className="text-[9px] mt-0.5" style={{ color: role === r.value ? '#3333ff' : '#94a3b8' }}>{r.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -186,9 +181,9 @@ export default function SignupPage() {
 
               <button type="submit" disabled={loading}
                 className="w-full rounded-xl px-6 py-3.5 text-sm font-bold text-white transition-all flex items-center justify-center gap-2"
-                style={{ background: loading ? '#93c5fd' : '#1d4ed8' }}
-                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#1e40af' }}
-                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#1d4ed8' }}>
+                style={{ background: loading ? '#8080ff' : '#0000ff' }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#0000e6' }}
+                onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#0000ff' }}>
                 {loading ? (
                   <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.2" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Creating account…</>
                 ) : 'Create Account'}
@@ -198,7 +193,7 @@ export default function SignupPage() {
             <div className="mt-5 flex items-center justify-between">
               <p className="text-sm" style={{ color: '#64748b' }}>
                 Have an account?{' '}
-                <Link to="/login" className="font-semibold transition-colors" style={{ color: '#1d4ed8' }}>Sign in</Link>
+                <Link to="/login" className="font-semibold transition-colors" style={{ color: '#0000ff' }}>Sign in</Link>
               </p>
               <Link to="/" className="text-xs" style={{ color: '#94a3b8' }}>← Back to home</Link>
             </div>
@@ -207,7 +202,7 @@ export default function SignupPage() {
 
         {/* Trust badges */}
         <div className="mt-5 flex flex-wrap gap-3 justify-center">
-          {['🔒 Secure & Encrypted', '✅ FAA Compliant', '🇺🇸 U.S. Based Office'].map(b => (
+          {[' Secure & Encrypted', ' FAA Compliant', ' U.S. Based Office'].map(b => (
             <span key={b} className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>{b}</span>
           ))}
         </div>

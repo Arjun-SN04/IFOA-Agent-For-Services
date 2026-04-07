@@ -26,9 +26,10 @@ function NavLink({ item }) {
       to={item.to}
       className={`relative px-4 py-2 text-sm font-semibold rounded-full transition-all duration-200 whitespace-nowrap
         ${active
-          ? 'bg-red-600 text-white shadow-sm'
+          ? 'text-white shadow-sm'
           : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
         }`}
+      style={active ? { background: '#000021' } : undefined}
     >
       {item.label}
     </Link>
@@ -232,8 +233,9 @@ export default function HeaderNav() {
                     to={item.to}
                     onClick={() => setMobileOpen(false)}
                     className={`flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
-                      active ? 'bg-red-600 text-white' : 'text-slate-700 hover:bg-slate-100'
+                      active ? 'text-white' : 'text-slate-700 hover:bg-slate-100'
                     }`}
+                    style={active ? { background: '#000021' } : undefined}
                   >
                     {item.label}
                   </Link>

@@ -236,3 +236,19 @@ exports.exportToExcel = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ─── PATCH /api/individuals/:id/mark-invoice-generated ───────────────────────
+// Called by admin after downloading the PDF invoice — marks invoiceGenerated = true
+exports.markInvoiceGenerated = async (req, res) => {
+  try {
+    const doc = await Individual.findByIdAndUpdate(
+      req.params.id,
+      { $set: { invoiceGenerated: true } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ success: false, message: 'Individual not found.' });
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

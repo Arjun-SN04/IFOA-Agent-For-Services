@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useAuth } from '../../context/AuthContext'
 import ifoaLogo from '../../assets/IFOA_USA_blanc_V.png'
+import ifoaLogo2 from "../../assets/IFOA_USA_white.png"
 
 const C = {
   blue: '#0000ff',
@@ -10,42 +12,30 @@ const C = {
 }
 
 export default function Footer() {
+  const { user } = useAuth()
+
   return (
     <>
       {/* ── IFOA CONTACT CTA ── */}
-      <section className="relative overflow-hidden px-6 py-20" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <section className="relative overflow-hidden px-6 py-20" style={{ borderTop: '1px solid #e5e7eb' }}>
         {/* Background */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0" style={{ background: C.dark }} />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #000021 0%, #000040 40%, #000021 100%)' }} />
-          {/* Blue accent blob */}
-          <div className="absolute -top-20 -left-20 w-[500px] h-[500px] rounded-full" style={{ background: 'radial-gradient(ellipse, rgba(0,0,255,0.22) 0%, transparent 70%)', opacity: 0.7 }} />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full" style={{ background: 'radial-gradient(ellipse, rgba(0,0,255,0.12) 0%, transparent 70%)' }} />
-          {/* Grid */}
-          <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.04 }} xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="ctaGrid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
-                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="white" strokeWidth="0.5" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#ctaGrid)" />
-          </svg>
-          {/* Top accent line */}
-          <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,255,0.8) 30%, rgba(100,100,255,0.5) 70%, transparent 100%)', opacity: 0.6 }} />
+          <div className="absolute inset-0" style={{ background: '#ffffff' }} />
         </div>
 
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 md:grid-cols-2">
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <h2 className="mb-8 text-3xl font-black leading-tight text-white sm:text-4xl">
+            <h2 className="mb-8 text-3xl font-black leading-tight sm:text-4xl" style={{ color: C.dark }}>
               Are You Ready to Appoint<br />Your Agent for Service?
             </h2>
-            {/* Logo — no dark bg needed since we're on dark background */}
-            <img src={ifoaLogo} alt="IFOA USA" className="h-24 w-auto object-contain" />
+            <div className="inline-flex items-center rounded-xl px-4 py-2" style={{ background: 'rgba(255,255,255,0.9)' }}>
+              <img src={ifoaLogo2} alt="IFOA USA" className="h-14 w-auto object-contain" />
+            </div>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <p className="mb-8 leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              Our <strong className="text-white">Daytona Beach</strong> office ensures fast and efficient handling and forwarding of our customers' mail.
+            <p className="mb-8 leading-relaxed" style={{ color: '#374151' }}>
+              Our <strong style={{ color: C.dark }}>Daytona Beach</strong> office ensures fast and efficient handling and forwarding of our customers' mail.
             </p>
 
             <div className="mb-8 space-y-4">
@@ -66,32 +56,34 @@ export default function Footer() {
                 },
               ].map((row, i) => (
                 <div key={i} className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: 'rgba(0,0,255,0.25)', border: '1px solid rgba(0,0,255,0.4)' }}>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ color: C.blue, background: 'rgba(0,0,255,0.09)', border: '1px solid rgba(0,0,255,0.22)' }}>
                     {row.icon}
                   </div>
                   {row.href ? (
-                    <a href={row.href} className="text-sm font-medium leading-relaxed text-white self-center transition-colors" style={{}} onMouseEnter={e => e.target.style.color = '#a0a0ff'} onMouseLeave={e => e.target.style.color = 'white'}>
+                    <a href={row.href} className="text-sm font-medium leading-relaxed self-center transition-colors" style={{ color: C.dark }} onMouseEnter={e => e.target.style.color = C.blue} onMouseLeave={e => e.target.style.color = C.dark}>
                       {row.label}
                     </a>
                   ) : (
-                    <span className="text-sm leading-relaxed self-center" style={{ color: 'rgba(255,255,255,0.7)' }}>{row.label}</span>
+                    <span className="text-sm leading-relaxed self-center" style={{ color: '#4b5563' }}>{row.label}</span>
                   )}
                 </div>
               ))}
             </div>
 
-            <Link
-              to="/individual/register"
-              className="inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-sm font-bold text-white transition-all duration-200"
-              style={{ background: C.blue, boxShadow: '0 4px 20px rgba(0,0,255,0.3)' }}
-              onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
-              onMouseLeave={e => e.currentTarget.style.background = C.blue}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Sign Up Now
-            </Link>
+            {!user && (
+              <Link
+                to="/individual/register"
+                className="inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-sm font-bold text-white transition-all duration-200"
+                style={{ background: C.blue, boxShadow: '0 4px 18px rgba(0,0,255,0.22)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.blueDark; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,255,0.28)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.blue; e.currentTarget.style.boxShadow = '0 4px 18px rgba(0,0,255,0.22)' }}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Sign Up Now
+              </Link>
+            )}
           </motion.div>
         </div>
       </section>

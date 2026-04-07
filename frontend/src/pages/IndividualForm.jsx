@@ -15,8 +15,8 @@ import axios from 'axios'
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 const C = {
-  blue:      '#1d4ed8',
-  blueDark:  '#1e40af',
+  blue:      '#0000ff',
+  blueDark:  '#0000e6',
   blueMuted: '#eff6ff',
   blueLight: '#dbeafe',
   dark:      '#0f172a',
@@ -137,10 +137,44 @@ function AuthModal({ onClose }) {
   )
 }
 
+// ── ActiveSubGuard ───────────────────────────────────────────────────────────
+function ActiveSubGuard() {
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.gray50 }}>
+      <div className="w-full max-w-md rounded-3xl overflow-hidden" style={{ border: `1px solid ${C.gray200}`, background: C.white, boxShadow: '0 20px 60px rgba(15,23,42,0.08)' }}>
+        <div className="h-1 w-full" style={{ background: C.blue }} />
+        <div className="px-8 py-10 text-center">
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center" style={{ background: C.blueMuted, border: `1px solid ${C.blueLight}` }}>
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} style={{ color: C.blue }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-black mb-2" style={{ color: C.dark }}>Active Subscription Found</h3>
+          <p className="text-sm leading-relaxed mb-7" style={{ color: C.gray500 }}>
+            You already have an active Individual subscription. You cannot register again with the same account.
+          </p>
+          <Link to="/dashboard/subscription"
+            className="w-full inline-flex items-center justify-center gap-2 text-white font-bold px-6 py-3.5 rounded-xl text-sm transition-all"
+            style={{ background: C.blue }}
+            onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
+            onMouseLeave={e => e.currentTarget.style.background = C.blue}>
+            View My Subscription
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function IndividualForm() {
   const { user, linkRegistration, addSubscription } = useAuth()
   const isBlocked = user?.role === 'airline'
+
+  // Block if user already has an active (paid) individual subscription
+  const hasActiveSub = user?.role === 'individual' &&
+    (user?.paymentStatus === 'paid' || user?.status === 'Active' || user?.isPaid === true)
+  if (hasActiveSub) return <><Navbar /><ActiveSubGuard /></>
   const [step, setStep]           = useState(1)
   const [formData, setFormData]   = useState(INIT)
   const [submitted, setSubmitted] = useState(false)

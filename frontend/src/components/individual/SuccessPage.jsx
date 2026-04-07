@@ -32,9 +32,9 @@ export default function SuccessPage({ name }) {
         transition={{ duration: 0.4, ease: 'easeOut' }}
         className="relative mx-auto max-w-3xl"
       >
-        <div className="overflow-hidden rounded-[34px] border border-white/80 bg-white shadow-[0_40px_100px_-50px_rgba(37,99,235,0.45)]">
+        <div className="overflow-hidden rounded-[34px] border border-white/80 bg-white shadow-[0_40px_100px_-50px_rgba(0,0,255,0.45)]">
           <div className="border-b border-blue-100 bg-[linear-gradient(180deg,#ffffff_0%,#f4f9ff_100%)] px-8 py-10 text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-blue-600 text-white shadow-[0_25px_55px_-30px_rgba(37,99,235,0.7)]">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[28px] bg-blue-600 text-white shadow-[0_25px_55px_-30px_rgba(0,0,255,0.7)]">
               <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
