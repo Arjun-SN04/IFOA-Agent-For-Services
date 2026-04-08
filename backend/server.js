@@ -39,6 +39,7 @@ app.use('/api/auth',        require('./routes/authRoutes'));
 app.use('/api/individuals', require('./routes/individualRoutes'));
 app.use('/api/airlines',    require('./routes/airlinesRoutes'));
 app.use('/api/payments',    require('./routes/paymentRoutes'));
+app.use('/api/notifications', require('./routes/notificationsRoutes'));
 app.use('/api/chat',        require('./routes/chatRoutes'));
 
 // ── Unified Registration Route ─────────────────────────────────────────────────

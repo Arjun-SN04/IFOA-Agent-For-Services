@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion as Motion } from 'framer-motion'
 import axios from 'axios'
 
 // Individual steps
@@ -76,6 +76,36 @@ const AIRLINES_INIT = {
   paymentEmail: '', paymentStatus: 'pending', agreedToTerms: false,
 }
 
+function hydrateAirlineFormFromExisting(existing) {
+  if (!existing) return null
+  return {
+    subscriptionPlan: existing.subscriptionPlan || AIRLINES_INIT.subscriptionPlan,
+    pricePerCertificate: Number(existing.pricePerCertificate ?? existing.pricePerCert ?? AIRLINES_INIT.pricePerCertificate),
+    totalAmount: Number(existing.totalAmount ?? existing.totalServiceFees ?? AIRLINES_INIT.totalAmount),
+    airlineName: existing.airlineName || '',
+    firstName: existing.firstName || existing.contactFirstName || '',
+    lastName: existing.lastName || existing.contactLastName || '',
+    middleName: existing.middleName || '',
+    dateOfBirth: existing.dateOfBirth || '',
+    email: existing.email || existing.contactEmail || '',
+    phone: existing.phone || existing.contactPhone || '',
+    addressLine1: existing.addressLine1 || '',
+    addressLine2: existing.addressLine2 || '',
+    city: existing.city || '',
+    state: existing.state || '',
+    postalCode: existing.postalCode || '',
+    country: existing.country || '',
+    holderCount: existing.holderCount || '',
+    holderCountValue: String(existing.holderCountValue || existing.committedCount || existing.certificateHolders?.length || ''),
+    certificateHolders: Array.isArray(existing.certificateHolders) ? existing.certificateHolders : [],
+    paymentEmail: existing.paymentEmail || existing.email || '',
+    paymentStatus: existing.paymentStatus || 'pending',
+    paymentMethod: existing.paymentMethod || 'card',
+    agreedToTerms: true,
+    _id: existing._id,
+  }
+}
+
 const SERVICE_CONTACT = [
   { label: 'Company', value: 'IFOA USA Corp' },
   { label: 'Address', value: '1616 Concierge Blvd Suite 100, Daytona Beach, FL 32117, USA' },
@@ -118,7 +148,7 @@ function RightSidebar({ regType }) {
       }}
     >
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div
+        <Motion.div
           key={regType}
           initial={{ opacity: 0, x: isIndividual ? -24 : 24 }}
           animate={{ opacity: 1, x: 0 }}
@@ -180,7 +210,7 @@ function RightSidebar({ regType }) {
             </div>
           </div>
           )}
-        </motion.div>
+        </Motion.div>
       </AnimatePresence>
     </div>
   )
@@ -192,9 +222,9 @@ function AuthModal({ onClose }) {
   const location = useLocation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      <Motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
+      <Motion.div
         initial={{ opacity: 0, scale: 0.94, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.94, y: 20 }} transition={{ duration: 0.25 }}
         className="relative w-full max-w-md rounded-3xl overflow-hidden bg-white shadow-2xl"
@@ -229,7 +259,7 @@ function AuthModal({ onClose }) {
           </div>
           <p className="text-gray-400 text-xs mt-5">Free to register · No credit card required</p>
         </div>
-      </motion.div>
+      </Motion.div>
     </div>
   )
 }
@@ -321,26 +351,11 @@ export default function RegisterPage() {
   const [hasAirlineSubmission, setHasAirlineSubmission] = useState(false)
   const hasExistingSubmissionForType = regType === 'individual' ? hasIndividualSubmission : hasAirlineSubmission
 
-  const checkExistingSubmission = async (type) => {
+  const checkExistingSubmission = useCallback(async (type) => {
     if (!user) return false
 
     const targetModel = type === 'individual' ? 'Individual' : 'Airlines'
     const endpointBase = type === 'individual' ? 'individuals' : 'airlines'
-
-    const ids = [
-      ...(user?.registrationId ? [String(user.registrationId)] : []),
-      ...((user?.subscriptionIds || []).map((id) => String(id))),
-    ]
-    const uniqueIds = [...new Set(ids)]
-
-    // Prefer direct id checks so deleted records are detected immediately.
-    if (uniqueIds.length > 0) {
-      const checks = await Promise.allSettled(
-        uniqueIds.map((id) => axios.get(`${BASE_URL}/${endpointBase}/${id}`)),
-      )
-      const existsById = checks.some((r) => r.status === 'fulfilled' && r?.value?.data?.data)
-      if (existsById) return true
-    }
 
     // If the account is currently linked to another model, do not block this form type.
     if (user?.registrationModel && user.registrationModel !== targetModel) {
@@ -354,10 +369,12 @@ export default function RegisterPage() {
         params: { email: user.email },
       })
       return Boolean(byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) && byEmail.data.all.length > 0))
-    } catch {
+    } catch (e) {
+      // 404 by-email means no existing submission for this email.
+      if (e?.response?.status === 404) return false
       return false
     }
-  }
+  }, [user])
 
   useEffect(() => {
     let cancelled = false
@@ -377,12 +394,35 @@ export default function RegisterPage() {
       } else if (user.role === 'airline') {
         const exists = await checkExistingSubmission('airline')
         if (!cancelled) setHasAirlineSubmission(exists)
+
+        if (exists && user?.email) {
+          try {
+            const byEmail = await axios.get(`${BASE_URL}/airlines/by-email`, {
+              params: { email: user.email },
+            })
+            if (cancelled) return
+            const existing = byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) ? byEmail.data.all[0] : null)
+            const hydrated = hydrateAirlineFormFromExisting(existing)
+            if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
+          } catch {
+            void 0
+          }
+        }
       }
     }
 
     run()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, checkExistingSubmission])
+
+  useEffect(() => {
+    if (regType === 'individual' && hasIndividualSubmission && indStep < 4) {
+      setIndStep(4)
+    }
+    if (regType === 'airline' && hasAirlineSubmission && airStep < 4) {
+      setAirStep(4)
+    }
+  }, [regType, hasIndividualSubmission, hasAirlineSubmission, indStep, airStep])
 
   const scrollToTop = () => {
     if (scrollContainerRef.current) {
@@ -422,7 +462,9 @@ export default function RegisterPage() {
         try {
           if (!user.registrationId) await linkRegistration(newId, 'Individual')
           else await addSubscription(newId)
-        } catch (_) {}
+        } catch {
+          void 0
+        }
       }
       if (opts.returnId) return newId
       setIndSubmitted(true); return null
@@ -436,20 +478,42 @@ export default function RegisterPage() {
     try {
       await axios.patch(`${BASE_URL}/individuals/${regId}/mark-paid`, {},
         { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch (_) {}
+    } catch {
+      void 0
+    }
     setIndSubmitted(true)
   }
 
   const handleAirSubmit = async (opts = {}) => {
-    if (await checkExistingSubmission('airline')) {
-      setHasAirlineSubmission(true)
+    if (hasAirlineSubmission && !opts.returnId) {
       setAirError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
       return null
     }
-    if (hasAirlineSubmission) {
-      setAirError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
-      return null
+
+    // In payment flows we need a registration ID. If this account already has one,
+    // return it so downstream wire/card handlers can continue.
+    if (hasAirlineSubmission && opts.returnId && user?.email) {
+      try {
+        const byEmail = await axios.get(`${BASE_URL}/airlines/by-email`, {
+          params: { email: user.email },
+        })
+        const existing = byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) ? byEmail.data.all[0] : null)
+        if (existing?._id) {
+          const hydrated = hydrateAirlineFormFromExisting(existing)
+          if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
+          try {
+            if (!user.registrationId) await linkRegistration(existing._id, 'Airlines')
+            else await addSubscription(existing._id)
+          } catch {
+            void 0
+          }
+          return existing._id
+        }
+      } catch {
+        void 0
+      }
     }
+
     if (!user) { setShowAuthModal(true); return }
     setAirSubmitting(true); setAirError('')
     try {
@@ -459,12 +523,32 @@ export default function RegisterPage() {
         try {
           if (!user.registrationId) await linkRegistration(newId, 'Airlines')
           else await addSubscription(newId)
-        } catch (_) {}
+        } catch {
+          void 0
+        }
       }
       if (opts.returnId) return newId
       setAirSubmitted(true)
+      return null
     } catch (e) {
+      // If server reports duplicate submission (409), reuse existing record ID.
+      if (e?.response?.status === 409) {
+        const existingId = e?.response?.data?.data?._id
+        if (existingId) {
+          try {
+            if (!user.registrationId) await linkRegistration(existingId, 'Airlines')
+            else await addSubscription(existingId)
+          } catch {
+            void 0
+          }
+          setHasAirlineSubmission(true)
+          setAirError('You already submitted this form. Updating your existing submission.')
+          if (opts.returnId) return existingId
+          return null
+        }
+      }
       setAirError(e?.response?.data?.message || 'Submission failed. Please try again.')
+      return null
     } finally { setAirSubmitting(false) }
   }
 
@@ -474,7 +558,9 @@ export default function RegisterPage() {
       await fetch(`${BASE_URL}/airlines/${id}/mark-paid`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       })
-    } catch (_) {}
+    } catch {
+      void 0
+    }
     setAirSubmitted(true)
   }
 
@@ -485,6 +571,8 @@ export default function RegisterPage() {
   const step      = regType === 'individual' ? indStep : airStep
   const activeStep = STEPS[step - 1]
   const progress  = Math.round((step / STEPS.length) * 100)
+  const showExistingBanner = hasExistingSubmissionForType && step < 4
+  const showExistingInlineWarning = hasExistingSubmissionForType && step === 4
 
   const handleNextToStep2 = () => {
     if (regType === 'individual' ? isIndBlocked : isAirBlocked) return
@@ -494,8 +582,7 @@ export default function RegisterPage() {
   const handleNextToStep3 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(3); else goAirStep(3) }
   const handleNextToStep4 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(4); else goAirStep(4) }
   const handleBack = (n)  => { if (regType === 'individual') goIndStep(n); else goAirStep(n) }
-
-  const isBlocked = (regType === 'individual' ? isIndBlocked : isAirBlocked) || hasExistingSubmissionForType
+  const isBlocked = regType === 'individual' ? isIndBlocked : isAirBlocked
 
   return (
     <>
@@ -624,7 +711,7 @@ export default function RegisterPage() {
 
               {/* Progress bar */}
               <div className="h-1.5 rounded-full overflow-hidden mb-1" style={{ background: '#e5e7eb' }}>
-                <motion.div
+                <Motion.div
                   className="h-full rounded-full"
                   animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -642,7 +729,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Form card */}
-            <motion.div
+            <Motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
@@ -675,53 +762,57 @@ export default function RegisterPage() {
 
               {/* Form body */}
               <div className="px-8 py-8">
-                {hasExistingSubmissionForType ? (
+                {showExistingBanner ? (
                   <ExistingFormBanner regType={regType} />
                 ) : (
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={`${regType}-${step}`}
-                      initial={{
-                        opacity: 0,
-                        x: transitionMode === 'type' ? 28 * switchDirection : 0,
-                        y: transitionMode === 'step' ? 8 : 0,
-                      }}
-                      animate={{ opacity: 1, x: 0, y: 0 }}
-                      exit={{
-                        opacity: 0,
-                        x: transitionMode === 'type' ? -28 * switchDirection : 0,
-                        y: transitionMode === 'step' ? -8 : 0,
-                      }}
-                      transition={{ duration: transitionMode === 'type' ? 0.4 : 0.28, ease: [0.22, 1, 0.36, 1] }}>
-                      {regType === 'individual' && (
-                        <>
-                          {indStep === 1 && <Step1PersonalInfo data={indData} update={updateInd} onNext={handleNextToStep2} />}
-                          {indStep === 2 && <Step2Certificates data={indData} update={updateInd} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                          {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
-                          {indStep === 4 && (
-                            <Step4Payment data={indData} update={updateInd} onBack={() => handleBack(3)}
-                              onSubmit={handleIndSubmit} onMarkPaidAndFinish={handleIndMarkPaid}
-                              submitting={indSubmitting} error={indError} isBlocked={isBlocked} />
-                          )}
-                        </>
-                      )}
-                      {regType === 'airline' && (
-                        <>
-                          {airStep === 1 && <AirlinesStep1PlanAndDetails data={airData} update={updateAir} onNext={handleNextToStep2} />}
-                          {airStep === 2 && <AirlinesStep2Holders data={airData} update={updateAir} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                          {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
-                          {airStep === 4 && (
-                            <AirlinesStep4Payment data={airData} update={updateAir} onBack={() => handleBack(3)}
-                              onSubmit={handleAirSubmit} onMarkPaidAndFinish={handleAirMarkPaid}
-                              submitting={airSubmitting} error={airError} isBlocked={isBlocked} />
-                          )}
-                        </>
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
+                  <div className="space-y-4">
+                    {showExistingInlineWarning && <ExistingFormBanner regType={regType} />}
+                    <AnimatePresence mode="wait">
+                      <Motion.div
+                        key={`${regType}-${step}`}
+                        initial={{
+                          opacity: 0,
+                          x: transitionMode === 'type' ? 28 * switchDirection : 0,
+                          y: transitionMode === 'step' ? 8 : 0,
+                        }}
+                        animate={{ opacity: 1, x: 0, y: 0 }}
+                        exit={{
+                          opacity: 0,
+                          x: transitionMode === 'type' ? -28 * switchDirection : 0,
+                          y: transitionMode === 'step' ? -8 : 0,
+                        }}
+                        transition={{ duration: transitionMode === 'type' ? 0.4 : 0.28, ease: [0.22, 1, 0.36, 1] }}>
+                        {regType === 'individual' && (
+                          <>
+                            {indStep === 1 && <Step1PersonalInfo data={indData} update={updateInd} onNext={handleNextToStep2} />}
+                            {indStep === 2 && <Step2Certificates data={indData} update={updateInd} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
+                            {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                            {indStep === 4 && (
+                              <Step4Payment data={indData} update={updateInd} onBack={() => handleBack(3)}
+                                onSubmit={handleIndSubmit} onMarkPaidAndFinish={handleIndMarkPaid}
+                                submitting={indSubmitting} error={indError} isBlocked={isBlocked} />
+                            )}
+                          </>
+                        )}
+                        {regType === 'airline' && (
+                          <>
+                            {airStep === 1 && <AirlinesStep1PlanAndDetails data={airData} update={updateAir} onNext={handleNextToStep2} />}
+                            {airStep === 2 && <AirlinesStep2Holders data={airData} update={updateAir} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
+                            {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                            {airStep === 4 && (
+                              <AirlinesStep4Payment data={airData} update={updateAir} onBack={() => handleBack(3)}
+                                onSubmit={handleAirSubmit} onMarkPaidAndFinish={handleAirMarkPaid}
+                                submitting={airSubmitting} error={airError} isBlocked={isBlocked}
+                                isExistingSubmission={hasAirlineSubmission} />
+                            )}
+                          </>
+                        )}
+                      </Motion.div>
+                    </AnimatePresence>
+                  </div>
                 )}
               </div>
-            </motion.div>
+            </Motion.div>
 
             {/* Bottom trust row */}
             <div className="flex flex-wrap gap-2 justify-center pb-6">

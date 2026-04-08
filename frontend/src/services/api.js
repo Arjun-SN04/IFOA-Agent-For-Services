@@ -72,3 +72,6 @@ export const updateProfile     = (data) => API.put('/auth/update-profile', data)
 export const linkRegistration  = (data) => API.put('/auth/link-registration', data)
 export const addSubscription   = (data) => API.put('/auth/add-subscription', data)
 export const updateAirlineName = (data) => API.put('/auth/update-airline-name', data)
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+export const getNotifications = (params) => API.get('/notifications', { params })

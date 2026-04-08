@@ -476,12 +476,20 @@ exports.getAirlinesSubscriptionById = async (req, res) => {
 exports.updateAirlinesSubscription = async (req, res) => {
   try {
     const allowedFields = [
+      'status', 'paymentStatus', 'isPaid',
+      'subscriptionPlan', 'subscriptionDate', 'expirationDate',
+      'holderCount', 'holderCountValue', 'committedCount',
+      'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
       'airlineName',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
       'email', 'phone',
       'pointOfContact', 'pointOfContactEmail', 'pointOfContactPhone',
       'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
       'certificateHolders',
+      'paymentEmail',
+      'wirePaymentRequested', 'wirePaymentRequestedAt',
+      // Admin invoice fields
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
     ];
 
     const payload = {};

@@ -1040,13 +1040,12 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               <Row label="Total Amount Due" value={money(s.totalAmount)} />
               {(() => {
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
-                const amountDue = (s.totalAmount || 0) - (s.amountPaid || 0)
                 if (remaining > 0) return (
                   <div className="py-3 border-b border-slate-100">
                     <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                       <div>
                         <p className="text-xs font-bold text-blue-800">{remaining} slot{remaining !== 1 ? 's' : ''} not yet filled</p>
-                        <p className="text-xs text-blue-600 mt-0.5">Remaining balance: <span className="font-black">${amountDue} USD</span></p>
+                        <p className="text-xs text-blue-600 mt-0.5">Total payment covers all committed slots.</p>
                       </div>
                       <button onClick={onAddHolders}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-all">

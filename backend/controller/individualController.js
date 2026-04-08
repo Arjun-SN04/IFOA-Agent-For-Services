@@ -370,13 +370,19 @@ exports.getIndividualById = async (req, res) => {
 exports.updateIndividual = async (req, res) => {
   try {
     const allowedFields = [
+      'status', 'paymentStatus', 'isPaid',
+      'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',
+      'price', 'totalServiceFees',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
-      'addressLine1', 'city', 'state', 'postalCode', 'country',
+      'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
       'phone', 'email',
+      'paymentEmail',
       'primaryAirmanCertificate', 'primaryCertificate',
       'faaCertificateNumber', 'iacraTrackingNumber',
       'hasSecondaryCertificate', 'secondaryCertificate',
       'secondaryFaaCertificateNumber', 'secondaryIacraTrackingNumber',
+      // Admin invoice fields
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
     ];
 
     const payload = {};

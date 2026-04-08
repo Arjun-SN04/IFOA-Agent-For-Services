@@ -294,7 +294,7 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
     pricePerCert:        0,
     amount:              data.price || 0,
     currency:            'USD',
-    invoiceNumber:       `INV-${Date.now()}`,
+    invoiceNumber:       data.invoiceNumber || `INV-${registrationId || 'PENDING'}`,
     paymentId:           registrationId || '',
   })
 

@@ -186,6 +186,12 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
     ? `Agent for Service — ${data.holderCount === '3 to 5' ? 'Up to 5' : data.holderCount === '5 to 10' ? 'Up to 10' : 'More than 10'} — Unlimited Plan`
     : null
 
+  const selectedCount = Number(data.holderCountValue || 0)
+  const pricePerCertificate = Number(data.pricePerCertificate || 0)
+  const payableTotal = data.subscriptionPlan === 'Unlimited Plan'
+    ? pricePerCertificate
+    : selectedCount > 0 ? (pricePerCertificate * selectedCount) : 0
+
   const validate = () => {
     const e = {}
     if (!data.holderCount)             e.holderCount      = 'Please select the number of holders'
@@ -292,6 +298,12 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
               {data.subscriptionPlan === '1 Year Subscription Plan' && <span className="text-xs text-gray-400 font-normal ml-1.5">per certificate / year</span>}
               {data.subscriptionPlan === 'Unlimited Plan' && <span className="text-xs text-gray-400 font-normal ml-1.5">per year</span>}
             </p>
+            {payableTotal > 0 && (
+              <p className="text-sm font-black text-blue-900 mt-1.5">
+                Payable Total: <span className="text-green-700">${payableTotal} USD</span>
+                {data.subscriptionPlan !== 'Unlimited Plan' && selectedCount > 0 ? ` (${selectedCount} holder${selectedCount !== 1 ? 's' : ''})` : ''}
+              </p>
+            )}
           </div>
         )}
       </div>

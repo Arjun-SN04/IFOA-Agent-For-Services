@@ -29,11 +29,11 @@ function Row({ label, value }) {
 export default function AirlinesStep3Preview({ data, update, onSaved, onNext, onBack }) {
   const holders = data.certificateHolders || []
   const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
-  const selectedCount = data.holderCountValue ? parseInt(data.holderCountValue) : holders.length
+  const selectedCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const actualCount = holders.length
   const total = isUnlimited
     ? (data.pricePerCertificate || 0)
-    : (data.pricePerCertificate || 0) * actualCount
+    : (data.pricePerCertificate || 0) * selectedCount
 
   const [termsError, setTermsError] = useState(false)
 

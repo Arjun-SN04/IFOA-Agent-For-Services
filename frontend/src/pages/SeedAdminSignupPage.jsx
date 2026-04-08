@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import logo from '../assets/IFOA_USA_blanc_V.png'
+import logo from '../assets/IFOA_USA_white.png'
 import { seedAdminSignup } from '../services/api'
 
 export default function SeedAdminSignupPage() {

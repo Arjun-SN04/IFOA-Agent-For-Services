@@ -32,9 +32,10 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
   const atLimit = maxHolders !== null && holders.length >= maxHolders
 
   const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
+  const payableCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const numericTotal = isUnlimited
     ? (data.pricePerCertificate || 0)
-    : (data.pricePerCertificate || 0) * holders.length
+    : (data.pricePerCertificate || 0) * payableCount
 
   const syncHolders = (newHolders) => update({ certificateHolders: newHolders })
 
@@ -119,10 +120,10 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3 flex items-center justify-between text-sm">
           <span className="text-blue-700 font-semibold">
             {data.subscriptionPlan}
-            {maxHolders ? ` · ${maxHolders} holder${maxHolders !== 1 ? 's' : ''} selected` : ` · ${holders.length} added`}
+            {payableCount ? ` · ${payableCount} holder${payableCount !== 1 ? 's' : ''} selected` : ` · ${holders.length} added`}
           </span>
           <span className="font-black text-blue-900">
-            {isUnlimited ? 'Flat: ' : 'Total: '}<span className="text-green-700">${numericTotal} USD</span>
+            {isUnlimited ? 'Flat: ' : 'Payable Total: '}<span className="text-green-700">${numericTotal} USD</span>
           </span>
         </div>
       )}

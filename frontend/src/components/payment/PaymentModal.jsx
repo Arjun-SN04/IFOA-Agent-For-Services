@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
-  PaymentElement,
+  CardNumberElement,
+  CardExpiryElement,
+  CardCvcElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js'
 import InvoiceModal from './InvoiceModal'
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY, {
+  advancedFraudSignals: false,
+})
 
 const ELEMENTS_APPEARANCE = {
   theme: 'stripe',
@@ -32,6 +36,22 @@ const ELEMENTS_APPEARANCE = {
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
+const CARD_ELEMENT_OPTIONS = {
+  style: {
+    base: {
+      color: '#0f172a',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontSize: '18px',
+      '::placeholder': { color: '#94a3b8' },
+      iconColor: '#64748b',
+    },
+    invalid: {
+      color: '#dc2626',
+      iconColor: '#dc2626',
+    },
+  },
+}
 
 // ── Payment Success Screen (shown before invoice) ─────────────────────────────
 function PaymentSuccessScreen({ amount, onViewInvoice }) {
@@ -97,9 +117,10 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
 }
 
 // ── Inner checkout form ───────────────────────────────────────────────────────
-function CheckoutForm({ registrationId, registrationModel, amount, subscriptionData, onSuccess, onCancel }) {
+function CheckoutForm({ clientSecret, registrationId, registrationModel, amount, subscriptionData, onSuccess, onCancel }) {
   const stripe   = useStripe()
   const elements = useElements()
+  const [cardholderName, setCardholderName] = useState('')
   const [loading,       setLoading]      = useState(false)
   const [error,         setError]        = useState(null)
   // phase: 'form' | 'success' | 'invoice'
@@ -113,21 +134,27 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
     setError(null)
 
     try {
-      // 1. Submit Stripe Elements (validates fields)
-      const { error: submitErr } = await elements.submit()
-      if (submitErr) throw new Error(submitErr.message)
+      const cardNumberEl = elements.getElement(CardNumberElement)
+      if (!cardNumberEl) {
+        throw new Error('Card form is not ready. Please try again.')
+      }
 
-      // 2. Confirm payment with Stripe
-      const { error: stripeErr, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        redirect: 'if_required',
+      // 1. Confirm payment with Stripe card element
+      const { error: stripeErr, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardNumberEl,
+          billing_details: {
+            name: cardholderName?.trim() || undefined,
+            email: subscriptionData?.email || subscriptionData?.paymentEmail || undefined,
+          },
+        },
       })
       if (stripeErr) throw new Error(stripeErr.message)
 
       if (paymentIntent?.status === 'succeeded') {
         const token = localStorage.getItem('ifoa_token') || ''
 
-        // 3. Call primary /payments/confirm endpoint — creates Payment record & marks subscription Active
+        // 2. Call primary /payments/confirm endpoint — creates Payment record & marks subscription Active
         let confirmJson = { success: false }
         try {
           const confirmRes = await fetch(`${BASE_URL}/payments/confirm`, {
@@ -148,7 +175,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
           console.warn('[PaymentModal] /payments/confirm network error:', networkErr.message)
         }
 
-        // 4. Fallback: if the primary confirm failed, directly mark the registration paid
+        // 3. Fallback: if the primary confirm failed, directly mark the registration paid
         //    This guarantees the user's profile shows Active even if the Payment record write failed
         if (!confirmJson.success) {
           console.warn('[PaymentModal] Primary confirm failed, running fallback mark-paid:', confirmJson.message)
@@ -165,7 +192,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
           }
         }
 
-        // 5. Build invoice from server Payment doc if available, otherwise build locally
+        // 4. Build invoice from server Payment doc if available, otherwise build locally
         const inv = confirmJson.payment
           ? serverPaymentToInvoice(confirmJson.payment)
           : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date())
@@ -204,31 +231,69 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
 
   // ── Payment form ─────────────────────────────────────────────────────────────
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Amount */}
-      <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount Due</p>
-          <p className="text-2xl font-black text-slate-900 mt-0.5">
-            ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <rect x="3" y="11" width="18" height="11" rx="2" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4" />
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Card preview */}
+      <div className="rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 p-4 shadow-lg">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">Amount</p>
+            <p className="text-white font-black text-base">
+              ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+          <svg className="w-7 h-4 text-white/40" viewBox="0 0 48 30" fill="currentColor">
+            <circle cx="17" cy="15" r="13" fillOpacity=".8" />
+            <circle cx="31" cy="15" r="13" fillOpacity=".5" />
           </svg>
-          SSL Secured
+        </div>
+        <p className="text-white font-mono text-sm tracking-[0.16em] mb-2.5">•••• •••• •••• ••••</p>
+        <div className="flex justify-between text-white/60 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="truncate max-w-[60%]">{cardholderName?.trim() || 'Cardholder Name'}</span>
+          <span>MM / YY</span>
         </div>
       </div>
 
-      {/* Stripe Payment Element */}
+      {/* Cardholder */}
       <div>
-        <PaymentElement
-          options={{
-            layout: { type: 'accordion', defaultCollapsed: false },
-          }}
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+          Cardholder Name
+        </label>
+        <input
+          type="text"
+          value={cardholderName}
+          onChange={(e) => setCardholderName(e.target.value)}
+          placeholder="Name on card"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
         />
+      </div>
+
+      {/* Card fields (card-only checkout) */}
+      <div>
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+          Card Number
+        </label>
+        <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+          <CardNumberElement options={CARD_ELEMENT_OPTIONS} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+            Expiration Date
+          </label>
+          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+            <CardExpiryElement options={CARD_ELEMENT_OPTIONS} />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+            Security Code
+          </label>
+          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+            <CardCvcElement options={CARD_ELEMENT_OPTIONS} />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -245,7 +310,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
           className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
           Cancel
         </button>
-        <button type="submit" disabled={!stripe || loading}
+        <button type="submit" disabled={!stripe || !elements || loading}
           className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 py-3 text-sm font-bold text-white transition disabled:opacity-50 shadow-md shadow-red-200">
           {loading ? (
             <>
@@ -267,12 +332,12 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
         </button>
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-1">
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-0.5">
+        <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <rect x="3" y="11" width="18" height="11" rx="2" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
-        Secured by SSL · Card payments only
+        Your payment is secured by 256-bit SSL encryption
       </div>
     </form>
   )
@@ -376,22 +441,32 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   }, [registrationId, registrationModel])
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
 
         {/* Header */}
-        <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">Secure Payment</p>
-            <h2 className="text-lg font-extrabold text-slate-900">Complete Your Subscription</h2>
+        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5">Secure Checkout</p>
+              <p className="text-white font-black text-base leading-tight">Complete Your Subscription</p>
+            </div>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">
-            ✕
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <div className="px-6 py-6">
+        <div className="px-5 py-4">
           {loading && (
             <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -416,6 +491,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
               options={{ clientSecret, appearance: ELEMENTS_APPEARANCE }}
             >
               <CheckoutForm
+                clientSecret={clientSecret}
                 registrationId={registrationId}
                 registrationModel={registrationModel}
                 amount={amount}

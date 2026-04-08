@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 
@@ -86,15 +86,7 @@ const sectionClass = 'rounded-2xl border border-gray-100 bg-white p-6 shadow-sm 
 
 export default function Step1PersonalInfo({ data, update, onNext }) {
   const [errors, setErrors] = useState({})
-  const [phoneCountry, setPhoneCountry] = useState('us')
-
-  // When user picks a country, auto-set the phone flag
-  useEffect(() => {
-    if (data.country) {
-      const iso2 = COUNTRY_TO_ISO2[data.country]
-      if (iso2) setPhoneCountry(iso2)
-    }
-  }, [data.country])
+  const [phoneCountry, setPhoneCountry] = useState(COUNTRY_TO_ISO2[data.country] || 'us')
 
   const validate = () => {
     const nextErrors = {}
@@ -307,7 +299,12 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
           <Field label="Country">
             <select
               value={data.country}
-              onChange={(e) => update({ country: e.target.value })}
+              onChange={(e) => {
+                const country = e.target.value
+                update({ country })
+                const iso2 = COUNTRY_TO_ISO2[country]
+                if (iso2) setPhoneCountry(iso2)
+              }}
               className={`${inputCls('country')} appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M2.22%204.47a.75.75%200%20011.06%200L6%207.19l2.72-2.72a.75.75%200%20011.06%201.06l-3.25%203.25a.75.75%200%2001-1.06%200L2.22%205.53a.75.75%200%20010-1.06z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_1rem_center] pr-10 cursor-pointer`}
             >
               <option value="">Select country</option>

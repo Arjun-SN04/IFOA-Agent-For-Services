@@ -271,7 +271,7 @@ function WireTransferSuccess({ onClose }) {
       </div>
       <p className="text-xs font-black uppercase tracking-[0.25em] text-blue-600 mb-2">Invoice Request Sent</p>
       <h3 className="text-2xl font-black text-gray-900 mb-2">Request Submitted!</h3>
-      <p className="text-sm text-gray-500 mb-2 max-w-xs leading-relaxed">Our team will review your registration and generate a wire transfer invoice within 1 business day.</p>
+      <p className="text-sm text-gray-500 mb-2 max-w-xs leading-relaxed">Notification has been sent to admin. Our team will review your registration and generate a wire transfer invoice within 1 business day.</p>
       <div className="w-full max-w-xs rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 mb-7 text-left space-y-2">
         <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-3">Bank Details for Wire Transfer</p>
         {[['Bank', 'Bank of America'],['Account Owner', 'IFOA USA Corp'],['SWIFT', 'BOFAUS3N'],['Account #', '8981 5632 1560']].map(([k,v]) => (
@@ -290,10 +290,11 @@ function WireTransferSuccess({ onClose }) {
   )
 }
 
-export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, onMarkPaidAndFinish, submitting, error, isBlocked }) {
+export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, onMarkPaidAndFinish, submitting, error, isBlocked, isExistingSubmission = false }) {
   const navigate = useNavigate()
   const [errors, setErrors]             = useState({})
-  const [paymentMethod, setPaymentMethod] = useState('') // '' | 'card' | 'wire'
+  const [localError, setLocalError]     = useState('')
+  const [paymentMethod, setPaymentMethod] = useState(data.paymentMethod || 'card') // 'card' | 'wire'
   const [showCardModal, setShowCardModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
   const [wireSubmitting, setWireSubmitting] = useState(false)
@@ -301,10 +302,19 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
 
   const holders       = data.certificateHolders || []
   const isUnlimited   = data.subscriptionPlan === 'Unlimited Plan'
-  const selectedCount = data.holderCountValue ? parseInt(data.holderCountValue) : holders.length
+  const selectedCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const pricePerCert  = data.pricePerCertificate || data.pricePerCert || 0
   const total         = isUnlimited ? pricePerCert : pricePerCert * selectedCount
   const totalLabel    = `${total} USD`
+  const selectedPaymentMethod = data.paymentMethod || paymentMethod || 'card'
+
+  useEffect(() => {
+    if (!data.paymentMethod) {
+      update({ paymentMethod: 'card' })
+    } else {
+      setPaymentMethod(data.paymentMethod)
+    }
+  }, [data.paymentMethod])
 
   const buildInvoiceData = () => ({
     name:             data.airlineName || [data.firstName, data.lastName].filter(Boolean).join(' '),
@@ -331,7 +341,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
 
   const validate = () => {
     const e = {}
-    if (!paymentMethod) e.paymentMethod = 'Please select a payment method'
+    if (!selectedPaymentMethod) e.paymentMethod = 'Please select a payment method'
     if (!data.paymentEmail?.trim()) e.paymentEmail = 'Billing email is required'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.paymentEmail)) e.paymentEmail = 'Invalid email address'
     if (!data.agreedToTerms) e.agreedToTerms = 'You must accept the terms before submitting.'
@@ -341,31 +351,55 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
 
   const handleStripeClick = async () => {
     if (isBlocked) return
+    setPaymentMethod('card')
+    update({ paymentMethod: 'card' })
     if (!validate()) return
+    setLocalError('')
     const newId = await onSubmit({ paymentStatus: 'pending', returnId: true })
-    if (newId) { setRegistrationId(newId); setShowCardModal(true) }
-    else { setShowCardModal(true) }
+    const targetId = newId || data._id
+    if (!targetId) {
+      setLocalError('Could not prepare card payment. Please try again.')
+      return
+    }
+    setRegistrationId(targetId)
+    setShowCardModal(true)
   }
 
   const handleWireClick = async () => {
     if (isBlocked) return
-    if (!validate()) return
+    setPaymentMethod('wire')
+    update({ paymentMethod: 'wire' })
+    if (!isExistingSubmission && !validate()) return
+    setLocalError('')
     setWireSubmitting(true)
     try {
       const newId = await onSubmit({ paymentStatus: 'pending', returnId: true })
-      if (newId) setRegistrationId(newId)
-      // Patch the registration to flag it as wire-transfer invoice requested
-      const id = newId || data._id
-      if (id) {
-        await axios.patch(
-          `${BASE_URL}/airlines/${id}/request-invoice`,
-          { paymentMethod: 'wire', requestedAt: new Date().toISOString() },
-          { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } }
-        ).catch(() => {}) // non-fatal if endpoint not yet wired up
+      const id = newId || data?._id || registrationId
+      if (!id) {
+        throw new Error('Could not create subscription. Please try again.')
       }
+      setRegistrationId(id)
+
+      // Patch the registration to flag it as wire-transfer invoice requested
+      const reqRes = await axios.patch(
+        `${BASE_URL}/airlines/${id}/request-invoice`,
+        { paymentMethod: 'wire', requestedAt: new Date().toISOString() },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } }
+      )
+
+      if (!reqRes?.data?.success) {
+        throw new Error(reqRes?.data?.message || 'Failed to submit wire request.')
+      }
+
       setWireSuccess(true)
     } catch (e) {
       console.error('Wire request failed:', e)
+      const msg = (e?.response?.data?.message || e?.message || '').toLowerCase()
+      if (e?.response?.status === 409 || msg.includes('already')) {
+        setWireSuccess(true)
+        return
+      }
+      setLocalError(e?.response?.data?.message || e?.message || 'Wire request failed. Please try again.')
     } finally {
       setWireSubmitting(false)
     }
@@ -447,14 +481,21 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
         </div>
       </div>
 
+      {isExistingSubmission && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          <p className="font-black mb-1.5">You already submitted your Company form</p>
+          <p className="text-xs leading-relaxed">New registration is disabled. You can still request a wire invoice for your existing submission below.</p>
+        </div>
+      )}
+
       {/* Payment Method Selector */}
-      <div>
+      {!isExistingSubmission && <div>
         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Select Payment Method</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           {/* Card */}
           <button
             type="button"
-            onClick={() => setPaymentMethod('card')}
+            onClick={() => { setPaymentMethod('card'); update({ paymentMethod: 'card' }) }}
             className={`relative rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
               paymentMethod === 'card'
                 ? 'border-red-500 bg-red-50/60 shadow-sm shadow-red-100'
@@ -463,21 +504,21 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
           >
             <div className="flex items-center gap-3 mb-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                paymentMethod === 'card' ? 'bg-red-100' : 'bg-gray-100'
+                selectedPaymentMethod === 'card' ? 'bg-red-100' : 'bg-gray-100'
               }`}>
-                <svg className={`w-5 h-5 ${paymentMethod === 'card' ? 'text-red-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className={`w-5 h-5 ${selectedPaymentMethod === 'card' ? 'text-red-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <rect x="2" y="5" width="20" height="14" rx="2" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
                 </svg>
               </div>
               <div className="flex-1">
-                <p className={`font-black text-sm ${paymentMethod === 'card' ? 'text-red-700' : 'text-gray-900'}`}>Credit / Debit Card</p>
+                <p className={`font-black text-sm ${selectedPaymentMethod === 'card' ? 'text-red-700' : 'text-gray-900'}`}>Credit / Debit Card</p>
                 <p className="text-xs text-gray-400">Instant payment</p>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                paymentMethod === 'card' ? 'border-red-500 bg-red-500' : 'border-gray-300 bg-white'
+                selectedPaymentMethod === 'card' ? 'border-red-500 bg-red-500' : 'border-gray-300 bg-white'
               }`}>
-                {paymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-white" />}
+                {selectedPaymentMethod === 'card' && <div className="w-2 h-2 rounded-full bg-white" />}
               </div>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">Pay securely now with Visa, Mastercard, Amex, Apple Pay, or Google Pay.</p>
@@ -486,33 +527,33 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
           {/* Wire Transfer */}
           <button
             type="button"
-            onClick={() => setPaymentMethod('wire')}
+            onClick={() => { setPaymentMethod('wire'); update({ paymentMethod: 'wire' }) }}
             className={`relative rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
-              paymentMethod === 'wire'
+              selectedPaymentMethod === 'wire'
                 ? 'border-blue-500 bg-blue-50/60 shadow-sm shadow-blue-100'
                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
             }`}
           >
             <div className="flex items-center gap-3 mb-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                paymentMethod === 'wire' ? 'bg-blue-100' : 'bg-gray-100'
+                selectedPaymentMethod === 'wire' ? 'bg-blue-100' : 'bg-gray-100'
               }`}>
-                <svg className={`w-5 h-5 ${paymentMethod === 'wire' ? 'text-blue-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className={`w-5 h-5 ${selectedPaymentMethod === 'wire' ? 'text-blue-600' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <p className={`font-black text-sm ${paymentMethod === 'wire' ? 'text-blue-700' : 'text-gray-900'}`}>Wire Transfer</p>
+                <p className={`font-black text-sm ${selectedPaymentMethod === 'wire' ? 'text-blue-700' : 'text-gray-900'}`}>Wire Transfer</p>
                 <p className="text-xs text-gray-400">Invoice via bank transfer</p>
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                paymentMethod === 'wire' ? 'border-blue-500 bg-blue-500' : 'border-gray-300 bg-white'
+                selectedPaymentMethod === 'wire' ? 'border-blue-500 bg-blue-500' : 'border-gray-300 bg-white'
               }`}>
-                {paymentMethod === 'wire' && <div className="w-2 h-2 rounded-full bg-white" />}
+                {selectedPaymentMethod === 'wire' && <div className="w-2 h-2 rounded-full bg-white" />}
               </div>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">Request an invoice — admin will generate a wire-transfer invoice for your company within 1 business day.</p>
-            {paymentMethod === 'wire' && (
+            {selectedPaymentMethod === 'wire' && (
               <div className="mt-3 rounded-xl bg-blue-100/70 border border-blue-200 px-3 py-2.5 text-xs text-blue-700 space-y-1">
                 <p className="font-black uppercase tracking-widest text-[9px] text-blue-500 mb-1.5">Bank of America — Wire Details</p>
                 {[['Account Owner','IFOA USA Corp'],['SWIFT','BOFAUS3N'],['Account #','8981 5632 1560']].map(([k,v]) => (
@@ -528,10 +569,10 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             {errors.paymentMethod}
           </p>
         )}
-      </div>
+      </div>}
 
       {/* Billing Details */}
-      <div>
+      {!isExistingSubmission && <div>
         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Billing Details</h3>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">
@@ -547,10 +588,10 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             </span>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Terms */}
-      <div className={`rounded-[26px] border p-5 ${errors.agreedToTerms ? 'border-red-200 bg-red-50/70' : 'border-slate-200 bg-slate-50/80'}`}>
+      {!isExistingSubmission && <div className={`rounded-[26px] border p-5 ${errors.agreedToTerms ? 'border-red-200 bg-red-50/70' : 'border-slate-200 bg-slate-50/80'}`}>
         <label className="flex cursor-pointer items-start gap-3">
           <input type="checkbox" checked={data.agreedToTerms || false} onChange={(e) => update({ agreedToTerms: e.target.checked })} className="mt-1 h-4 w-4 accent-blue-600" />
           <span className="text-sm leading-6 text-slate-700">
@@ -565,12 +606,12 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />{errors.agreedToTerms}
           </p>
         )}
-      </div>
+      </div>}
 
-      {error && (
+      {(error || localError) && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
           <span className="text-lg flex-shrink-0">⚠️</span>
-          <p>{error}</p>
+          <p>{localError || error}</p>
         </div>
       )}
 
@@ -581,8 +622,21 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
           Previous
         </button>
 
-        {/* Dynamic CTA based on payment method */}
-        {paymentMethod === 'wire' ? (
+        {isExistingSubmission ? (
+          <button
+            onClick={handleWireClick}
+            disabled={wireSubmitting || isBlocked}
+            className={`inline-flex items-center gap-2.5 px-8 py-3 text-white font-bold rounded-xl transition-all duration-150 shadow-sm min-w-52 justify-center ${
+              isBlocked ? 'bg-gray-300 cursor-not-allowed opacity-60'
+              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow-md hover:-translate-y-px disabled:opacity-50'
+            }`}>
+            {wireSubmitting
+              ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path fill="currentColor" d="M4 12a8 8 0 018-8v8z" className="opacity-75" /></svg>Submitting…</>
+              : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>Request Wire Invoice</>
+            }
+          </button>
+        ) : (
+        selectedPaymentMethod === 'wire' ? (
           <button
             onClick={handleWireClick}
             disabled={wireSubmitting || isBlocked}
@@ -608,10 +662,11 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             {submitting
               ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path fill="currentColor" d="M4 12a8 8 0 018-8v8z" className="opacity-75" /></svg>Completing…</>
               : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>
-                {paymentMethod === 'card' ? 'Enter Card Details' : 'Select Payment Method'}
+                {selectedPaymentMethod === 'card' ? 'Enter Card Details' : 'Select Payment Method'}
               </>
             }
           </button>
+        )
         )}
       </div>
     </div>

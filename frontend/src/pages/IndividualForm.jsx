@@ -174,7 +174,6 @@ export default function IndividualForm() {
   // Block if user already has an active (paid) individual subscription
   const hasActiveSub = user?.role === 'individual' &&
     (user?.paymentStatus === 'paid' || user?.status === 'Active' || user?.isPaid === true)
-  if (hasActiveSub) return <><Navbar /><ActiveSubGuard /></>
   const [step, setStep]           = useState(1)
   const [formData, setFormData]   = useState(INIT)
   const [submitted, setSubmitted] = useState(false)
@@ -208,7 +207,9 @@ export default function IndividualForm() {
         try {
           if (!user.registrationId) await linkRegistration(newId, 'Individual')
           else await addSubscription(newId)
-        } catch (_) {}
+        } catch {
+          void 0
+        }
       }
       if (opts.returnId) return newId
       setSubmitted(true); return null
@@ -222,10 +223,13 @@ export default function IndividualForm() {
     try {
       await axios.patch(`${BASE_URL}/individuals/${registrationId}/mark-paid`, {},
         { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch (_) {}
+    } catch {
+      void 0
+    }
     setSubmitted(true)
   }
 
+  if (hasActiveSub) return <><Navbar /><ActiveSubGuard /></>
   if (submitted) return <><Navbar /><SuccessPage name={formData.firstName} /></>
 
   const handleNextToStep2 = () => { if (isBlocked) return; goToStep(2) }

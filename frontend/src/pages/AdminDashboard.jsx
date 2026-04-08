@@ -728,9 +728,23 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const fmtInput = (d) => d ? new Date(d).toISOString().slice(0, 10) : ''
 
   const defaultInvoiceNumber = record.invoiceNumber || `US-${String(Math.floor(Math.random() * 900) + 100).padStart(3,'0')}-${String(today.getFullYear()).slice(2)}`
-  const holderCount  = record.certificateHolders?.length || record.holderCountValue || 1
-  const pricePerCert = record.pricePerCertificate || record.pricePerCert || (isAirline ? 49 : 0)
-  const totalAmt     = isAirline ? (pricePerCert * holderCount) : (record.price || record.totalServiceFees || 0)
+  const holderCount = Number(
+    record.committedCount || record.holderCountValue || record.certificateHolders?.length || 1
+  ) || 1
+  const pricePerCert = Number(record.pricePerCertificate || record.pricePerCert || (isAirline ? 49 : 0))
+  const paidConfirmed = record?.isPaid === true || record?.paymentStatus === 'paid'
+
+  const fallbackTotal = isAirline
+    ? Number(record.totalAmount ?? (pricePerCert * holderCount) ?? 0)
+    : Number(record.price || record.totalServiceFees || 0)
+
+  // Always trust confirmed paid totals first to prevent under-billing invoices.
+  const paidTotal = Number(
+    record.amountPaid || record.totalAmount || record.price || record.totalServiceFees || 0
+  )
+
+  const totalAmt = paidConfirmed && paidTotal > 0 ? paidTotal : fallbackTotal
+  const unitPrice = isAirline ? Number((totalAmt / holderCount).toFixed(2)) : totalAmt
   const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
 
   // Prefer saved invoiceDraft payment method; otherwise infer from payment record.
@@ -765,17 +779,21 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
       {
         description: planDesc,
         quantity:    isAirline ? holderCount : 1,
-        unitPrice:   isAirline ? pricePerCert : totalAmt,
+        unitPrice:   isAirline ? unitPrice : totalAmt,
         totalPrice:  totalAmt,
       }
     ],
   }
 
+  const draftItems = Array.isArray(record.invoiceDraft?.lineItems) ? record.invoiceDraft.lineItems : []
+  const draftTotal = draftItems.reduce((sum, it) => sum + (Number(it?.totalPrice) || 0), 0)
+  const hasStaleDraftTotal = paidConfirmed && totalAmt > 0 && Math.abs(draftTotal - totalAmt) > 0.009
+
   const mergedInvoice = {
     ...initialInvoice,
     ...(record.invoiceDraft || {}),
-    lineItems: Array.isArray(record.invoiceDraft?.lineItems) && record.invoiceDraft.lineItems.length
-      ? record.invoiceDraft.lineItems
+    lineItems: draftItems.length && !hasStaleDraftTotal
+      ? draftItems
       : initialInvoice.lineItems,
   }
 

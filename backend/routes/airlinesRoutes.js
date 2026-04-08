@@ -44,7 +44,7 @@ router.get('/by-email', getAirlinesSubscriptionByEmail);
 router.patch('/:id/mark-paid', markAirlinesPaid);
 
 // Airline wire transfer invoice request (user action from airline step 4)
-router.patch('/:id/request-invoice', authMiddleware, requestAirlineInvoice);
+router.patch('/:id/request-invoice', requestAirlineInvoice);
 
 // Mark invoice as generated (admin only)
 router.patch('/:id/mark-invoice-generated', markAirlinesInvoiceGenerated);

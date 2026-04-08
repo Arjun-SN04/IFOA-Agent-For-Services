@@ -138,6 +138,7 @@ const INIT = {
   certificateHolders: [],
   paymentEmail: '',
   paymentStatus: 'pending',
+  paymentMethod: 'card',
   agreedToTerms: false,
 }
 
@@ -304,6 +305,10 @@ export default function AirlinesForm() {
       if (opts.returnId) return newId
       setSubmitted(true)
     } catch (e) {
+      if (opts.returnId && e?.response?.status === 409) {
+        const existingId = e?.response?.data?.data?._id || user?.registrationId || formData?._id
+        if (existingId) return existingId
+      }
       setError(e?.response?.data?.message || 'Submission failed. Please try again.')
     } finally {
       setSubmitting(false)

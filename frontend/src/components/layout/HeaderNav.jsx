@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { LayoutGroup } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { getNotifications } from '../../services/api'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
 const adminNav = [
@@ -32,9 +33,7 @@ function NavLink({ item }) {
         }`}
     >
       {active && (
-        <motion.span
-          layoutId="dashboard-nav-active-pill"
-          transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.9 }}
+        <span
           className="absolute inset-0 rounded-full"
           style={{ background: '#000021' }}
         />
@@ -50,8 +49,19 @@ export default function HeaderNav() {
   const navigate = useNavigate()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [readIds, setReadIds] = useState([])
+  const [dismissedIds, setDismissedIds] = useState([])
   const dropdownRef = useRef(null)
+  const notifRef = useRef(null)
   const nav = user?.role === 'admin' ? adminNav : userNav
+
+  const readKey = user?.id ? `ifoa_notif_read_${user.id}` : 'ifoa_notif_read_anon'
+  const dismissedKey = user?.id ? `ifoa_notif_dismissed_${user.id}` : 'ifoa_notif_dismissed_anon'
+  const visibleNotifications = notifications.filter(n => !dismissedIds.includes(n.id))
+  const unreadCount = visibleNotifications.filter(n => !readIds.includes(n.id)).length
 
   const initials = [user?.firstName?.[0], user?.lastName?.[0]]
     .filter(Boolean).join('').toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'
@@ -61,10 +71,59 @@ export default function HeaderNav() {
     const handleClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
         setDropdownOpen(false)
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(readKey) || '[]')
+      setReadIds(Array.isArray(stored) ? stored : [])
+    } catch {
+      setReadIds([])
+    }
+  }, [readKey])
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(dismissedKey) || '[]')
+      setDismissedIds(Array.isArray(stored) ? stored : [])
+    } catch {
+      setDismissedIds([])
+    }
+  }, [dismissedKey])
+
+  useEffect(() => {
+    if (!user) return
+
+    let active = true
+    let timer
+
+    const loadNotifications = async (isInitial = false) => {
+      try {
+        if (isInitial) setNotifLoading(true)
+        const res = await getNotifications({ limit: 20 })
+        if (!active) return
+        const incoming = res?.data?.notifications || []
+        setNotifications(incoming)
+      } catch {
+        if (active) setNotifications([])
+      } finally {
+        if (active && isInitial) setNotifLoading(false)
+      }
+    }
+
+    loadNotifications(true)
+    timer = setInterval(() => loadNotifications(false), 15000)
+
+    return () => {
+      active = false
+      if (timer) clearInterval(timer)
+    }
+  }, [user])
 
   useEffect(() => {
     const handleResize = () => { if (window.innerWidth >= 768) setMobileOpen(false) }
@@ -75,7 +134,41 @@ export default function HeaderNav() {
   useEffect(() => {
     setDropdownOpen(false)
     setMobileOpen(false)
+    setNotifOpen(false)
   }, [pathname])
+
+  const markAllRead = () => {
+    const ids = visibleNotifications.map(n => n.id)
+    setReadIds(ids)
+    localStorage.setItem(readKey, JSON.stringify(ids))
+  }
+
+  const clearAllNotifications = () => {
+    const ids = Array.from(new Set([...dismissedIds, ...visibleNotifications.map(n => n.id)]))
+    setDismissedIds(ids)
+    localStorage.setItem(dismissedKey, JSON.stringify(ids))
+  }
+
+  const openNotification = (item) => {
+    const next = Array.from(new Set([...readIds, item.id]))
+    setReadIds(next)
+    localStorage.setItem(readKey, JSON.stringify(next))
+    setNotifOpen(false)
+    if (item.link) navigate(item.link)
+  }
+
+  const notifTone = (severity) => {
+    if (severity === 'high') return 'border-red-200 bg-red-50 text-red-700'
+    if (severity === 'warn') return 'border-amber-200 bg-amber-50 text-amber-700'
+    if (severity === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    return 'border-blue-200 bg-blue-50 text-blue-700'
+  }
+
+  const fmtNotifTime = (dateVal) => {
+    const d = new Date(dateVal)
+    if (Number.isNaN(d.getTime())) return 'Just now'
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
 
   const handleLogout = () => {
     setDropdownOpen(false)
@@ -104,9 +197,11 @@ export default function HeaderNav() {
           </Link>
 
           {/* Centre nav — pills */}
-          <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100 transition-all duration-300">
-            {nav.map(item => <NavLink key={item.to} item={item} />)}
-          </nav>
+          <LayoutGroup id="header-nav-pills">
+            <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100 transition-all duration-300">
+              {nav.map(item => <NavLink key={item.to} item={item} />)}
+            </nav>
+          </LayoutGroup>
 
           {/* Right side */}
           <div className="flex items-center gap-2 ml-auto">
@@ -129,6 +224,86 @@ export default function HeaderNav() {
                 {user.role}
               </span>
             )}
+
+            {/* Notifications */}
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => {
+                  setNotifOpen(o => !o)
+                  if (!notifOpen) markAllRead()
+                }}
+                className="relative w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-all"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <svg className="w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V10a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9" />
+                </svg>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-[3px] rounded-full bg-red-600 text-white text-[9px] leading-[14px] font-black">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="dd-in absolute right-0 top-[calc(100%+8px)] w-[360px] max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Notifications</p>
+                      <p className="text-[11px] text-slate-500">Live updates for your account</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={markAllRead}
+                        className="text-[11px] font-bold text-blue-600 hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                      <button
+                        onClick={clearAllNotifications}
+                        className="text-[11px] font-bold text-slate-600 hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[360px] overflow-y-auto p-2 space-y-1">
+                    {notifLoading && (
+                      <div className="px-3 py-6 text-sm text-slate-400 text-center">Loading notifications...</div>
+                    )}
+
+                    {!notifLoading && visibleNotifications.length === 0 && (
+                      <div className="px-3 py-8 text-center">
+                        <p className="text-sm font-semibold text-slate-600">No notifications</p>
+                        <p className="text-xs text-slate-400 mt-1">You are all caught up.</p>
+                      </div>
+                    )}
+
+                    {!notifLoading && visibleNotifications.map((n) => {
+                      const isRead = readIds.includes(n.id)
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => openNotification(n)}
+                          className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all hover:border-slate-300 ${notifTone(n.severity)} ${isRead ? 'opacity-75' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black uppercase tracking-wider">{n.title}</p>
+                              <p className="text-sm font-medium mt-1 leading-snug">{n.message}</p>
+                              <p className="text-[11px] mt-1.5 opacity-80">{fmtNotifTime(n.createdAt)}</p>
+                            </div>
+                            {!isRead && <span className="w-2 h-2 rounded-full bg-red-500 mt-2 flex-shrink-0" />}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Avatar dropdown */}
             <div className="relative" ref={dropdownRef}>
