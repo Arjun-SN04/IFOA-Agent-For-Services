@@ -83,6 +83,8 @@ const AirlinesSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  // True only after payment is completed (card confirm or wire marked paid).
+  isFormCompleted: { type: Boolean, default: false, index: true },
   isPaid:        { type: Boolean, default: false, index: true },  // true only after Payment record confirmed
   paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' }, // link to Payment doc
   invoiceStatus: { type: String },

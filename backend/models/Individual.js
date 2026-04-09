@@ -58,6 +58,8 @@ const IndividualSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  // True only after payment is completed (card confirm or wire marked paid).
+  isFormCompleted: { type: Boolean, default: false, index: true },
   isPaid:        { type: Boolean, default: false, index: true },
   paymentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
   invoiceStatus: { type: String },

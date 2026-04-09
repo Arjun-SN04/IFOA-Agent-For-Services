@@ -173,6 +173,7 @@ function buildAirlinePayload(raw) {
     country: String(pick(src, ['country', 'Country'], '')).trim(),
     paymentEmail: String(src.paymentEmail || email).toLowerCase().trim(),
     paymentStatus,
+    isFormCompleted: paid,
     isPaid: paid,
     status,
     agreedToTerms: src.agreedToTerms === undefined ? true : toBool(src.agreedToTerms, true),
@@ -476,7 +477,7 @@ exports.getAirlinesSubscriptionById = async (req, res) => {
 exports.updateAirlinesSubscription = async (req, res) => {
   try {
     const allowedFields = [
-      'status', 'paymentStatus', 'isPaid',
+      'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
       'subscriptionPlan', 'subscriptionDate', 'expirationDate',
       'holderCount', 'holderCountValue', 'committedCount',
       'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
@@ -501,6 +502,14 @@ exports.updateAirlinesSubscription = async (req, res) => {
 
     if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
     if (payload.pointOfContactEmail) payload.pointOfContactEmail = String(payload.pointOfContactEmail).toLowerCase().trim();
+
+    // Keep completion flag in sync when payment state is explicitly changed.
+    if (payload.paymentStatus === 'paid' || payload.isPaid === true) {
+      payload.isFormCompleted = true;
+    }
+    if (payload.paymentStatus === 'failed' || payload.isPaid === false) {
+      payload.isFormCompleted = false;
+    }
 
     let doc = await Airlines.findByIdAndUpdate(
       req.params.id, payload, { new: true, runValidators: false },
@@ -581,6 +590,7 @@ exports.markAirlinesPaid = async (req, res) => {
     const update = {
       paymentStatus:    'paid',
       isPaid:           true,
+      isFormCompleted:  true,
       status:           'Active',
       subscriptionDate: now,
       invoiceStatus:    'Paid',

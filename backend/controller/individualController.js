@@ -141,6 +141,7 @@ function buildIndividualPayload(raw) {
 
     paymentEmail: String(pick(src, ['paymentEmail', 'Email'], email)).toLowerCase().trim(),
     paymentStatus,
+    isFormCompleted: paid,
     isPaid: paid,
     invoiceStatus: pick(src, ['invoiceStatus', 'Invoice'], paid ? 'Paid' : 'Pending'),
     invoiceNumber: pick(src, ['invoiceNumber', 'Invoice Number'], ''),
@@ -370,7 +371,7 @@ exports.getIndividualById = async (req, res) => {
 exports.updateIndividual = async (req, res) => {
   try {
     const allowedFields = [
-      'status', 'paymentStatus', 'isPaid',
+      'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
       'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',
       'price', 'totalServiceFees',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
@@ -393,6 +394,14 @@ exports.updateIndividual = async (req, res) => {
     });
 
     if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
+
+    // Keep completion flag in sync when payment state is explicitly changed.
+    if (payload.paymentStatus === 'paid' || payload.isPaid === true) {
+      payload.isFormCompleted = true;
+    }
+    if (payload.paymentStatus === 'failed' || payload.isPaid === false) {
+      payload.isFormCompleted = false;
+    }
 
     const individual = await Individual.findByIdAndUpdate(
       req.params.id,
@@ -448,6 +457,7 @@ exports.markIndividualPaid = async (req, res) => {
     const update = {
       paymentStatus: 'paid',
       isPaid:        true,
+      isFormCompleted: true,
       status:        'Active',
       subscriptionDate: now,
       invoiceStatus: 'Paid',

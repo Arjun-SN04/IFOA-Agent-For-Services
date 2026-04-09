@@ -115,6 +115,7 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   const update = {
     paymentStatus:         'paid',
     isPaid:                true,
+    isFormCompleted:       true,
     status:                'Active',
     subscriptionDate:      now,
     invoiceStatus:         'Paid',
@@ -428,7 +429,7 @@ exports.stripeWebhook = async (req, res) => {
         if (doc && !doc.isPaid && Model) {
           await Model.findByIdAndUpdate(
             registrationId,
-            { $set: { paymentStatus: 'failed', status: 'Inactive' } },
+            { $set: { paymentStatus: 'failed', isFormCompleted: false, status: 'Inactive' } },
           );
         }
         // Upsert a failed Payment record for audit trail

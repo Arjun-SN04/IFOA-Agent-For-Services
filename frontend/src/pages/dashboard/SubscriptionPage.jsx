@@ -698,6 +698,8 @@ export default function SubscriptionPage() {
 
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
+    const basePath = isAirline ? '/airlines' : '/individuals'
+    const modelName = isAirline ? 'Airlines' : 'Individual'
 
     const mergeAndSort = (...groups) => {
       const seen = new Set()
@@ -713,7 +715,7 @@ export default function SubscriptionPage() {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     }
 
-    const fetchByIds = async (basePath) => {
+    const fetchByIds = async () => {
       const ids = [...(user.subscriptionIds || [])]
       if (user.registrationId) {
         const regId = user.registrationId?.toString()
@@ -731,75 +733,19 @@ export default function SubscriptionPage() {
 
     const load = async () => {
       try {
-        if (isAirline) {
-          // ── Strategy: fetch by subscriptionIds array first (most reliable),
-          //   then merge in any email-matched records as a fallback/catch-all.
-          const allById = []
+        const emailPromise = user.email
+          ? API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+              .then((r) => r.data.all || (r.data.data ? [r.data.data] : []))
+              .catch(() => [])
+          : Promise.resolve([])
 
-          // 1. Fetch every ID stored in user.subscriptionIds
-          const storedIds = user.subscriptionIds || []
-          if (user.registrationId) {
-            const regIdStr = user.registrationId?.toString()
-            if (!storedIds.map(i => i.toString()).includes(regIdStr)) {
-              storedIds.push(user.registrationId)
-            }
-          }
-
-          if (storedIds.length > 0) {
-            const fetched = await Promise.allSettled(
-              storedIds.map(id => API.get(`/airlines/${id}`, { headers }))
-            )
-            fetched.forEach(r => {
-              if (r.status === 'fulfilled' && r.value?.data?.data) {
-                allById.push(r.value.data.data)
-              }
-            })
-          }
-
-          // 2. Also fetch by email to catch older/unlinked subscriptions
-          let emailSubs = []
-          if (user.email) {
-            try {
-              const r2 = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-              emailSubs = r2.data.all || (r2.data.data ? [r2.data.data] : [])
-            } catch (_) {}
-          }
-
-          // 3. Merge, deduplicate by _id, sort newest first
-          const seen = new Set()
-          const merged = [...allById, ...emailSubs].filter(s => {
-            const key = s._id?.toString()
-            if (!key || seen.has(key)) return false
-            seen.add(key)
-            return true
-          }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-
-          setSubs(merged)
-          setSub(merged[0] || null)
-
-          // 4. Auto-link if first time (no registrationId yet)
-          if (!user.registrationId && merged[0]?._id) {
-            try { await linkRegistration(merged[0]._id, 'Airlines') } catch (_) {}
-          }
-          return
-        }
-
-        // Individual: fetch all subscriptions via stored IDs + email fallback.
-        const idSubs = await fetchByIds('/individuals')
-        let emailSubs = []
-        if (user.email) {
-          try {
-            const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-            emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
-          } catch {}
-        }
-
+        const [idSubs, emailSubs] = await Promise.all([fetchByIds(), emailPromise])
         const merged = mergeAndSort(idSubs, emailSubs)
         setSubs(merged)
         setSub(merged[0] || null)
 
         if (!user.registrationId && merged[0]?._id) {
-          try { await linkRegistration(merged[0]._id, 'Individual') } catch (_) {}
+          try { await linkRegistration(merged[0]._id, modelName) } catch { void 0 }
         }
       } catch {
         setSubs([])
@@ -810,7 +756,7 @@ export default function SubscriptionPage() {
     }
 
     load()
-  }, [user, token])
+  }, [user, token, linkRegistration])
 
   return (
     <DashboardLayout>

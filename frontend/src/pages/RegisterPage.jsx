@@ -106,6 +106,35 @@ function hydrateAirlineFormFromExisting(existing) {
   }
 }
 
+function hydrateIndividualFormFromExisting(existing) {
+  if (!existing) return null
+  return {
+    subscriptionPlan: existing.subscriptionPlan || INDIVIDUAL_INIT.subscriptionPlan,
+    price: Number(existing.price ?? existing.totalAmount ?? existing.totalServiceFees ?? INDIVIDUAL_INIT.price),
+    firstName: existing.firstName || '',
+    lastName: existing.lastName || '',
+    middleName: existing.middleName || '',
+    dateOfBirth: existing.dateOfBirth ? String(existing.dateOfBirth).slice(0, 10) : '',
+    addressLine1: existing.addressLine1 || '',
+    city: existing.city || '',
+    state: existing.state || '',
+    postalCode: existing.postalCode || '',
+    country: existing.country || '',
+    phone: existing.phone || '',
+    email: existing.email || '',
+    primaryAirmanCertificate: existing.primaryAirmanCertificate || 'EXISTING',
+    primaryCertificate: existing.primaryCertificate || '',
+    iacraTrackingNumber: existing.iacraTrackingNumber || '',
+    hasSecondaryCertificate: !!existing.hasSecondaryCertificate,
+    secondaryCertificate: existing.secondaryCertificate || '',
+    secondaryFaaCertificateNumber: existing.secondaryFaaCertificateNumber || '',
+    secondaryIacraTrackingNumber: existing.secondaryIacraTrackingNumber || '',
+    paymentEmail: existing.paymentEmail || existing.email || '',
+    agreedToTerms: true,
+    _id: existing._id,
+  }
+}
+
 const SERVICE_CONTACT = [
   { label: 'Company', value: 'IFOA USA Corp' },
   { label: 'Address', value: '1616 Concierge Blvd Suite 100, Daytona Beach, FL 32117, USA' },
@@ -299,7 +328,7 @@ function ExistingFormBanner({ regType }) {
         </div>
         <div className="flex-1">
           <p className="text-sm font-black mb-1" style={{ color: '#1e3a8a' }}>
-            {isIndividual ? 'You already submitted your Individual form' : 'You already submitted your Company form'}
+            {isIndividual ? 'Your Individual form is already filled' : 'Your Company form is already filled'}
           </p>
           <p className="text-xs leading-relaxed" style={{ color: '#1d4ed8' }}>
             You cannot submit a new registration again. Please edit your submitted form from your Subscription dashboard.
@@ -321,9 +350,46 @@ function ExistingFormBanner({ regType }) {
   )
 }
 
+function ExistingOrderSummary({ regType, data }) {
+  const isIndividual = regType === 'individual'
+  const money = (n) => {
+    const value = Number(n || 0)
+    return Number.isFinite(value) ? `$${value.toFixed(2)} USD` : '$0.00 USD'
+  }
+
+  return (
+    <div className="rounded-3xl border px-6 py-5" style={{ background: '#ffffff', borderColor: '#e5e7eb' }}>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-3" style={{ color: '#64748b' }}>Order Summary</p>
+      <div className="space-y-2 text-sm">
+        {isIndividual ? (
+          <>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Plan</span><span className="font-semibold text-slate-800">{data.subscriptionPlan || '1 Year Subscription Plan'}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Primary Certificate</span><span className="font-semibold text-slate-800">{data.primaryCertificate || 'Not specified'}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Certificate Status</span><span className="font-semibold text-slate-800">{data.primaryAirmanCertificate || 'EXISTING'}</span></div>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2"><span className="text-slate-500">Total</span><span className="font-black text-slate-900">{money(data.price)}</span></div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Plan</span><span className="font-semibold text-slate-800">{data.subscriptionPlan || '1 Year Subscription Plan'}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Price / Certificate</span><span className="font-semibold text-slate-800">{money(data.pricePerCertificate)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Committed Holders</span><span className="font-semibold text-slate-800">{Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">Current Holders Added</span><span className="font-semibold text-slate-800">{data.certificateHolders?.length || 0}</span></div>
+            <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2"><span className="text-slate-500">Total</span><span className="font-black text-slate-900">{money(data.totalAmount || (Number(data.pricePerCertificate || 0) * Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0)))}</span></div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const isRecordCompleted = (record) => {
+  if (!record) return false
+  return record.isFormCompleted === true || (record.isFormCompleted == null && (record.isPaid === true || record.paymentStatus === 'paid'))
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RegisterPage() {
-  const { user, linkRegistration, addSubscription } = useAuth()
+  const { user, token, linkRegistration, addSubscription } = useAuth()
 
   const [regType, setRegType] = useState('individual')
   const [switchDirection, setSwitchDirection] = useState(1)
@@ -349,17 +415,33 @@ export default function RegisterPage() {
   const isAirBlocked = user?.role === 'individual'
   const [hasIndividualSubmission, setHasIndividualSubmission] = useState(false)
   const [hasAirlineSubmission, setHasAirlineSubmission] = useState(false)
+  const [existingIndividualRecord, setExistingIndividualRecord] = useState(null)
+  const [existingAirlineRecord, setExistingAirlineRecord] = useState(null)
   const hasExistingSubmissionForType = regType === 'individual' ? hasIndividualSubmission : hasAirlineSubmission
 
-  const checkExistingSubmission = useCallback(async (type) => {
-    if (!user) return false
+  const findExistingSubmission = useCallback(async (type) => {
+    if (!user) return null
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
-    const targetModel = type === 'individual' ? 'Individual' : 'Airlines'
     const endpointBase = type === 'individual' ? 'individuals' : 'airlines'
 
-    // If the account is currently linked to another model, do not block this form type.
-    if (user?.registrationModel && user.registrationModel !== targetModel) {
-      return false
+    // First, check all linked IDs for this model path. This is the fastest and most reliable signal.
+    const ids = [...(user.subscriptionIds || [])]
+    if (user.registrationId) {
+      const regId = String(user.registrationId)
+      if (!ids.map((i) => String(i)).includes(regId)) ids.push(user.registrationId)
+    }
+
+    if (ids.length > 0) {
+      const probes = await Promise.allSettled(
+        ids.map((id) => axios.get(`${BASE_URL}/${endpointBase}/${id}`, { headers }))
+      )
+      const byId = probes
+        .filter((p) => p.status === 'fulfilled' && p.value?.data?.data)
+        .map((p) => p.value.data.data)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      const completedById = byId.filter(isRecordCompleted)
+      if (completedById.length > 0) return completedById[0]
     }
 
     // Fallback by email for older accounts that may not have linked ids.
@@ -367,14 +449,21 @@ export default function RegisterPage() {
     try {
       const byEmail = await axios.get(`${BASE_URL}/${endpointBase}/by-email`, {
         params: { email: user.email },
+        headers,
       })
-      return Boolean(byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) && byEmail.data.all.length > 0))
+      if (Array.isArray(byEmail?.data?.all) && byEmail.data.all.length > 0) {
+        const completed = byEmail.data.all
+          .filter(isRecordCompleted)
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        return completed[0] || null
+      }
+      return isRecordCompleted(byEmail?.data?.data) ? byEmail.data.data : null
     } catch (e) {
       // 404 by-email means no existing submission for this email.
-      if (e?.response?.status === 404) return false
-      return false
+      if (e?.response?.status === 404) return null
+      return null
     }
-  }, [user])
+  }, [user, token])
 
   useEffect(() => {
     let cancelled = false
@@ -389,31 +478,33 @@ export default function RegisterPage() {
       }
 
       if (user.role === 'individual') {
-        const exists = await checkExistingSubmission('individual')
-        if (!cancelled) setHasIndividualSubmission(exists)
-      } else if (user.role === 'airline') {
-        const exists = await checkExistingSubmission('airline')
-        if (!cancelled) setHasAirlineSubmission(exists)
+        const existing = await findExistingSubmission('individual')
+        if (!cancelled) {
+          setHasIndividualSubmission(!!existing)
+          setExistingIndividualRecord(existing || null)
+        }
 
-        if (exists && user?.email) {
-          try {
-            const byEmail = await axios.get(`${BASE_URL}/airlines/by-email`, {
-              params: { email: user.email },
-            })
-            if (cancelled) return
-            const existing = byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) ? byEmail.data.all[0] : null)
-            const hydrated = hydrateAirlineFormFromExisting(existing)
-            if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
-          } catch {
-            void 0
-          }
+        if (existing) {
+          const hydrated = hydrateIndividualFormFromExisting(existing)
+          if (hydrated && !cancelled) setIndData((prev) => ({ ...prev, ...hydrated }))
+        }
+      } else if (user.role === 'airline') {
+        const existing = await findExistingSubmission('airline')
+        if (!cancelled) {
+          setHasAirlineSubmission(!!existing)
+          setExistingAirlineRecord(existing || null)
+        }
+
+        if (existing) {
+          const hydrated = hydrateAirlineFormFromExisting(existing)
+          if (hydrated && !cancelled) setAirData((prev) => ({ ...prev, ...hydrated }))
         }
       }
     }
 
     run()
     return () => { cancelled = true }
-  }, [user, checkExistingSubmission])
+  }, [user, token, findExistingSubmission])
 
   useEffect(() => {
     if (regType === 'individual' && hasIndividualSubmission && indStep < 4) {
@@ -444,7 +535,7 @@ export default function RegisterPage() {
   const updateAir = (fields) => setAirData(prev => ({ ...prev, ...fields }))
 
   const handleIndSubmit = async (opts = {}) => {
-    if (await checkExistingSubmission('individual')) {
+    if (await findExistingSubmission('individual')) {
       setHasIndividualSubmission(true)
       setIndError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
       return null
@@ -496,6 +587,7 @@ export default function RegisterPage() {
       try {
         const byEmail = await axios.get(`${BASE_URL}/airlines/by-email`, {
           params: { email: user.email },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         const existing = byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) ? byEmail.data.all[0] : null)
         if (existing?._id) {
@@ -571,8 +663,10 @@ export default function RegisterPage() {
   const step      = regType === 'individual' ? indStep : airStep
   const activeStep = STEPS[step - 1]
   const progress  = Math.round((step / STEPS.length) * 100)
-  const showExistingBanner = hasExistingSubmissionForType && step < 4
-  const showExistingInlineWarning = hasExistingSubmissionForType && step === 4
+  const showExistingSummaryOnly = hasExistingSubmissionForType
+  const existingSummaryData = regType === 'individual'
+    ? (existingIndividualRecord ? hydrateIndividualFormFromExisting(existingIndividualRecord) : indData)
+    : (existingAirlineRecord ? hydrateAirlineFormFromExisting(existingAirlineRecord) : airData)
 
   const handleNextToStep2 = () => {
     if (regType === 'individual' ? isIndBlocked : isAirBlocked) return
@@ -762,11 +856,13 @@ export default function RegisterPage() {
 
               {/* Form body */}
               <div className="px-8 py-8">
-                {showExistingBanner ? (
-                  <ExistingFormBanner regType={regType} />
+                {showExistingSummaryOnly ? (
+                  <div className="space-y-4">
+                    <ExistingFormBanner regType={regType} />
+                    <ExistingOrderSummary regType={regType} data={existingSummaryData} />
+                  </div>
                 ) : (
                   <div className="space-y-4">
-                    {showExistingInlineWarning && <ExistingFormBanner regType={regType} />}
                     <AnimatePresence mode="wait">
                       <Motion.div
                         key={`${regType}-${step}`}

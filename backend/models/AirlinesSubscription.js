@@ -58,6 +58,7 @@ const AirlinesSubscriptionSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed'],
     default: 'pending',
   },
+  isFormCompleted: { type: Boolean, default: false, index: true },
 
   agreedToTerms: { type: Boolean, required: true },
   submittedAt: { type: Date, default: Date.now },
