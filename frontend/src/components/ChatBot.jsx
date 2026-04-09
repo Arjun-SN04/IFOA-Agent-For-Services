@@ -588,7 +588,7 @@ export default function ChatBot() {
                     onClick={() => {
                       if (tab.id === 'home') setView('home')
                       else if (tab.id === 'chat') { setInitialQuestion(null); setView('chat') }
-                      else setView('article')
+                      else if (tab.id === 'help') { setInitialQuestion(null); setView('chat') }
                     }}
                     className="flex-1 flex flex-col items-center gap-1 py-3 transition-colors"
                     style={{ color: (view === tab.id || (tab.id === 'help' && view === 'article')) ? '#000' : '#9ca3af' }}

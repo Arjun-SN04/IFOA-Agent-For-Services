@@ -861,7 +861,6 @@ exports.getSignUpAirlines = async (req, res) => {
 // ── Admin: Create airline form with new User account ───────────────────────────
 exports.adminCreateAirlineForm = async (req, res) => {
   try {
-    const User = require('../models/User');
     const body = { ...req.body };
 
     // Normalize emails

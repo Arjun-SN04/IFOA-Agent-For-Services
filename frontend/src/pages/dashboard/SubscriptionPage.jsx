@@ -24,6 +24,13 @@ const CERTIFICATE_TYPES = [
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
 
+// Attach JWT token to every request from this local API instance
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem('ifoa_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
 // Fetch the server-stored Payment record for a registration
 async function fetchPaymentRecord(registrationId, token) {
   try {
@@ -123,6 +130,10 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
           faaCertificateNumber: h.faaCertificateNumber || '',
           iacraFtnNumber: h.iacraFtnNumber || '',
           email: h.email || '',
+          hasSecondaryCertificate: !!h.hasSecondaryCertificate,
+          secondaryCertificateType: h.secondaryCertificateType || '',
+          secondaryFaaCertificateNumber: h.secondaryFaaCertificateNumber || '',
+          secondaryIacraFtnNumber: h.secondaryIacraFtnNumber || '',
         })),
       }
     }
@@ -333,6 +344,26 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                         <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
                         <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="IACRA FTN #" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
                       </div>
+
+                      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={!!h.hasSecondaryCertificate}
+                          onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
+                        />
+                        This user has a secondary FAA certificate
+                      </label>
+
+                      {h.hasSecondaryCertificate && (
+                        <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                          <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.secondaryCertificateType || ''} onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}>
+                            <option value="">Secondary Certificate Type</option>
+                            {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Secondary FAA Certificate #" value={h.secondaryFaaCertificateNumber || ''} onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)} />
+                          <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs sm:col-span-2" placeholder="Secondary IACRA FTN #" value={h.secondaryIacraFtnNumber || ''} onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)} />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -396,18 +427,34 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
   const API = axios.create({ baseURL: BASE_URL })
+  API.interceptors.request.use((config) => {
+    const t = localStorage.getItem('ifoa_token')
+    if (t) config.headers.Authorization = `Bearer ${t}`
+    return config
+  })
 
   const currentCount = sub.certificateHolders?.length || 0
   const committedCount = sub.committedCount || currentCount
   const remainingSlots = committedCount - currentCount
-  const pricePerCert = sub.pricePerCertificate || 0
+  const existingHolders = sub.certificateHolders || []
 
-  const [holders, setHolders] = useState([{ ...EMPTY_HOLDER }])
+  const [holders, setHolders] = useState(() => {
+    if (existingHolders.length > 0) {
+      return existingHolders.map((h) => ({
+        ...EMPTY_HOLDER,
+        ...h,
+        dateOfBirth: h.dateOfBirth ? String(h.dateOfBirth).slice(0, 10) : '',
+      }))
+    }
+    return [{ ...EMPTY_HOLDER }]
+  })
   const [errors, setErrors] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState('')
 
-  const atLimit = holders.length >= remainingSlots
+  const existingCount = existingHolders.length
+  const newMembersCount = Math.max(0, holders.length - existingCount)
+  const atLimit = newMembersCount >= remainingSlots
 
   const onChange = (i, field, val) =>
     setHolders(prev => prev.map((h, idx) => idx === i ? { ...h, [field]: val } : h))
@@ -417,11 +464,21 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   }
 
   const removeRow = (i) => {
+    // Existing rows can be edited but not removed from this modal.
+    if (i < existingCount) return
     if (holders.length > 1) setHolders(prev => prev.filter((_, idx) => idx !== i))
   }
 
-  const validate = () => {
-    const errs = holders.map(h => {
+  const isHolderEmpty = (h) =>
+    !h.fullName?.trim() &&
+    !h.dateOfBirth &&
+    !h.certificateType &&
+    !h.iacraFtnNumber?.trim() &&
+    !h.faaCertificateNumber?.trim() &&
+    !h.email?.trim()
+
+  const validate = (rows) => {
+    const errs = rows.map(h => {
       const e = {}
       if (!h.fullName?.trim()) e.fullName = 'Required'
       if (!h.dateOfBirth) e.dateOfBirth = 'Required'
@@ -434,11 +491,20 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   }
 
   const handleSubmit = async () => {
-    if (!validate()) return
+    const cleaned = holders.filter((h) => !isHolderEmpty(h))
+    if (cleaned.length === 0) {
+      setApiError('Add at least one member.')
+      return
+    }
+    if (cleaned.length > committedCount) {
+      setApiError(`You selected ${committedCount} committed slot${committedCount !== 1 ? 's' : ''}.`) 
+      return
+    }
+    if (!validate(cleaned)) return
     setSubmitting(true)
     setApiError('')
     try {
-      const res = await API.patch(`/airlines/${sub._id}/add-holders`, { newHolders: holders })
+      const res = await API.put(`/airlines/${sub._id}`, { certificateHolders: cleaned })
       onSuccess(res.data)
     } catch (err) {
       setApiError(err.response?.data?.message || 'Something went wrong')
@@ -447,7 +513,6 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
     }
   }
 
-  const extraDue = pricePerCert * holders.length
   const inp = (err) => `w-full px-3 py-2 border rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-600/15 ${err ? 'border-red-300 bg-red-50/30' : 'border-gray-200 focus:border-blue-600'}`
 
   return (
@@ -458,7 +523,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
           <div>
             <h2 className="text-base font-black text-gray-900">Add Team Members</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              {remainingSlots} slot{remainingSlots !== 1 ? 's' : ''} remaining · ${pricePerCert}/cert
+              {remainingSlots} slot{remainingSlots !== 1 ? 's' : ''} remaining · already covered by your committed plan
             </p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
@@ -468,8 +533,11 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
 
         {/* Cost banner */}
         <div className="mx-6 mt-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm flex items-center justify-between">
-          <span className="text-blue-700 font-semibold">Adding {holders.length} member{holders.length !== 1 ? 's' : ''}</span>
-          <span className="font-black text-blue-900">Amount due: <span className="text-green-700">${extraDue} USD</span></span>
+          <span className="text-blue-700 font-semibold">
+            {existingCount > 0
+              ? `Editing ${existingCount} existing member${existingCount !== 1 ? 's' : ''}${newMembersCount > 0 ? ` + adding ${newMembersCount}` : ''}`
+              : `Adding ${holders.length} member${holders.length !== 1 ? 's' : ''}`}
+          </span>
         </div>
 
         {/* Holder forms */}
@@ -478,7 +546,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
             <div key={i} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Member #{i + 1}</span>
-                <button onClick={() => removeRow(i)} disabled={holders.length <= 1}
+                <button onClick={() => removeRow(i)} disabled={holders.length <= 1 || i < existingCount}
                   className="w-6 h-6 flex items-center justify-center rounded-full text-red-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-25">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -587,7 +655,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
             className={`w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold transition-all ${
               atLimit ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400'
             }`}>
-            + Add Another Member {atLimit ? `(max ${remainingSlots})` : `(${holders.length}/${remainingSlots})`}
+            + Add Another Member {atLimit ? `(max ${remainingSlots})` : `(${newMembersCount}/${remainingSlots})`}
           </button>
 
           {apiError && (
@@ -600,7 +668,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
           <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition-all">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting}
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50">
-            {submitting ? 'Saving…' : `Submit & Pay ${extraDue} USD`}
+            {submitting ? 'Saving…' : 'Add Members'}
           </button>
         </div>
       </div>

@@ -33,16 +33,16 @@ router.post('/admin/create-form', authMiddleware, requireAdmin, adminCreateIndiv
 router.post('/admin/import-excel', authMiddleware, requireAdmin, upload.single('file'), adminImportIndividualsFromExcel);
 
 // ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
-router.get('/export/excel', exportToExcel);
+router.get('/export/excel', authMiddleware, requireAdmin, exportToExcel);
 
 // Email lookup
-router.get('/by-email', getIndividualByEmail);
+router.get('/by-email', authMiddleware, getIndividualByEmail);
 
 // Mark as paid immediately after Stripe payment completes on the frontend
-router.patch('/:id/mark-paid', markIndividualPaid);
+router.patch('/:id/mark-paid', authMiddleware, markIndividualPaid);
 
 // Mark invoice as generated (admin only)
-router.patch('/:id/mark-invoice-generated', markInvoiceGenerated);
+router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
 
 // Admin CRUD
 router.get('/', getAllIndividuals);

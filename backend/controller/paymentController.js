@@ -161,7 +161,9 @@ exports.createPaymentIntent = async (req, res) => {
         message: 'This subscription is already paid.',
       });
 
-    const amountDollars = doc.price || doc.totalAmount || doc.totalServiceFees || 0;
+    const amountDollars = (registrationModel === 'Individual')
+      ? (doc.price || doc.totalAmount || 0)
+      : (doc.totalAmount || doc.totalServiceFees || 0);
     const amountCents   = Math.round(amountDollars * 100);
     if (amountCents <= 0)
       return res.status(400).json({ success: false, message: 'Invalid payment amount.' });

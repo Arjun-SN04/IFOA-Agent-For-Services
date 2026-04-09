@@ -43,6 +43,8 @@ export const deleteAirlinesSubscription     = (id)       => API.delete(`/airline
 export const markAirlinesPaid               = (id)       => API.patch(`/airlines/${id}/mark-paid`)
 export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
 export const exportAirlinesExcel            = ()         => `${BASE_URL}/airlines/export/excel`
+export const createAdminAirlineForm         = (data)     => API.post('/airlines/admin/create-form', data)
+export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines/${id}/request-invoice`, data)
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
 // Create a Stripe PaymentIntent — returns { success, clientSecret, amount, currency }

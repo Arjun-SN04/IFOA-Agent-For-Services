@@ -138,6 +138,8 @@ export default function SettingsPage() {
               <div className="relative">
                 <input
                   type={showCurrentPwd ? 'text' : 'password'}
+                  name="settings-current-password"
+                  autoComplete="off"
                   placeholder="Enter your current password"
                   value={currentPwd}
                   onChange={e => setCurrentPwd(e.target.value)}
@@ -161,7 +163,9 @@ export default function SettingsPage() {
                 <Field label="New Email Address" error={errors.newEmail} helper="Leave blank to keep your current email">
                   <input
                     type="email"
-                    placeholder={user?.email || 'new@example.com'}
+                    name="settings-new-email"
+                    autoComplete="off"
+                    placeholder="Enter new email address"
                     value={newEmail}
                     onChange={e => setNewEmail(e.target.value)}
                     className={inputCls(!!errors.newEmail)}
@@ -173,6 +177,8 @@ export default function SettingsPage() {
                   <div className="relative">
                     <input
                       type={showNewPwd ? 'text' : 'password'}
+                      name="settings-new-password"
+                      autoComplete="new-password"
                       placeholder="New password (min 8 chars)"
                       value={newPwd}
                       onChange={e => setNewPwd(e.target.value)}
@@ -193,6 +199,8 @@ export default function SettingsPage() {
                   <Field label="Confirm New Password" error={errors.confirmPwd}>
                     <input
                       type="password"
+                      name="settings-confirm-new-password"
+                      autoComplete="new-password"
                       placeholder="Confirm new password"
                       value={confirmPwd}
                       onChange={e => setConfirmPwd(e.target.value)}

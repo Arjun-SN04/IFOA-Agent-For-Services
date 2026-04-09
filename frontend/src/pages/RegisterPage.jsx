@@ -591,7 +591,7 @@ export default function RegisterPage() {
       </AnimatePresence>
 
       {/* ── Full-height two-column layout ─────────────────────────────────── */}
-      <div className="flex min-h-screen" style={{ background: '#f8fafc' }}>
+      <div className="flex h-screen overflow-hidden" style={{ background: '#f8fafc' }}>
 
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
         <div ref={scrollContainerRef} className="flex-1 h-screen flex flex-col overflow-y-auto">
