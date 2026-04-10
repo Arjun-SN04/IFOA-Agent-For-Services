@@ -312,13 +312,12 @@ exports.createAirlinesSubscription = async (req, res) => {
       : holdersFilled;
 
     // totalAmount = full amount for all committed slots (even if not all filled yet)
-    body.totalAmount = isUnlimited
-      ? body.pricePerCertificate
-      : body.pricePerCertificate * body.committedCount;
+    // Unlimited Plan uses the same formula: pricePerCert × committedCount
+    body.totalAmount = body.pricePerCertificate * body.committedCount;
 
     // amountPaid = amount for holders actually submitted now
     body.amountPaid = isUnlimited
-      ? body.pricePerCertificate
+      ? body.pricePerCertificate * body.committedCount
       : body.pricePerCertificate * holdersFilled;
 
     const doc = new Airlines(body);
@@ -340,11 +339,30 @@ exports.addHoldersToSubscription = async (req, res) => {
     if (!Array.isArray(newHolders) || newHolders.length === 0)
       return res.status(400).json({ success: false, message: 'newHolders array is required' });
 
-    if (doc.subscriptionPlan === 'Unlimited Plan')
-      return res.status(400).json({
-        success: false,
-        message: 'Unlimited plan — no per-holder billing applies',
+    if (doc.subscriptionPlan === 'Unlimited Plan') {
+      // Unlimited plan: holders are pre-paid, slots are already committed.
+      // Allow adding holders up to committedCount — no extra billing needed.
+      const currentCount   = doc.certificateHolders.length;
+      const committedCount = doc.committedCount || currentCount;
+      const remainingSlots = committedCount - currentCount;
+      if (remainingSlots <= 0)
+        return res.status(400).json({
+          success: false,
+          message: `No remaining slots. Committed: ${committedCount}, current holders: ${currentCount}`,
+        });
+      const toAdd = newHolders.slice(0, remainingSlots);
+      doc.certificateHolders.push(...toAdd);
+      await doc.save();
+      return res.json({
+        success:        true,
+        data:           doc,
+        addedCount:     toAdd.length,
+        extraAmountDue: 0,
+        totalHolders:   doc.certificateHolders.length,
+        committedCount: doc.committedCount,
+        remainingSlots: committedCount - doc.certificateHolders.length,
       });
+    }
 
     const currentCount   = doc.certificateHolders.length;
     const committedCount = doc.committedCount || currentCount;
@@ -754,7 +772,8 @@ exports.exportAirlinesExcel = async (req, res) => {
       const isOneYear   = d.subscriptionPlan === '1 Year Subscription Plan';
       const holders     = d.certificateHolders || [];
       const ppc         = d.pricePerCertificate || d.pricePerCert || 0;
-      const total       = isUnlimited ? ppc : ppc * (holders.length || 1);
+      const committedCount = d.committedCount || Number(d.holderCountValue) || holders.length || 1;
+      const total       = d.totalAmount || (ppc * committedCount);
       const contactName = [d.firstName, d.lastName].filter(Boolean).join(' ');
       const rowCount    = Math.max(holders.length, 1);
       const startRow    = currentRow;
@@ -887,13 +906,8 @@ exports.adminCreateAirlineForm = async (req, res) => {
       ? parseInt(body.holderCountValue, 10)
       : holdersFilled;
 
-    body.totalAmount = isUnlimited
-      ? body.pricePerCertificate
-      : body.pricePerCertificate * body.committedCount;
-
-    body.amountPaid = isUnlimited
-      ? body.pricePerCertificate
-      : body.pricePerCertificate * holdersFilled;
+    body.totalAmount = body.pricePerCertificate * body.committedCount;
+    body.amountPaid  = body.pricePerCertificate * body.committedCount;
 
     body.status = 'Active';
     body.paymentStatus = 'paid';
@@ -907,11 +921,15 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // Create or update User account for airline
     let user = await User.findOne({ email: body.pointOfContactEmail });
 
+    // Password = airlineName stripped of spaces, lowercased.
+    // Simple and predictable so admin can verbally tell the airline.
+    // mustChangePassword=true forces a password-change prompt on first login.
+    const defaultPassword = (body.airlineName || 'ifoa12345').replace(/\s+/g, '').toLowerCase();
+
     if (!user) {
-      // Create new airline user with email and airline name as password
       user = new User({
         email: body.pointOfContactEmail,
-        password: body.airlineName, // Password is airline name
+        password: defaultPassword,
         role: 'airline',
         airlineName: body.airlineName,
         firstName: body.firstName,
@@ -919,10 +937,11 @@ exports.adminCreateAirlineForm = async (req, res) => {
         registrationId: airline._id,
         registrationModel: 'Airlines',
         subscriptionIds: [airline._id],
+        mustChangePassword: true, // user must set their own password on first login
       });
       await user.save();
     } else {
-      // Update existing user if needed
+      // Existing user — update linkage but do NOT reset their password
       user.airlineName = body.airlineName;
       user.registrationId = airline._id;
       user.registrationModel = 'Airlines';
@@ -943,7 +962,9 @@ exports.adminCreateAirlineForm = async (req, res) => {
         },
         loginCredentials: {
           email: body.pointOfContactEmail,
-          password: body.airlineName,
+          // Default password = airlineName lowercase no spaces (e.g. "Air India" → "airindia")
+          // The airline will be prompted to change it on first login.
+          password: defaultPassword,
         },
       },
       message: 'Airline form created successfully. Login credentials have been set.',
@@ -1023,9 +1044,10 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
 
         let user = await User.findOne({ email: payload.pointOfContactEmail });
         if (!user) {
+          const importPassword = (payload.airlineName || 'ifoa12345').replace(/\s+/g, '').toLowerCase();
           user = await User.create({
             email: payload.pointOfContactEmail,
-            password: payload.airlineName,
+            password: importPassword,
             role: 'airline',
             airlineName: payload.airlineName,
             firstName: payload.firstName,
@@ -1033,6 +1055,15 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
             registrationId: airline._id,
             registrationModel: 'Airlines',
             subscriptionIds: [airline._id],
+            mustChangePassword: true, // forced change on first login
+          });
+          created.push({
+            row: `${sheetName}!${rowNumber}`,
+            id: airline._id,
+            airlineName: airline.airlineName,
+            email: payload.pointOfContactEmail,
+            // Password is always airlineName lowercase no spaces — easy for admin to communicate
+            loginCredentials: { email: payload.pointOfContactEmail, password: importPassword },
           });
         } else {
           user.airlineName = payload.airlineName;
@@ -1044,13 +1075,17 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
           }
           await user.save();
         }
-
-        created.push({
-          row: `${sheetName}!${rowNumber}`,
-          id: airline._id,
-          airlineName: airline.airlineName,
-          email: payload.pointOfContactEmail,
-        });
+        // Note: created.push is handled inside the !user branch above to include loginCredentials.
+        // For existing users whose account was just linked, still record the row.
+        if (created.every(c => String(c.id) !== String(airline._id))) {
+          created.push({
+            row: `${sheetName}!${rowNumber}`,
+            id: airline._id,
+            airlineName: airline.airlineName,
+            email: payload.pointOfContactEmail,
+            loginCredentials: null, // existing user — password unchanged
+          });
+        }
       } catch (rowErr) {
         failed.push({ row: `${sheetName}!${rowNumber}`, error: rowErr.message });
       }

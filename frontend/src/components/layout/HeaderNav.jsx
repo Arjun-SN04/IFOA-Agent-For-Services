@@ -1,15 +1,14 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutGroup } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { getNotifications } from '../../services/api'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
 const adminNav = [
   { to: '/admin',             label: 'Overview',    exact: true },
-  { to: '/admin/individuals', label: 'Individuals'              },
-  { to: '/admin/airlines',    label: 'Airlines'                 },
-  { to: '/admin/profile',     label: 'Profile'                  },
+  { to: '/admin/individuals', label: 'Individuals', exact: true  },
+  { to: '/admin/airlines',    label: 'Airlines',    exact: true  },
+  { to: '/admin/profile',     label: 'Profile',     exact: true  },
 ]
 
 const userNav = [
@@ -26,11 +25,12 @@ function NavLink({ item }) {
   return (
     <Link
       to={item.to}
-      className={`relative inline-flex h-9 min-w-[98px] items-center justify-center px-4 text-center text-sm font-semibold rounded-full transition-all duration-300 ease-out whitespace-nowrap transform-gpu overflow-hidden
+      className={`relative inline-flex h-9 min-w-[98px] items-center justify-center px-4 text-center text-sm font-semibold rounded-full transition-all duration-200 ease-out whitespace-nowrap transform-gpu overflow-hidden select-none
         ${active
           ? 'text-white shadow-sm'
-          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 hover:-translate-y-px'
+          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
         }`}
+      style={active ? {} : { WebkitTapHighlightColor: 'transparent' }}
     >
       {active && (
         <span
@@ -38,7 +38,7 @@ function NavLink({ item }) {
           style={{ background: '#000021' }}
         />
       )}
-      <span className="relative z-10">{item.label}</span>
+      <span className="relative z-10" style={active ? { color: '#fff' } : {}}>{item.label}</span>
     </Link>
   )
 }
@@ -108,7 +108,11 @@ export default function HeaderNav() {
         const res = await getNotifications({ limit: 20 })
         if (!active) return
         const incoming = res?.data?.notifications || []
-        setNotifications(incoming)
+        setNotifications(prev => {
+          // Skip re-render if data hasn't changed
+          if (JSON.stringify(prev.map(n => n.id)) === JSON.stringify(incoming.map(n => n.id))) return prev
+          return incoming
+        })
       } catch {
         if (active) setNotifications([])
       } finally {
@@ -117,7 +121,8 @@ export default function HeaderNav() {
     }
 
     loadNotifications(true)
-    timer = setInterval(() => loadNotifications(false), 15000)
+    // Poll every 60s instead of 15s — notifications are not real-time critical
+    timer = setInterval(() => loadNotifications(false), 60000)
 
     return () => {
       active = false
@@ -154,14 +159,37 @@ export default function HeaderNav() {
     setReadIds(next)
     localStorage.setItem(readKey, JSON.stringify(next))
     setNotifOpen(false)
-    if (item.link) navigate(item.link)
+    if (item.link) {
+      // For wire-request notifications, append the entityId so AdminDashboard
+      // can auto-select and highlight that specific airline row.
+      if (item.type === 'wire-request' && item.entityId) {
+        navigate(`${item.link}?highlight=${item.entityId}`)
+      } else {
+        navigate(item.link)
+      }
+    }
   }
 
-  const notifTone = (severity) => {
-    if (severity === 'high') return 'border-red-200 bg-red-50 text-red-700'
-    if (severity === 'warn') return 'border-amber-200 bg-amber-50 text-amber-700'
-    if (severity === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    return 'border-blue-200 bg-blue-50 text-blue-700'
+  const notifIcon = (n) => {
+    if (n.type === 'wire-request')        return { bg: 'bg-red-100',     svgPath: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', color: 'text-red-600',     dot: 'bg-red-500' }
+    if (n.type === 'wire-pending')        return { bg: 'bg-orange-100',  svgPath: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15', color: 'text-orange-600', dot: 'bg-orange-400' }
+    if (n.type === 'payment-pending')     return { bg: 'bg-amber-100',   svgPath: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-amber-600',   dot: 'bg-amber-500' }
+    if (n.type === 'subscription-active') return { bg: 'bg-emerald-100', svgPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-emerald-600', dot: 'bg-emerald-500' }
+    if (n.type === 'expiry-soon')         return { bg: 'bg-yellow-100',  svgPath: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z', color: 'text-yellow-600',  dot: 'bg-yellow-500' }
+    if (n.type === 'new-registration')    return { bg: 'bg-blue-100',    svgPath: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 000 4h6a2 2 0 000-4M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-blue-600',     dot: 'bg-blue-500' }
+    if (n.type === 'payment-confirmed')   return { bg: 'bg-emerald-100', svgPath: 'M5 13l4 4L19 7', color: 'text-emerald-600',                                                                                                          dot: 'bg-emerald-500' }
+    if (n.type === 'invoice-ready')       return { bg: 'bg-indigo-100',  svgPath: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', color: 'text-indigo-600',  dot: 'bg-indigo-500' }
+    if (n.severity === 'high')            return { bg: 'bg-red-100',     svgPath: 'M12 8v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z', color: 'text-red-600',     dot: 'bg-red-500' }
+    if (n.severity === 'warn')            return { bg: 'bg-amber-100',   svgPath: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z', color: 'text-amber-600',   dot: 'bg-amber-500' }
+    if (n.severity === 'success')         return { bg: 'bg-emerald-100', svgPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-emerald-600', dot: 'bg-emerald-500' }
+    return { bg: 'bg-slate-100', svgPath: 'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V10a6 6 0 10-12 0v4.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0m6 0H9', color: 'text-slate-500', dot: 'bg-slate-400' }
+  }
+
+  const notifBorderColor = (severity) => {
+    if (severity === 'high')    return 'border-red-100 hover:border-red-200'
+    if (severity === 'warn')    return 'border-amber-100 hover:border-amber-200'
+    if (severity === 'success') return 'border-emerald-100 hover:border-emerald-200'
+    return 'border-slate-100 hover:border-slate-200'
   }
 
   const fmtNotifTime = (dateVal) => {
@@ -197,11 +225,9 @@ export default function HeaderNav() {
           </Link>
 
           {/* Centre nav — pills */}
-          <LayoutGroup id="header-nav-pills">
-            <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100 transition-all duration-300">
-              {nav.map(item => <NavLink key={item.to} item={item} />)}
-            </nav>
-          </LayoutGroup>
+          <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100">
+            {nav.map(item => <NavLink key={item.to} item={item} />)}
+          </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-2 ml-auto">
@@ -247,60 +273,118 @@ export default function HeaderNav() {
               </button>
 
               {notifOpen && (
-                <div className="dd-in absolute right-0 top-[calc(100%+8px)] w-[360px] max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-black text-slate-900">Notifications</p>
-                      <p className="text-[11px] text-slate-500">Live updates for your account</p>
-                    </div>
+                <div className="dd-in absolute right-0 top-[calc(100%+10px)] w-[400px] max-w-[92vw] bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden z-50"
+                  style={{ boxShadow: '0 20px 60px -10px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.04)' }}>
+
+                  {/* Header */}
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={markAllRead}
-                        className="text-[11px] font-bold text-blue-600 hover:underline"
-                      >
-                        Mark all read
+                      <div className="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V10a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 leading-tight">Notifications</p>
+                        <p className="text-[11px] text-slate-400 leading-tight">
+                          {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={markAllRead}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all">
+                        Mark read
                       </button>
-                      <button
-                        onClick={clearAllNotifications}
-                        className="text-[11px] font-bold text-slate-600 hover:underline"
-                      >
+                      <button onClick={clearAllNotifications}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
                         Clear all
                       </button>
                     </div>
                   </div>
 
-                  <div className="max-h-[360px] overflow-y-auto p-2 space-y-1">
+                  {/* Body */}
+                  <div className="max-h-[440px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                     {notifLoading && (
-                      <div className="px-3 py-6 text-sm text-slate-400 text-center">Loading notifications...</div>
-                    )}
-
-                    {!notifLoading && visibleNotifications.length === 0 && (
-                      <div className="px-3 py-8 text-center">
-                        <p className="text-sm font-semibold text-slate-600">No notifications</p>
-                        <p className="text-xs text-slate-400 mt-1">You are all caught up.</p>
+                      <div className="flex flex-col items-center justify-center py-10 gap-3">
+                        <div className="w-7 h-7 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" />
+                        <p className="text-xs text-slate-400 font-medium">Loading…</p>
                       </div>
                     )}
 
-                    {!notifLoading && visibleNotifications.map((n) => {
-                      const isRead = readIds.includes(n.id)
-                      return (
-                        <button
-                          key={n.id}
-                          onClick={() => openNotification(n)}
-                          className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all hover:border-slate-300 ${notifTone(n.severity)} ${isRead ? 'opacity-75' : ''}`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-xs font-black uppercase tracking-wider">{n.title}</p>
-                              <p className="text-sm font-medium mt-1 leading-snug">{n.message}</p>
-                              <p className="text-[11px] mt-1.5 opacity-80">{fmtNotifTime(n.createdAt)}</p>
-                            </div>
-                            {!isRead && <span className="w-2 h-2 rounded-full bg-red-500 mt-2 flex-shrink-0" />}
-                          </div>
-                        </button>
-                      )
-                    })}
+                    {!notifLoading && visibleNotifications.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-2xl">
+                          🔕
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-slate-700">No notifications</p>
+                          <p className="text-xs text-slate-400 mt-0.5">You're all caught up!</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!notifLoading && visibleNotifications.length > 0 && (
+                      <div className="p-2 space-y-1">
+                        {visibleNotifications.map((n) => {
+                          const isRead = readIds.includes(n.id)
+                          const tone = notifIcon(n)
+                          const isWireRequest = n.type === 'wire-request'
+                          return (
+                            <button
+                              key={n.id}
+                              onClick={() => openNotification(n)}
+                              className={`group w-full text-left rounded-xl border p-3.5 transition-all duration-150 ${notifBorderColor(n.severity)} ${isRead ? 'bg-white opacity-70 hover:opacity-100' : 'bg-white hover:bg-slate-50/80'}`}
+                              style={{ boxShadow: isRead ? 'none' : '0 1px 4px rgba(15,23,42,0.06)' }}
+                            >
+                              <div className="flex items-start gap-3">
+                                {/* Icon */}
+                                <div className={`w-9 h-9 rounded-xl ${tone.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                                  <svg className={`w-4 h-4 ${tone.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d={tone.svgPath} />
+                                  </svg>
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <p className="text-xs font-black text-slate-800 uppercase tracking-wide leading-tight truncate">{n.title}</p>
+                                    {!isRead && (
+                                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${tone.dot}`} />
+                                    )}
+                                  </div>
+                                  <p className="text-[13px] text-slate-600 leading-snug">{n.message}</p>
+                                  <div className="flex items-center justify-between mt-1.5">
+                                    <p className="text-[11px] text-slate-400 font-medium">{fmtNotifTime(n.createdAt)}</p>
+                                    {isWireRequest && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-red-600 bg-red-50 border border-red-100 rounded-full px-2 py-0.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                        Action needed
+                                      </span>
+                                    )}
+                                    {n.link && !isWireRequest && (
+                                      <span className="text-[11px] font-bold text-slate-400 group-hover:text-blue-600 transition-colors">
+                                        View →
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Footer */}
+                  {visibleNotifications.length > 0 && (
+                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                      <p className="text-[11px] text-slate-400">{visibleNotifications.length} notification{visibleNotifications.length !== 1 ? 's' : ''}</p>
+                      <p className="text-[11px] text-slate-400">Auto-refreshes every 60s</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

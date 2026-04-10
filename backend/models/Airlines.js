@@ -100,17 +100,12 @@ const AirlinesSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Auto-compute totalAmount before save.
-// Uses committedCount (the declared seat count) NOT current holders length,
-// so partial submissions don't shrink the invoice.
+// Uses committedCount × pricePerCertificate for ALL plans including Unlimited.
+// Unlimited Plan is NOT a flat fee — it's pricePerCert × committed seats.
 AirlinesSchema.pre('save', function (next) {
-  const isUnlimited = this.subscriptionPlan === 'Unlimited Plan';
-  if (isUnlimited) {
-    this.totalAmount = this.pricePerCertificate;
-  } else {
-    // committedCount set by controller on create; fall back to actual holders
-    const count = this.committedCount || this.certificateHolders?.length || 1;
-    this.totalAmount = this.pricePerCertificate * count;
-  }
+  // committedCount set by controller on create; fall back to actual holders
+  const count = this.committedCount || this.certificateHolders?.length || 1;
+  this.totalAmount = this.pricePerCertificate * count;
   next();
 });
 

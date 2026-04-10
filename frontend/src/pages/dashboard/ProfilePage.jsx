@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
@@ -202,8 +203,9 @@ function EditAirlineNameModal({ currentName, onClose, onSave }) {
 
 export default function ProfilePage() {
   const { user, token, updateProfile, updateAirlineName } = useAuth()
-  const [subs, setSubs] = useState([])   // all subscriptions
-  const [sub, setSub] = useState(null)    // most recent (kept for single-sub display compat)
+  const { getOrFetch, invalidate } = useDataCache()
+  const [subs, setSubs] = useState([])
+  const [sub, setSub] = useState(null)
   const [subLoading, setSubLoading] = useState(true)
   const [editNameOpen, setEditNameOpen] = useState(false)
   const [editAirlineNameOpen, setEditAirlineNameOpen] = useState(false)
@@ -216,6 +218,7 @@ export default function ProfilePage() {
     if (!user) { setSubLoading(false); return }
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
+    const cacheKey = `subs_${user.id || user.email}`
 
     const mergeAndSort = (...groups) => {
       const seen = new Set()
@@ -238,7 +241,6 @@ export default function ProfilePage() {
         if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
       }
       if (ids.length === 0) return []
-
       const fetched = await Promise.allSettled(
         ids.map(id => API.get(`${basePath}/${id}`, { headers }))
       )
@@ -249,31 +251,28 @@ export default function ProfilePage() {
 
     const load = async () => {
       try {
-        if (isAirline) {
-          const idSubs = await fetchByIds('/airlines')
+        const merged = await getOrFetch(cacheKey, async () => {
+          if (isAirline) {
+            const idSubs = await fetchByIds('/airlines')
+            let emailSubs = []
+            if (user.email) {
+              try {
+                const r = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+                emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
+              } catch {}
+            }
+            return mergeAndSort(idSubs, emailSubs)
+          }
+          const idSubs = await fetchByIds('/individuals')
           let emailSubs = []
           if (user.email) {
             try {
-              const r = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+              const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
               emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
             } catch {}
           }
-          const merged = mergeAndSort(idSubs, emailSubs)
-          setSubs(merged)
-          setSub(merged[0] || null)
-          return
-        }
-
-        // Individual: fetch from stored IDs first, then merge email matches.
-        const idSubs = await fetchByIds('/individuals')
-        let emailSubs = []
-        if (user.email) {
-          try {
-            const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-            emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
-          } catch {}
-        }
-        const merged = mergeAndSort(idSubs, emailSubs)
+          return mergeAndSort(idSubs, emailSubs)
+        })
         setSubs(merged)
         setSub(merged[0] || null)
       } catch {
@@ -284,7 +283,7 @@ export default function ProfilePage() {
       }
     }
     load()
-  }, [user])
+  }, [user, token, getOrFetch])
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
   const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'

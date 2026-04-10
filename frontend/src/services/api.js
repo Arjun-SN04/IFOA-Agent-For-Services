@@ -12,25 +12,32 @@ API.interceptors.request.use((config) => {
 })
 
 // ── Unified Registration ────────────────────────────────────────────────────
-// type: 'individual' | 'airline'
 export const register = (type, data) => API.post('/register', { type, ...data })
 
 // ── Individual ──────────────────────────────────────────────────────────────
-export const createIndividual         = (data)        => API.post('/individuals', data)
-export const createAdminIndividualForm = (data)       => API.post('/individuals/admin/create-form', data)
-export const importIndividualsFromExcel = (formData)  => API.post('/individuals/admin/import-excel', formData, {
+export const createIndividual              = (data)      => API.post('/individuals', data)
+export const createAdminIndividualForm     = (data)      => API.post('/individuals/admin/create-form', data)
+export const importIndividualsFromExcel    = (formData)  => API.post('/individuals/admin/import-excel', formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
 })
-export const getAllIndividuals         = ()            => API.get('/individuals')
-export const getIndividualById        = (id)          => API.get(`/individuals/${id}`)
-export const getIndividualByEmail     = (email)       => API.get('/individuals/by-email', { params: { email } })
-export const updateIndividual         = (id, data)    => API.put(`/individuals/${id}`, data)
-export const deleteIndividual         = (id)          => API.delete(`/individuals/${id}`)
-export const markIndividualPaid       = (id)          => API.patch(`/individuals/${id}/mark-paid`)
-export const markIndividualInvoiceGenerated = (id)    => API.patch(`/individuals/${id}/mark-invoice-generated`)
-export const exportIndividualsExcel   = ()            => `${BASE_URL}/individuals/export/excel`
+export const getAllIndividuals              = ()          => API.get('/individuals')
+export const getIndividualById             = (id)        => API.get(`/individuals/${id}`)
+export const getIndividualByEmail          = (email)     => API.get('/individuals/by-email', { params: { email } })
+export const updateIndividual              = (id, data)  => API.put(`/individuals/${id}`, data)
+export const deleteIndividual              = (id)        => API.delete(`/individuals/${id}`)
+export const markIndividualPaid            = (id)        => API.patch(`/individuals/${id}/mark-paid`)
+export const markIndividualInvoiceGenerated = (id)       => API.patch(`/individuals/${id}/mark-invoice-generated`)
 
-// ── Airlines ────────────────────────────────────────────────────────────────
+export const exportIndividualsExcel = () => {
+  const token = localStorage.getItem('ifoa_token') || ''
+  return `${BASE_URL}/individuals/export/excel${token ? `?token=${token}` : ''}`
+}
+export const exportAirlinesExcel = () => {
+  const token = localStorage.getItem('ifoa_token') || ''
+  return `${BASE_URL}/airlines/export/excel${token ? `?token=${token}` : ''}`
+}
+
+// ── Airlines ─────────────────────────────────────────────────────────────────
 export const createAirlinesSubscription     = (data)     => API.post('/airlines', data)
 export const importAirlinesFromExcel        = (formData) => API.post('/airlines/admin/import-excel', formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
@@ -42,27 +49,31 @@ export const updateAirlinesSubscription     = (id, data) => API.put(`/airlines/$
 export const deleteAirlinesSubscription     = (id)       => API.delete(`/airlines/${id}`)
 export const markAirlinesPaid               = (id)       => API.patch(`/airlines/${id}/mark-paid`)
 export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
-export const exportAirlinesExcel            = ()         => `${BASE_URL}/airlines/export/excel`
 export const createAdminAirlineForm         = (data)     => API.post('/airlines/admin/create-form', data)
 export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines/${id}/request-invoice`, data)
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
-// Create a Stripe PaymentIntent — returns { success, clientSecret, amount, currency }
 export const createPaymentIntent = (registrationId, registrationModel) =>
   API.post('/payments/create-intent', { registrationId, registrationModel })
 
-// Confirm a payment after Stripe succeeds — writes Payment record, marks subscription Active
 export const confirmPayment = (data) => API.post('/payments/confirm', data)
 
-// Get all Payment records for a registration (user dashboard / admin)
 export const getPaymentsByRegistration = (registrationId) =>
   API.get(`/payments/by-registration/${registrationId}`)
 
-// Get a single Payment record by its _id
 export const getPaymentById = (id) => API.get(`/payments/${id}`)
 
-// Admin: paginated list of all payments
 export const getAllPayments = (params) => API.get('/payments', { params })
+
+/**
+ * Admin saves edited invoice fields back to the Payment document.
+ * This is the SINGLE SOURCE OF TRUTH — both admin and user see the same invoice.
+ * @param {string} paymentId   - Payment._id
+ * @param {object} invoiceDraft - Full invoice shape used by generateIFOAInvoicePDF()
+ * @param {string} invoiceNumber
+ */
+export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) =>
+  API.patch(`/payments/${paymentId}/save-invoice-draft`, { invoiceDraft, invoiceNumber })
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)

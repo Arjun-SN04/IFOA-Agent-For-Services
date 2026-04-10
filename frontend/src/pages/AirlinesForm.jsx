@@ -11,6 +11,7 @@ import AirlinesStep4Payment from '../components/airlines/AirlinesStep4Payment'
 import AirlinesSuccessPage from '../components/airlines/AirlinesSuccessPage'
 import { createAirlinesSubscription } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { User, Lock, ShieldCheck, MapPin, Plane, Users, Flag } from 'lucide-react'
 
 const STEPS = [
   { label: 'Plan & Details', detail: 'Choose your plan and enter company information.' },
@@ -62,7 +63,7 @@ const WHY_CARDS = [
       'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=600&q=80&auto=format&fit=crop',
     ],
     gradient: 'from-red-900 via-red-800 to-red-700',
-    emoji: '👥',
+    fallbackIcon: <Users className="w-8 h-8" />,
   },
   {
     icon: (
@@ -77,7 +78,7 @@ const WHY_CARDS = [
       'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=600&q=80&auto=format&fit=crop',
     ],
     gradient: 'from-gray-900 via-gray-800 to-gray-700',
-    emoji: '✅',
+    fallbackIcon: <ShieldCheck className="w-8 h-8" />,
   },
   {
     icon: (
@@ -92,17 +93,17 @@ const WHY_CARDS = [
       'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&q=80&auto=format&fit=crop',
     ],
     gradient: 'from-slate-800 via-slate-700 to-slate-600',
-    emoji: '💰',
+    fallbackIcon: <MapPin className="w-8 h-8" />,
   },
 ]
 
-function CardImage({ srcs, gradient, emoji, alt, className }) {
+function CardImage({ srcs, gradient, fallbackIcon, alt, className }) {
   const [idx, setIdx] = useState(0)
   const failed = idx >= srcs.length
   if (failed) {
     return (
       <div className={`bg-gradient-to-br ${gradient} flex items-center justify-center ${className}`}>
-        <span className="text-5xl opacity-60 select-none">{emoji}</span>
+        <span className="text-white/60">{fallbackIcon}</span>
       </div>
     )
   }
@@ -118,7 +119,7 @@ function CardImage({ srcs, gradient, emoji, alt, className }) {
 
 const INIT = {
   subscriptionPlan: '1 Year Subscription Plan',
-  pricePerCertificate: 49,
+  pricePerCertificate: 0,
   totalAmount: 0,
   airlineName: '',
   firstName: '',
@@ -171,7 +172,7 @@ function WrongRoleBanner() {
             Create Airlines Account
           </Link>
           <Link to="/individual/register" className="inline-flex items-center gap-1.5 border border-blue-300 text-blue-800 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-blue-100 transition-all whitespace-nowrap">
-            👤 Go to Individual Form
+            <User className="w-3.5 h-3.5" /> Go to Individual Form
           </Link>
         </div>
       </div>
@@ -380,7 +381,7 @@ export default function AirlinesForm() {
             </p>
           </motion.div>
 
-          <div className="grid lg:grid-cols-2 gap-8 items-center mb-14">
+          <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8 items-center mb-14">
             <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }} className="relative rounded-2xl overflow-hidden shadow-2xl shadow-red-900/20 aspect-video border border-gray-200">
               <iframe className="absolute inset-0 w-full h-full" src="https://www.youtube.com/embed/cfjy4wI7ZY4?rel=0&modestbranding=1" title="IFOA USA Agent for Service Registration" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
             </motion.div>
@@ -486,7 +487,7 @@ export default function AirlinesForm() {
               <motion.div key={card.title} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.12, duration: 0.5 }}
                 className="group rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                 <div className="relative h-44 overflow-hidden">
-                  <CardImage srcs={card.srcs} gradient={card.gradient} emoji={card.emoji} alt={card.title} className="w-full h-full group-hover:scale-105 transition-transform duration-500" />
+                  <CardImage srcs={card.srcs} gradient={card.gradient} fallbackIcon={card.fallbackIcon} alt={card.title} className="w-full h-full group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                   <div className="absolute bottom-4 left-4 w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-lg">{card.icon}</div>
                 </div>
@@ -503,7 +504,7 @@ export default function AirlinesForm() {
       {/* ═══ STATS ROW ═══ */}
       <section className="bg-black py-12 px-6">
         <div className="max-w-6xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6">
-          {[{ value: '$49', label: 'Per Cert / Year' }, { value: '3+', label: 'Minimum Holders' }, { value: '4', label: 'Simple Steps' }, { value: '🇺🇸', label: 'U.S. Based Office' }].map((stat, i) => (
+          {[{ value: '$49', label: 'Per Cert / Year' }, { value: '3+', label: 'Minimum Holders' }, { value: '4', label: 'Simple Steps' }, { value: <Flag className="w-8 h-8 text-white mx-auto" />, label: 'U.S. Based Office' }].map((stat, i) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08, duration: 0.5 }} className="text-center">
               <p className="text-4xl font-black text-white mb-1">{stat.value}</p>
               <p className="text-xs font-bold text-red-400 uppercase tracking-widest">{stat.label}</p>
@@ -545,7 +546,7 @@ export default function AirlinesForm() {
 
       {/* ═══ AGENT CONTACT + INDIVIDUAL CTA ═══ */}
       <section className="bg-gray-50 border-t border-gray-100 py-12 px-6">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-[1fr_1.2fr] gap-6">
           <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}
             className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="px-6 py-5 border-b border-gray-100">
@@ -646,9 +647,14 @@ export default function AirlinesForm() {
           </motion.div>
 
           <div className="mt-6 flex flex-wrap gap-3 justify-center">
-            {[{ icon: '🔒', text: 'Secure & Encrypted' }, { icon: '✅', text: 'FAA Compliant' }, { icon: '🇺🇸', text: 'U.S. Based Office' }, { icon: '✈️', text: 'Fleet Management' }].map((badge) => (
+            {[
+              { icon: <Lock className="w-3.5 h-3.5" />, text: 'Secure & Encrypted' },
+              { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: 'FAA Compliant' },
+              { icon: <MapPin className="w-3.5 h-3.5" />, text: 'U.S. Based Office' },
+              { icon: <Plane className="w-3.5 h-3.5" />, text: 'Fleet Management' },
+            ].map((badge) => (
               <div key={badge.text} className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 shadow-sm">
-                <span>{badge.icon}</span>{badge.text}
+                {badge.icon}{badge.text}
               </div>
             ))}
           </div>

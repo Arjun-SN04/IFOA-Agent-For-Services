@@ -5,6 +5,8 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
+import { Plane } from 'lucide-react'
+import { getAirlineTotal, fmtAirlineTotal } from '../utils/airlineTotal'
 import {
   deleteAirlinesSubscription,
   deleteIndividual,
@@ -218,7 +220,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
                 <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
                 <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDate(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price/Cert" value={fmtMoney(record.pricePerCertificate ?? record.pricePerCert)} />
-                <ViewField label="Total Fees" value={fmtMoney(record.totalServiceFees ?? record.totalAmount)} />
+                <ViewField label="Total Fees" value={fmtAirlineTotal(record)} />
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Airline / Operator" />
@@ -738,12 +740,19 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     ? Number(record.totalAmount ?? (pricePerCert * holderCount) ?? 0)
     : Number(record.price || record.totalServiceFees || 0)
 
+  // For airlines, always compute total as pricePerCert × holderCount.
+  // totalAmount in DB may have been stored with old flat-rate logic for Unlimited plan,
+  // so recompute it to ensure correctness.
+  const computedAirlineTotal = isAirline ? (pricePerCert * holderCount) : 0
+
   // Always trust confirmed paid totals first to prevent under-billing invoices.
   const paidTotal = Number(
     record.amountPaid || record.totalAmount || record.price || record.totalServiceFees || 0
   )
 
-  const totalAmt = paidConfirmed && paidTotal > 0 ? paidTotal : fallbackTotal
+  const totalAmt = isAirline
+    ? (paidConfirmed && paidTotal > 0 ? Math.max(paidTotal, computedAirlineTotal) : computedAirlineTotal)
+    : (paidConfirmed && paidTotal > 0 ? paidTotal : fallbackTotal)
   const unitPrice = isAirline ? Number((totalAmt / holderCount).toFixed(2)) : totalAmt
   const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
 
@@ -1287,7 +1296,7 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
 }
 
 // ─── Grouped Individuals Table ─────────────────────────────────────────────────
-function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting }) {
+function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
   const [expanded, setExpanded] = useState({})
 
   const groups = useMemo(() => {
@@ -1335,7 +1344,11 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
               return (
                 <React.Fragment key={key}>
                   <tr
-                    className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
+                    className={`border-b border-slate-100 transition-colors cursor-pointer ${
+                      String(primary._id) === String(highlightedId)
+                        ? 'bg-amber-50 outline outline-2 outline-amber-400'
+                        : isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'
+                    }`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
@@ -1448,7 +1461,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 }
 
 // ─── Grouped Airlines Table ────────────────────────────────────────────────────
-function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting }) {
+function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
   const [expanded, setExpanded] = useState({})
 
   const groups = useMemo(() => {
@@ -1497,11 +1510,17 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
               return (
                 <React.Fragment key={key}>
                   <tr
-                    className={`border-b border-slate-100 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'}`}
+                    className={`border-b border-slate-100 transition-colors cursor-pointer ${
+                      String(primary._id) === String(highlightedId)
+                        ? 'bg-amber-50 ring-2 ring-inset ring-amber-400'
+                        : isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'
+                    }`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-black text-white text-xs font-black flex items-center justify-center flex-shrink-0 select-none">✈</div>
+                        <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center flex-shrink-0">
+                          <Plane className="w-4 h-4" />
+                        </div>
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
@@ -1523,7 +1542,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
                           {primary.certificateHolders?.length || 0}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtMoney(primary.totalAmount || primary.totalServiceFees)}</span>
+                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(primary)}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
@@ -1563,7 +1582,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">{sub.certificateHolders?.length || 0}</span>
-                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtMoney(sub.totalAmount || sub.totalServiceFees)}</span>
+                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(sub)}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
@@ -1593,7 +1612,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
 
 function OverviewPanel({ individuals, airlines }) {
   const indTotal   = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
-  const airTotal   = airlines.reduce((s, r) => s + (Number(r.totalAmount) || Number(r.totalServiceFees) || 0), 0)
+  const airTotal   = airlines.reduce((s, r) => s + getAirlineTotal(r), 0)
   const indPaid    = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const airPaid    = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const allHolders = airlines.reduce((s, r) => s + (r.certificateHolders?.length || 0), 0)
@@ -1664,7 +1683,7 @@ function OverviewPanel({ individuals, airlines }) {
 }
 
 export default function AdminDashboard() {
-  const { pathname } = useLocation()
+  const { pathname, search: locationSearch } = useLocation()
   const navigate = useNavigate()
   const tabFromPath = pathname.endsWith('/individuals')
     ? 'individuals'
@@ -1677,6 +1696,12 @@ export default function AdminDashboard() {
           : 'overview'
   const [tab, setTab] = useState(tabFromPath)
   useEffect(() => { setTab(tabFromPath) }, [pathname])
+
+  // Deep-link: ?highlight=<airlineId> — auto-opens the view modal for that record
+  const highlightId = useMemo(() => {
+    const p = new URLSearchParams(locationSearch)
+    return p.get('highlight') || null
+  }, [locationSearch])
 
   const [individuals, setIndividuals] = useState([])
   const [airlines, setAirlines]       = useState([])
@@ -1694,11 +1719,25 @@ export default function AdminDashboard() {
   const [saving, setSaving]     = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [toast, setToast]       = useState(null)
+  const [highlightedAirlineId, setHighlightedAirlineId] = useState(null)
 
   // invoiceModal state: { record, type, initialStep, autoPreview }
   const [invoiceModal, setInvoiceModal] = useState(null)
 
   useEffect(() => { loadData() }, [])
+
+  // Wire notification: switch to Airlines tab and highlight the row
+  useEffect(() => {
+    if (!highlightId || loading || airlines.length === 0) return
+    const record = airlines.find(a => String(a._id) === String(highlightId))
+    if (record) {
+      setTab('airlines')
+      setHighlightedAirlineId(highlightId)
+      navigate('/admin/airlines', { replace: true })
+      // Auto-clear the highlight after 6 seconds
+      setTimeout(() => setHighlightedAirlineId(null), 6000)
+    }
+  }, [highlightId, airlines, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -1980,6 +2019,7 @@ export default function AdminDashboard() {
       ) : tab === 'individuals' ? (
         <IndividualsTable
           data={filtered}
+          highlightedId={null}
           onView={r => openView(r, 'individual')}
           onDelete={handleDelete}
           deleting={deleting}
@@ -1989,6 +2029,7 @@ export default function AdminDashboard() {
       ) : (
         <AirlinesTable
           data={filtered}
+          highlightedId={highlightedAirlineId}
           onView={r => openView(r, 'airline')}
           onDelete={handleDelete}
           deleting={deleting}

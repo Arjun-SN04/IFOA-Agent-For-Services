@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_white.png'
+import { Lock, ShieldCheck, MapPin } from 'lucide-react'
 
 const roles = [
   { value: 'individual', label: 'Individual Pilot / Dispatcher', desc: 'Part 61/65 certificate holders' },
@@ -202,8 +203,12 @@ export default function SignupPage() {
 
         {/* Trust badges */}
         <div className="mt-5 flex flex-wrap gap-3 justify-center">
-          {[' Secure & Encrypted', ' FAA Compliant', ' U.S. Based Office'].map(b => (
-            <span key={b} className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>{b}</span>
+          {[
+            { icon: <Lock className="w-3.5 h-3.5" />, text: 'Secure & Encrypted' },
+            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: 'FAA Compliant' },
+            { icon: <MapPin className="w-3.5 h-3.5" />, text: 'U.S. Based Office' },
+          ].map(b => (
+            <span key={b.text} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>{b.icon}{b.text}</span>
           ))}
         </div>
       </motion.div>

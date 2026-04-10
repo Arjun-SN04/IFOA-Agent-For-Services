@@ -28,12 +28,10 @@ function Row({ label, value }) {
 
 export default function AirlinesStep3Preview({ data, update, onSaved, onNext, onBack }) {
   const holders = data.certificateHolders || []
-  const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
   const selectedCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const actualCount = holders.length
-  const total = isUnlimited
-    ? (data.pricePerCertificate || 0)
-    : (data.pricePerCertificate || 0) * selectedCount
+  // Unlimited plan is priced per certificate — always multiply price × count
+  const total = (data.pricePerCertificate || 0) * selectedCount
 
   const [termsError, setTermsError] = useState(false)
 
@@ -69,11 +67,11 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
             <SectionHeader title="Subscription Plan" />
             <Row label="Plan" value={data.subscriptionPlan} />
             <Row label="Holder Range" value={data.holderCount} />
-            <Row label="Holders Selected" value={String(selectedCount)} />
-            <Row label="Holders Added (Billed)" value={String(actualCount)} />
+            <Row label="Holders Selected (Billed)" value={String(selectedCount)} />
+            <Row label="Holders Added So Far" value={String(actualCount)} />
             <Row
-              label={isUnlimited ? 'Annual Fee' : 'Price / Certificate'}
-              value={fmtPrice(data.pricePerCertificate) + ' USD' + (isUnlimited ? ' / year' : '')}
+              label="Price / Certificate"
+              value={fmtPrice(data.pricePerCertificate) + ' USD'}
             />
             <Row label="Total Amount" value={'$' + total + ' USD'} />
 
@@ -81,7 +79,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
             <SectionHeader title="Company Information" />
             <Row label="Company" value={data.airlineName} />
             <Row label="Address" value={data.addressLine1} />
-            {data.addressLine2 && <Row label="Address Line 1" value={data.addressLine2} />}
+            {data.addressLine2 && <Row label="Address Line 2" value={data.addressLine2} />}
             <Row label="City" value={data.city} />
             <Row label="State" value={data.state} />
             <Row label="Postal Code" value={data.postalCode} />
@@ -139,11 +137,7 @@ export default function AirlinesStep3Preview({ data, update, onSaved, onNext, on
           <p>
             {actualCount} team member{actualCount !== 1 ? 's' : ''} added
           </p>
-          {isUnlimited ? (
-            <p className="font-semibold">{'$' + data.pricePerCertificate + ' flat / year'}</p>
-          ) : (
-            <p className="font-semibold">{'$' + data.pricePerCertificate + ' per certificate'}</p>
-          )}
+          <p className="font-semibold">{'$' + data.pricePerCertificate + ' per certificate'}</p>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required — set it in .env');
@@ -20,6 +22,7 @@ function publicUser(user) {
     airlineName: user.airlineName || '',
     registrationId: user.registrationId,
     subscriptionIds: user.subscriptionIds || [],
+    mustChangePassword: user.mustChangePassword || false,
   };
 }
 
@@ -78,17 +81,28 @@ exports.getMe = async (req, res) => {
 };
 
 // POST /api/auth/seed-admin-signup
+// SECURED: requires SEED_ADMIN_SECRET env var in request body to prevent public abuse.
 exports.seedAdminSignup = async (req, res) => {
   try {
+    // Guard — reject unless the caller knows the server-side secret
+    const SEED_SECRET = process.env.SEED_ADMIN_SECRET;
+    if (!SEED_SECRET) {
+      return res.status(503).json({ message: 'Admin seeding is not enabled on this server.' });
+    }
+    if (req.body.seedSecret !== SEED_SECRET) {
+      return res.status(403).json({ message: 'Invalid seed secret.' });
+    }
+
     const { email, password, firstName, lastName } = req.body;
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required.' });
     if (password.length < 8)
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
 
-    const existing = await User.findOne({ email: email.toLowerCase() });
-    if (existing)
-      return res.status(409).json({ message: 'An account with this email already exists.' });
+    // Only allow one admin to be seeded — prevents repeated calls
+    const adminExists = await User.findOne({ role: 'admin' });
+    if (adminExists)
+      return res.status(409).json({ message: 'An admin account already exists. Use the login endpoint.' });
 
     const admin = await User.create({
       email: email.toLowerCase(),
@@ -162,6 +176,8 @@ exports.updateCredentials = async (req, res) => {
       if (newPassword.length < 8)
         return res.status(400).json({ message: 'New password must be at least 8 characters.' });
       user.password = newPassword;
+      // Clear the first-login flag once they set their own password
+      user.mustChangePassword = false;
     }
 
     await user.save();
@@ -228,7 +244,6 @@ exports.linkRegistration = async (req, res) => {
     if (!registrationId || !registrationModel)
       return res.status(400).json({ message: 'registrationId and registrationModel are required.' });
 
-    const mongoose = require('mongoose');
     const oid = new mongoose.Types.ObjectId(registrationId);
 
     const user = await User.findByIdAndUpdate(
@@ -261,7 +276,6 @@ exports.addSubscription = async (req, res) => {
     if (!subscriptionId)
       return res.status(400).json({ message: 'subscriptionId is required.' });
 
-    const mongoose = require('mongoose');
     const oid = new mongoose.Types.ObjectId(subscriptionId);
 
     const user = await User.findByIdAndUpdate(

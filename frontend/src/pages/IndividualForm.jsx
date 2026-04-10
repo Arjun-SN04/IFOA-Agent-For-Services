@@ -11,6 +11,7 @@ import SuccessPage from '../components/individual/SuccessPage'
 import { createIndividual } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
+import { Plane, Lock, ShieldCheck, MapPin, Zap } from 'lucide-react'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -78,7 +79,7 @@ function WrongRoleBanner() {
             Create Individual Account
           </Link>
           <Link to="/airlines/register" className="inline-flex items-center gap-1.5 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-white transition-all whitespace-nowrap" style={{ border: `1px solid ${C.blueLight}`, color: C.blue }}>
-            ✈ Airlines Form
+          <Plane className="w-3.5 h-3.5" /> Airlines Form
           </Link>
         </div>
       </div>
@@ -250,7 +251,7 @@ export default function IndividualForm() {
           HERO — clean, minimal, light background
       ═══════════════════════════════════════════════════════════ */}
       <section style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
+        <div className="max-w-6xl mx-auto px-6 py-16 lg:py-20 grid lg:grid-cols-[1fr_1.2fr] gap-10 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>U.S. Agent for Service</p>
             <h1 className="text-4xl sm:text-5xl font-extrabold mb-4 leading-tight" style={{ color: C.dark }}>Individual Registration</h1>
@@ -258,9 +259,14 @@ export default function IndividualForm() {
               Complete our secure 4-step registration to designate IFOA USA as your official FAA U.S. Agent for Service. Takes less than 5 minutes.
             </p>
             <div className="flex flex-wrap gap-3 mb-8">
-              {[{ icon: '🔒', text: 'Secure & Encrypted' }, { icon: '✅', text: 'FAA Compliant' }, { icon: '🇺🇸', text: 'U.S. Based Office' }, { icon: '⚡', text: 'Fast Processing' }].map(b => (
+              {[
+                { icon: <Lock className="w-3.5 h-3.5" />, text: 'Secure & Encrypted' },
+                { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: 'FAA Compliant' },
+                { icon: <MapPin className="w-3.5 h-3.5" />, text: 'U.S. Based Office' },
+                { icon: <Zap className="w-3.5 h-3.5" />, text: 'Fast Processing' },
+              ].map(b => (
                 <div key={b.text} className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold" style={{ border: `1px solid ${C.gray200}`, background: C.white, color: C.gray600 }}>
-                  <span>{b.icon}</span>{b.text}
+                  {b.icon}{b.text}
                 </div>
               ))}
             </div>
@@ -479,7 +485,7 @@ export default function IndividualForm() {
               style={{ background: C.dark }}
               onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
               onMouseLeave={e => e.currentTarget.style.background = C.dark}>
-              ✈ Airlines Plan
+              <Plane className="w-4 h-4" /> Airlines Plan
             </Link>
           </motion.div>
         </div>

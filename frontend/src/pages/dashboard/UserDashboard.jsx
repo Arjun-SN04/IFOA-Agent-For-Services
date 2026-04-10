@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import axios from 'axios'
+import { Plane } from 'lucide-react'
+import { getAirlineTotal } from '../../utils/airlineTotal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
@@ -49,7 +51,9 @@ function ActionRow({ icon, label, to, href }) {
 
 export default function UserDashboard() {
   const { user, token } = useAuth()
+  const { getOrFetch, invalidate } = useDataCache()
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'
+  const isAirline = user?.role === 'airline'
   const [sub, setSub] = useState(null)
   const [subLoading, setSubLoading] = useState(true)
 
@@ -57,28 +61,37 @@ export default function UserDashboard() {
     if (!user) { setSubLoading(false); return }
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
+    const cacheKey = `sub_${user.id || user.email}`
+
+    // Invalidate on mount so the dashboard always shows the latest subscription
+    // state when the user navigates here from another page.
+    invalidate(cacheKey)
 
     const load = async () => {
       try {
-        const endpointById    = isAirline ? '/airlines'          : '/individuals'
-        const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
+        const result = await getOrFetch(cacheKey, async () => {
+          const endpointById    = isAirline ? '/airlines'          : '/individuals'
+          const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
 
-        if (user.registrationId) {
-          try {
-            const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
-            if (r.data?.data) { setSub(r.data.data); return }
-          } catch { /* fall through */ }
-        }
+          if (user.registrationId) {
+            try {
+              const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
+              if (r.data?.data) return r.data.data
+            } catch { /* fall through */ }
+          }
 
-        if (user.email) {
-          const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
-          if (r.data?.data) { setSub(r.data.data); return }
-        }
+          if (user.email) {
+            const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
+            if (r.data?.data) return r.data.data
+          }
+          return null
+        })
+        setSub(result)
       } catch { /* no sub yet */ }
       finally { setSubLoading(false) }
     }
     load()
-  }, [user, token])
+  }, [user, token, getOrFetch, invalidate])
 
   const getSubStatus = () => {
     if (subLoading) return { label: 'Loading…', accent: 'sky', sub: 'Checking subscription' }
@@ -96,10 +109,7 @@ export default function UserDashboard() {
       <div className="max-w-4xl mx-auto space-y-6">
 
         {/* ── Welcome banner ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
+        <div
           className="relative rounded-2xl overflow-hidden border border-slate-200"
           style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}
         >
@@ -117,20 +127,17 @@ export default function UserDashboard() {
                 onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
                 onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}
               >
-                {user?.role === 'airline' ? '✈ Airlines Registration' : 'Complete Registration'}
+                {user?.role === 'airline' ? <><Plane className="w-4 h-4" /> Airlines Registration</> : 'Complete Registration'}
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* ── Stat cards ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08 }}
+        <div
           className="grid grid-cols-1 sm:grid-cols-3 gap-4"
         >
           <StatCard
@@ -149,18 +156,21 @@ export default function UserDashboard() {
           />
           <StatCard
             label="Plan"
-            value={sub ? sub.subscriptionPlan?.split(' ')[0] + (sub.subscriptionPlan?.includes('Unlimited') ? ' Unlimited' : ' Year') : 'None'}
+            value={sub
+              ? sub.subscriptionPlan?.includes('Unlimited')
+                ? 'Unlimited'
+                : sub.subscriptionPlan?.includes('Multiple')
+                ? `Multi-Year (${sub.multiYearCount || 3}yr)`
+                : '1 Year'
+              : 'None'}
             accent={sub ? 'sky' : 'blue'}
-            sub={sub ? `$${sub.price ?? sub.totalAmount ?? 0}` : 'No plan selected'}
+            sub={sub ? `${isAirline ? getAirlineTotal(sub).toFixed(2) : (sub.price ?? sub.totalAmount ?? 0)}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
-        </motion.div>
+        </div>
 
         {/* ── Info grid ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.15 }}
+        <div
           className="grid grid-cols-1 sm:grid-cols-2 gap-5"
         >
           {/* Account info */}
@@ -219,14 +229,11 @@ export default function UserDashboard() {
               />
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* ── No subscription notice ── */}
         {!subLoading && !sub && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.22 }}
+          <div
             className="rounded-2xl border border-blue-100 bg-blue-50 p-5 flex items-start gap-4"
           >
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -240,15 +247,12 @@ export default function UserDashboard() {
                 Submit your FAA certificate details to activate your U.S. Agent for Service.
               </p>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* ── Subscription summary ── */}
         {!subLoading && sub && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.22 }}
+          <div
             className={`rounded-2xl border p-5 flex items-start gap-4 ${
               sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                 ? 'border-emerald-100 bg-emerald-50'
@@ -297,7 +301,7 @@ export default function UserDashboard() {
             >
               View Details →
             </Link>
-          </motion.div>
+          </div>
         )}
       </div>
     </DashboardLayout>

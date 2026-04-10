@@ -33,9 +33,8 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
 
   const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
   const payableCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
-  const numericTotal = isUnlimited
-    ? (data.pricePerCertificate || 0)
-    : (data.pricePerCertificate || 0) * payableCount
+  // Unlimited plan is priced per certificate too — always multiply by count
+  const numericTotal = (data.pricePerCertificate || 0) * payableCount
 
   const syncHolders = (newHolders) => update({ certificateHolders: newHolders })
 
@@ -80,14 +79,30 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
     })
     setErrors(errs)
 
-    // Scroll to the first holder card that has errors
+    // Scroll to the first holder card that has errors.
+    // Use the closest scrollable ancestor instead of window.scrollIntoView
+    // so the RegisterPage left-column container scrolls, not the whole page.
     const firstInvalidIdx = errs.findIndex(e => Object.keys(e).length > 0)
     if (firstInvalidIdx !== -1) {
       setTimeout(() => {
         const el = document.getElementById(`holder-card-${firstInvalidIdx}`)
         if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          // Then focus on the first invalid input inside that card
+          // Walk up the DOM to find the nearest scrollable ancestor
+          let scrollParent = el.parentElement
+          while (scrollParent && scrollParent !== document.body) {
+            const { overflowY } = window.getComputedStyle(scrollParent)
+            if (overflowY === 'auto' || overflowY === 'scroll') break
+            scrollParent = scrollParent.parentElement
+          }
+          if (scrollParent && scrollParent !== document.body) {
+            // Scroll the container directly without triggering window scroll
+            const elTop = el.getBoundingClientRect().top
+            const containerTop = scrollParent.getBoundingClientRect().top
+            scrollParent.scrollBy({ top: elTop - containerTop - 16, behavior: 'smooth' })
+          } else {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          // Focus the first invalid input
           const firstField = Object.keys(errs[firstInvalidIdx])[0]
           const input = el.querySelector(`[data-field="${firstField}"]`)
           if (input) setTimeout(() => input.focus({ preventScroll: true }), 350)
@@ -123,7 +138,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
             {payableCount ? ` · ${payableCount} holder${payableCount !== 1 ? 's' : ''} selected` : ` · ${holders.length} added`}
           </span>
           <span className="font-black text-blue-900">
-            {isUnlimited ? 'Flat: ' : 'Payable Total: '}<span className="text-green-700">${numericTotal} USD</span>
+            Payable Total: <span className="text-green-700">${numericTotal} USD</span>
           </span>
         </div>
       )}

@@ -3,6 +3,9 @@ const User = require('../models/User');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
 
+// Shared default for multi-year plan — keeps price and expiry in sync.
+const DEFAULT_MULTI_YEAR = 3;
+
 function toBool(v, defaultValue = false) {
   if (v === undefined || v === null || v === '') return defaultValue;
   if (typeof v === 'boolean') return v;
@@ -58,7 +61,7 @@ function normalizePlanPrice(plan, multiYearCount, explicitPrice) {
   }
   if (plan === 'Unlimited Plan') return 299;
   if (plan === 'Multiple Years Subscription Plan') {
-    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : 2;
+    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : DEFAULT_MULTI_YEAR;
     return 55 * years;
   }
   return 69;
@@ -72,7 +75,7 @@ function computeExpiration(plan, subscriptionDate, multiYearCount) {
     return d;
   }
   if (plan === 'Multiple Years Subscription Plan') {
-    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : 3;
+    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : DEFAULT_MULTI_YEAR;
     d.setFullYear(d.getFullYear() + years);
     return d;
   }
@@ -114,7 +117,8 @@ function buildIndividualPayload(raw) {
     firstName,
     lastName,
     middleName: String(pick(src, ['middleName', 'Middle Name'])).trim(),
-    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])) || toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date('1990-01-01'),
+    // Use only the actual dateOfBirth columns — never fall back to subscriptionDate (different field).
+    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])) || new Date('1990-01-01'),
 
     addressLine1: String(pick(src, ['addressLine1', 'Address Line 1'])).trim(),
     city: String(pick(src, ['city', 'City'])).trim(),
@@ -171,20 +175,23 @@ function inferRowKind(row) {
 async function linkOrCreateIndividualUser(individual, payload) {
   let user = await User.findOne({ email: payload.email });
   if (!user) {
-    const generatedPassword = (payload.firstName || 'ifoa12345').trim();
+    // Password = firstname+lastname lowercase no spaces (e.g. "John Doe" → "johndoe").
+    // Simple so admin can tell them verbally. mustChangePassword forces a prompt on first login.
+    const defaultPassword = `${payload.firstName || ''}${payload.lastName || ''}`.replace(/\s+/g, '').toLowerCase() || 'ifoa12345';
     user = await User.create({
       email: payload.email,
-      password: generatedPassword,
+      password: defaultPassword,
       role: 'individual',
       firstName: payload.firstName,
       lastName: payload.lastName,
       registrationId: individual._id,
       registrationModel: 'Individual',
       subscriptionIds: [individual._id],
+      mustChangePassword: true, // user must set their own password on first login
     });
     return {
       user,
-      loginCredentials: { email: payload.email, password: generatedPassword },
+      loginCredentials: { email: payload.email, password: defaultPassword },
     };
   }
 
@@ -261,12 +268,14 @@ exports.adminImportIndividualsFromExcel = async (req, res) => {
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) {
+    if (!workbook.SheetNames.length) {
       return res.status(400).json({ success: false, message: 'No worksheet found in the uploaded file.' });
     }
 
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    // Read ALL sheets (not just the first) so multi-sheet workbooks are fully imported.
+    const rows = workbook.SheetNames.flatMap((name) =>
+      XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: '' })
+    );
     if (!rows.length) {
       return res.status(400).json({ success: false, message: 'The uploaded sheet is empty.' });
     }
@@ -291,12 +300,13 @@ exports.adminImportIndividualsFromExcel = async (req, res) => {
           continue;
         }
         const individual = await Individual.create(payload);
-        await linkOrCreateIndividualUser(individual, payload);
+        const linked = await linkOrCreateIndividualUser(individual, payload);
         created.push({
           row: i + 2,
           id: individual._id,
           email: individual.email,
           name: `${individual.firstName} ${individual.lastName}`.trim(),
+          loginCredentials: linked.loginCredentials,
         });
       } catch (rowErr) {
         failed.push({ row: i + 2, error: rowErr.message });
@@ -370,6 +380,22 @@ exports.getIndividualById = async (req, res) => {
 // ── Update ────────────────────────────────────────────────────────────────────
 exports.updateIndividual = async (req, res) => {
   try {
+    // Ownership check — non-admins can only update their own record
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const ownsRecord = userRegId === req.params.id || userSubIds.includes(req.params.id);
+      if (!ownsRecord) {
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+      }
+      const ADMIN_ONLY = ['paymentStatus', 'isPaid', 'isFormCompleted', 'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft'];
+      for (const f of ADMIN_ONLY) {
+        if (Object.prototype.hasOwnProperty.call(req.body, f)) {
+          return res.status(403).json({ success: false, message: `Field '${f}' can only be changed by an admin.` });
+        }
+      }
+    }
+
     const allowedFields = [
       'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
       'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',

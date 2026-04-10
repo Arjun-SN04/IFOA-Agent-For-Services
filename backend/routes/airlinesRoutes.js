@@ -28,32 +28,32 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// Public
+// ── Public — registration form submit ────────────────────────────────────────
 router.post('/', createAirlinesSubscription);
 
-// ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
-router.get('/export/excel', authMiddleware, requireAdmin, exportAirlinesExcel);
-router.get('/signup/list', authMiddleware, getSignUpAirlines); // Get all signed-up airlines for dropdown
-router.post('/admin/create-form', authMiddleware, requireAdmin, adminCreateAirlineForm); // Admin create airline form
+// ── Static / named routes BEFORE /:id ────────────────────────────────────────
+router.get('/export/excel',   authMiddleware, requireAdmin, exportAirlinesExcel);
+router.get('/signup/list',    authMiddleware, getSignUpAirlines);
+router.get('/by-email',       authMiddleware, getAirlinesSubscriptionByEmail);
+
+// ── Admin create / import ────────────────────────────────────────────────────
+router.post('/admin/create-form',  authMiddleware, requireAdmin, adminCreateAirlineForm);
 router.post('/admin/import-excel', authMiddleware, requireAdmin, upload.single('file'), adminImportAirlinesFromExcel);
 
-// Email lookup
-router.get('/by-email', authMiddleware, getAirlinesSubscriptionByEmail);
-
-// Mark as paid immediately after Stripe payment completes on the frontend
-router.patch('/:id/mark-paid', authMiddleware, markAirlinesPaid);
-
-// Airline wire transfer invoice request (user action from airline step 4)
-router.patch('/:id/request-invoice', authMiddleware, requestAirlineInvoice);
-
-// Mark invoice as generated (admin only)
+// ── Record-level actions ──────────────────────────────────────────────────────
+router.patch('/:id/mark-paid',              authMiddleware, markAirlinesPaid);
+router.patch('/:id/request-invoice',        authMiddleware, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
+router.patch('/:id/add-holders',            authMiddleware, addHoldersToSubscription);
 
-// Admin CRUD
-router.get('/', getAllAirlinesSubscriptions);
-router.get('/:id', getAirlinesSubscriptionById);
-router.patch('/:id/add-holders', addHoldersToSubscription);
-router.put('/:id', updateAirlinesSubscription);
-router.delete('/:id', deleteAirlinesSubscription);
+// ── CRUD — all require authentication ────────────────────────────────────────
+// GET / is admin-only (list all)
+// GET /:id allows any authenticated user (dashboard fetches own record by ID)
+// PUT /:id allows any authenticated user (dashboard edit form)
+// DELETE /:id is admin-only
+router.get('/',    authMiddleware, requireAdmin, getAllAirlinesSubscriptions);
+router.get('/:id', authMiddleware, getAirlinesSubscriptionById);
+router.put('/:id', authMiddleware, updateAirlinesSubscription);
+router.delete('/:id', authMiddleware, requireAdmin, deleteAirlinesSubscription);
 
 module.exports = router;

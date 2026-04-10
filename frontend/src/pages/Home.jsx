@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import Footer from '../components/layout/footer'
 import classicStamp from '../assets/Classic-Stamp.png'
 import dgrCrewImg from '../assets/DGR-Crew.jpg'
+import { Plane, Zap, Lock, Monitor, MapPin, User } from 'lucide-react'
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const C = {
@@ -50,6 +51,7 @@ const PLANS = [
     cta: 'Subscribe Now',
     to: '/register',
     img: 'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=600&q=80&auto=format&fit=crop&crop=center',
+    imgFallback: 'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=600&q=80&auto=format&fit=crop&crop=center',
   },
   {
     name: 'VIP Plan',
@@ -97,15 +99,27 @@ const HOW_STEPS = [
 ]
 
 const WHY_CHOOSE = [
-  { icon: '✈', title: 'Aviation-Specific Expertise', desc: 'Our services are designed specifically for individuals and businesses in the aviation industry, ensuring full FAA compliance.' },
-  { icon: '⚡', title: 'Fast and Simple Setup', desc: 'Register in just a few minutes, and your U.S. address will be active within 24 hours.' },
-  { icon: '🔒', title: 'Fully Digital and Secure', desc: "You'll receive real-time notifications when mail arrives at your U.S. address." },
-  { icon: '💻', title: 'Custom Software', desc: 'Tailored solution that streamlines FAA compliance through Agent for Service Appointment and optimizes workflows.' },
-  { icon: '📍', title: 'Oklahoma Office', desc: "Our Oklahoma office, located in close proximity to the FAA, ensures fast and efficient handling and forwarding of our customers' mail." },
-  { icon: '👤', title: 'Personal Contact', desc: 'Personalized, proactive guidance from an aviation-focused team ensures seamless FAA compliance.' },
+  { icon: <Plane className="w-6 h-6" />, title: 'Aviation-Specific Expertise', desc: 'Our services are designed specifically for individuals and businesses in the aviation industry, ensuring full FAA compliance.' },
+  { icon: <Zap className="w-6 h-6" />, title: 'Fast and Simple Setup', desc: 'Register in just a few minutes, and your U.S. address will be active within 24 hours.' },
+  { icon: <Lock className="w-6 h-6" />, title: 'Fully Digital and Secure', desc: "You'll receive real-time notifications when mail arrives at your U.S. address." },
+  { icon: <Monitor className="w-6 h-6" />, title: 'Custom Software', desc: 'Tailored solution that streamlines FAA compliance through Agent for Service Appointment and optimizes workflows.' },
+  { icon: <MapPin className="w-6 h-6" />, title: 'Oklahoma Office', desc: "Our Oklahoma office, located in close proximity to the FAA, ensures fast and efficient handling and forwarding of our customers' mail." },
+  { icon: <User className="w-6 h-6" />, title: 'Personal Contact', desc: 'Personalized, proactive guidance from an aviation-focused team ensures seamless FAA compliance.' },
 ]
 
 function PlanCard({ plan, index }) {
+  const imgRef = useRef(null)
+
+  const handleImgError = (e) => {
+    const el = e.target
+    if (plan.imgFallback && el.src !== plan.imgFallback) {
+      el.src = plan.imgFallback
+    } else {
+      // Hide broken image and show the SVG airplane placeholder behind it
+      el.style.display = 'none'
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -124,8 +138,19 @@ function PlanCard({ plan, index }) {
           Best Value
         </div>
       )}
-      <div className="relative h-52 overflow-hidden" style={{ background: `linear-gradient(135deg, ${C.blueMuted} 0%, ${C.gray50} 100%)` }}>
-        <img src={plan.img} alt={plan.name} className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.background = C.gray100 }} />
+      <div className="relative h-52 overflow-hidden flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.blueMuted} 0%, ${C.gray50} 100%)` }}>
+        {/* SVG airplane placeholder always rendered behind the photo */}
+        <svg viewBox="0 0 200 120" className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 60 L100 20 L180 60 L140 60 L130 90 L100 80 L70 90 L60 60 Z" fill="#0000ff" />
+          <path d="M100 20 L110 60 L90 60 Z" fill="#0000cc" />
+          <circle cx="100" cy="60" r="6" fill="#0000aa" />
+          <path d="M60 60 L20 70 L20 60 Z" fill="#0000dd" />
+          <path d="M140 60 L180 70 L180 60 Z" fill="#0000dd" />
+        </svg>
+        <svg viewBox="0 0 240 140" className="absolute w-3/4 h-3/4 opacity-10" xmlns="http://www.w3.org/2000/svg">
+          <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="#0000ff">✈</text>
+        </svg>
+        <img src={plan.img} alt={plan.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" onError={handleImgError} />
       </div>
       <div className="flex flex-col flex-1 p-6">
         <h3 className="text-xl font-black mb-1" style={{ color: C.dark }}>{plan.name}</h3>
@@ -363,7 +388,7 @@ export default function Home() {
                 style={{ background: '#000021' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#000000'}
                 onMouseLeave={e => e.currentTarget.style.background = '#000021'}>
-                ✈ Airlines Register
+                <Plane className="w-4 h-4" /> Airlines Register
               </Link>
             </div>
           </motion.div>

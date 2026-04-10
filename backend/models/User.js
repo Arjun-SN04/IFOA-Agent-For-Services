@@ -9,6 +9,9 @@ const UserSchema = new mongoose.Schema({
   lastName: { type: String },
   // Airline name — only used when role === 'airline'. Pre-fills & locks the form.
   airlineName: { type: String, default: '' },
+  // When true the user was created by admin and must change their password on first login.
+  // Cleared to false after they successfully set a new password via update-credentials.
+  mustChangePassword: { type: Boolean, default: false },
   // Reference to their primary registration record (for airline/individual)
   registrationId: { type: mongoose.Schema.Types.ObjectId, refPath: 'registrationModel' },
   registrationModel: { type: String, enum: ['Individual', 'AirlinesSubscription', 'Airlines'] },

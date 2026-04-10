@@ -304,7 +304,8 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const isUnlimited   = data.subscriptionPlan === 'Unlimited Plan'
   const selectedCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const pricePerCert  = data.pricePerCertificate || data.pricePerCert || 0
-  const total         = isUnlimited ? pricePerCert : pricePerCert * selectedCount
+  // Always multiply by count — Unlimited plan is $265/certificate too
+  const total         = pricePerCert * selectedCount
   const totalLabel    = `${total} USD`
   const selectedPaymentMethod = data.paymentMethod || paymentMethod || 'card'
 
@@ -417,7 +418,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
     { label: 'Phone',        value: data.phone ? ('+' + data.phone) : '' },
     { label: 'Holder Range', value: data.holderCount },
     { label: 'Team Members', value: String(selectedCount) + ' member' + (selectedCount !== 1 ? 's' : '') },
-    { label: isUnlimited ? 'Annual Fee' : 'Price per Certificate', value: `${pricePerCert} USD${isUnlimited ? ' / year' : ''}` },
+    { label: 'Price per Certificate', value: `${pricePerCert} USD` },
     { label: 'Total', value: totalLabel },
   ]
 

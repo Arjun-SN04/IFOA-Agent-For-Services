@@ -11,6 +11,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(() => localStorage.getItem('ifoa_token'))
   const [loading, setLoading] = useState(true)
+  // When true, show the forced-password-change modal instead of the normal dashboard
+  const [mustChangePassword, setMustChangePassword] = useState(false)
 
   useEffect(() => {
     if (token) {
@@ -28,9 +30,11 @@ export function AuthProvider({ children }) {
       try {
         const res = await API.get('/auth/me')
         setUser(res.data.user)
+        setMustChangePassword(res.data.user?.mustChangePassword || false)
       } catch {
         setToken(null)
         setUser(null)
+        setMustChangePassword(false)
       } finally {
         setLoading(false)
       }
@@ -42,6 +46,7 @@ export function AuthProvider({ children }) {
     const res = await API.post('/auth/login', { email, password })
     setToken(res.data.token)
     setUser(res.data.user)
+    setMustChangePassword(res.data.user?.mustChangePassword || false)
     return res.data.user
   }
 
@@ -49,17 +54,20 @@ export function AuthProvider({ children }) {
     const res = await API.post('/auth/signup', { email, password, role, firstName, lastName, airlineName })
     setToken(res.data.token)
     setUser(res.data.user)
+    setMustChangePassword(res.data.user?.mustChangePassword || false)
     return res.data.user
   }
 
   const logout = () => {
     setToken(null)
     setUser(null)
+    setMustChangePassword(false)
   }
 
   const setSession = (newToken, newUser) => {
     setToken(newToken)
     setUser(newUser)
+    setMustChangePassword(newUser?.mustChangePassword || false)
     localStorage.setItem('ifoa_token', newToken)
   }
 
@@ -67,11 +75,12 @@ export function AuthProvider({ children }) {
     const res = await API.put('/auth/update-credentials', { currentPassword, newEmail, newPassword })
     setToken(res.data.token)
     setUser(res.data.user)
+    // If they just changed their password, mustChangePassword will be false now
+    setMustChangePassword(res.data.user?.mustChangePassword || false)
     localStorage.setItem('ifoa_token', res.data.token)
     return res.data
   }
 
-  // NEW: update profile name only (no password required)
   const updateProfile = async (firstName, lastName) => {
     const res = await API.put('/auth/update-profile', { firstName, lastName })
     setToken(res.data.token)
@@ -88,8 +97,6 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
-  // Adds a new subscription ID to the user's subscriptionIds array.
-  // Does NOT overwrite the primary registrationId — safe to call on every new form submit.
   const addSubscription = async (subscriptionId) => {
     const res = await API.put('/auth/add-subscription', { subscriptionId })
     setToken(res.data.token)
@@ -98,7 +105,6 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
-  // Updates the airline name stored on the user account (airline role only).
   const updateAirlineName = async (airlineName) => {
     const res = await API.put('/auth/update-airline-name', { airlineName })
     setToken(res.data.token)
@@ -108,7 +114,13 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, setSession, updateCredentials, updateProfile, linkRegistration, addSubscription, updateAirlineName }}>
+    <AuthContext.Provider value={{
+      user, token, loading,
+      mustChangePassword,
+      login, signup, logout, setSession,
+      updateCredentials, updateProfile,
+      linkRegistration, addSubscription, updateAirlineName,
+    }}>
       {children}
     </AuthContext.Provider>
   )

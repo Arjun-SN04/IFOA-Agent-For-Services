@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { Link } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
@@ -7,6 +8,7 @@ import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
+import { getAirlineTotal } from '../../utils/airlineTotal'
 
 const EMPTY_HOLDER = {
   fullName: '', dateOfBirth: '', certificateType: '',
@@ -504,7 +506,12 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
     setSubmitting(true)
     setApiError('')
     try {
-      const res = await API.put(`/airlines/${sub._id}`, { certificateHolders: cleaned })
+      // Use the dedicated add-holders PATCH endpoint which enforces slot limits
+      // and correctly accumulates amountPaid.
+      const newHolders = cleaned.slice(existingCount) // only the truly new rows
+      const res = newHolders.length > 0
+        ? await API.patch(`/airlines/${sub._id}/add-holders`, { newHolders })
+        : await API.put(`/airlines/${sub._id}`, { certificateHolders: cleaned })
       onSuccess(res.data)
     } catch (err) {
       setApiError(err.response?.data?.message || 'Something went wrong')
@@ -678,13 +685,15 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
 
 export default function SubscriptionPage() {
   const { user, token, linkRegistration } = useAuth()
-  const [subs, setSubs] = useState([])       // all subscriptions
-  const [sub, setSub] = useState(null)        // primary / most recent (for modal targets)
+  const { getOrFetch, set: cacheSet, invalidate } = useDataCache()
+  const [subs, setSubs] = useState([])
+  const [sub, setSub] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showPayModal,  setShowPayModal]  = useState(false)
   const [payTarget,     setPayTarget]     = useState(null)
+  const [payingId,      setPayingId]      = useState(null) // prevents double-click
   const [showAddHolders, setShowAddHolders] = useState(false)
-  const [viewInvoice,   setViewInvoice]   = useState(null)  // invoice to preview
+  const [viewInvoice,   setViewInvoice]   = useState(null)
   const [editTarget, setEditTarget] = useState(null)
 
   const regId = user?.registrationId || sub?._id
@@ -693,6 +702,16 @@ export default function SubscriptionPage() {
 
   const isPending = (s) => s && s.paymentStatus !== 'paid' && s.status !== 'Active'
 
+  // Invalidate cache every time this page is mounted so the user always
+  // sees fresh data without needing to manually refresh the browser.
+  useEffect(() => {
+    if (user) {
+      invalidate(`subs_${user.id || user.email}`)
+      invalidate(`sub_${user.id || user.email}`)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // run once on mount only
+
   useEffect(() => {
     if (!user) { setLoading(false); return }
 
@@ -700,6 +719,12 @@ export default function SubscriptionPage() {
     const isAirline = user.role === 'airline'
     const basePath = isAirline ? '/airlines' : '/individuals'
     const modelName = isAirline ? 'Airlines' : 'Individual'
+    const cacheKey = `subs_${user.id || user.email}`
+
+    // Always invalidate on mount so navigating to this page fetches fresh data.
+    // Without this, stale cache can show old payment/subscription state until
+    // the 5-second TTL naturally expires.
+    invalidate(cacheKey)
 
     const mergeAndSort = (...groups) => {
       const seen = new Set()
@@ -722,7 +747,6 @@ export default function SubscriptionPage() {
         if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
       }
       if (ids.length === 0) return []
-
       const fetched = await Promise.allSettled(
         ids.map(id => API.get(`${basePath}/${id}`, { headers }))
       )
@@ -733,17 +757,17 @@ export default function SubscriptionPage() {
 
     const load = async () => {
       try {
-        const emailPromise = user.email
-          ? API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-              .then((r) => r.data.all || (r.data.data ? [r.data.data] : []))
-              .catch(() => [])
-          : Promise.resolve([])
-
-        const [idSubs, emailSubs] = await Promise.all([fetchByIds(), emailPromise])
-        const merged = mergeAndSort(idSubs, emailSubs)
+        const merged = await getOrFetch(cacheKey, async () => {
+          const emailPromise = user.email
+            ? API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+                .then((r) => r.data.all || (r.data.data ? [r.data.data] : []))
+                .catch(() => [])
+            : Promise.resolve([])
+          const [idSubs, emailSubs] = await Promise.all([fetchByIds(), emailPromise])
+          return mergeAndSort(idSubs, emailSubs)
+        })
         setSubs(merged)
         setSub(merged[0] || null)
-
         if (!user.registrationId && merged[0]?._id) {
           try { await linkRegistration(merged[0]._id, modelName) } catch { void 0 }
         }
@@ -754,9 +778,8 @@ export default function SubscriptionPage() {
         setLoading(false)
       }
     }
-
     load()
-  }, [user, token, linkRegistration])
+  }, [user, token, linkRegistration, getOrFetch, invalidate])
 
   return (
     <DashboardLayout>
@@ -822,7 +845,22 @@ export default function SubscriptionPage() {
                 total={subs.length}
                 user={user}
                 token={token}
-                onPay={() => { setSub(s); setPayTarget(s); setShowPayModal(true) }}
+                onPay={() => {
+              if (payingId === s._id) return // double-click guard
+              const isAirSub = user?.role === 'airline'
+              const correctTotal = isAirSub
+                ? (Number(s.pricePerCertificate || s.pricePerCert || 0) *
+                   Number(s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0)) ||
+                  Number(s.totalAmount || s.totalServiceFees || 0)
+                : Number(s.price || s.totalServiceFees || 0)
+              // Build the enriched sub object BEFORE opening the modal so
+              // PaymentModal always receives the correct amount on first render.
+              const enrichedSub = { ...s, _computedTotal: correctTotal }
+              setSub(enrichedSub)
+              setPayTarget(enrichedSub)
+              setPayingId(s._id)
+              setShowPayModal(true)
+            }}
                 onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onEditForm={() => setEditTarget(s)}
@@ -837,16 +875,19 @@ export default function SubscriptionPage() {
           <PaymentModal
             registrationId={sub?._id}
             registrationModel={user?.role === 'airline' ? 'Airlines' : 'Individual'}
-            amount={Math.round((sub?.price || sub?.totalAmount || sub?.totalServiceFees || 0) * 100)}
+            amount={Math.round((sub?._computedTotal ?? getAirlineTotal(sub) ?? sub?.price ?? sub?.totalAmount ?? sub?.totalServiceFees ?? 0) * 100)}
             subscriptionData={sub}
-            onClose={() => { setShowPayModal(false); setPayTarget(null) }}
+            onClose={() => { setShowPayModal(false); setPayTarget(null); setPayingId(null) }}
             onSuccess={async (inv) => {
-              // Optimistic update — show Active immediately
+              // Invalidate cache so next visit re-fetches fresh data
+              invalidate(`subs_${user?.id || user?.email}`)
+              // Optimistic update
               const updated = { ...sub, paymentStatus: 'paid', status: 'Active', isPaid: true }
               setSubs(prev => prev.map(s => s._id === updated._id ? updated : s))
               setSub(updated)
               setShowPayModal(false)
               setPayTarget(null)
+              setPayingId(null)
               if (inv) setViewInvoice(inv)
               // Re-fetch authoritative data from server so profile & subscription pages
               // both reflect the real DB state when the user navigates around
@@ -925,13 +966,19 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         return
       }
     } catch (_) {}
-    // Fallback: build invoice locally from subscription data
+    // Fallback: build invoice locally from subscription data.
+    // For airlines we MUST use getAirlineTotal() (pricePerCert × committedCount)
+    // because the DB's stored totalAmount / price was historically saved with
+    // the flat per-cert price bug (e.g. $265 instead of $795).
     try {
       const paidDate = s.subscriptionDate || s.updatedAt || s.createdAt
+      const correctAmountCents = isAirline
+        ? Math.round(getAirlineTotal(s) * 100)
+        : Math.round((s.price || s.totalServiceFees || 0) * 100)
       onViewInvoice?.(buildInvoice(
         s,
         isAirline ? 'Airlines' : 'Individual',
-        Math.round((s.price || s.totalAmount || s.totalServiceFees || 0) * 100),
+        correctAmountCents,
         { id: s.stripePaymentIntentId || s.invoiceNumber || '—' },
         paidDate ? new Date(paidDate) : new Date()
       ))
@@ -999,7 +1046,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
             {isAirline ? 'Total Amount' : 'Plan Price'}
           </p>
           <p className="text-3xl font-black">
-            {isAirline ? money(s.totalAmount) : money(s.price || s.totalServiceFees)}
+            {isAirline
+              ? money(getAirlineTotal(s))
+              : money(s.price || s.totalServiceFees)}
           </p>
         </div>
       </div>
@@ -1050,8 +1099,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
                 }
               />
               <Row label="Price per Certificate" value={money(s.pricePerCertificate || s.pricePerCert)} />
-              <Row label="Certificate Holders" value={`${s.certificateHolders?.length || 0} / ${s.committedCount || s.certificateHolders?.length || 0} holder(s)`} />
-              <Row label="Total Amount Due" value={money(s.totalAmount)} />
+              <Row label="Certificate Holders" value={`${s.certificateHolders?.length || 0} / ${s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0} holder(s)`} />
+              <Row label="Total Amount Due" value={money(getAirlineTotal(s))} />
               {(() => {
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
                 if (remaining > 0) return (

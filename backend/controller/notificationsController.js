@@ -28,6 +28,7 @@ function toIso(value) {
 }
 
 async function getAdminNotifications(limit) {
+  // 1. Wire payment requests — highest priority
   const wireRequested = await Airlines.find({
     wirePaymentRequested: true,
     paymentStatus: 'pending',
@@ -37,7 +38,7 @@ async function getAdminNotifications(limit) {
     .limit(limit)
     .select('airlineName firstName lastName subscriptionPlan wirePaymentRequestedAt createdAt _id');
 
-  return wireRequested.map((row) => {
+  const wireNotifs = wireRequested.map((row) => {
     const requestedAt = row.wirePaymentRequestedAt || row.createdAt || new Date();
     const who = row.airlineName || [row.firstName, row.lastName].filter(Boolean).join(' ') || 'Airline account';
     return {
@@ -51,6 +52,179 @@ async function getAdminNotifications(limit) {
       entityId: String(row._id),
     };
   });
+
+  // 2. New airline registrations (last 48 hours, unpaid)
+  const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const newAirlines = await Airlines.find({
+    createdAt: { $gte: cutoff48h },
+    paymentStatus: { $ne: 'paid' },
+    wirePaymentRequested: { $ne: true },
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .select('airlineName firstName lastName subscriptionPlan createdAt _id');
+
+  const newAirlineNotifs = newAirlines.map((row) => {
+    const who = row.airlineName || [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An airline';
+    return {
+      id: `new-airline-${row._id}`,
+      type: 'new-registration',
+      title: 'New Airline Registration',
+      message: `${who} submitted a new registration for ${row.subscriptionPlan || 'a plan'}. Awaiting payment.`,
+      createdAt: toIso(row.createdAt),
+      severity: 'info',
+      link: '/admin/airlines',
+      entityId: String(row._id),
+    };
+  });
+
+  // 3. New individual registrations (last 48 hours, unpaid)
+  const newIndividuals = await Individual.find({
+    createdAt: { $gte: cutoff48h },
+    paymentStatus: { $ne: 'paid' },
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .select('firstName lastName subscriptionPlan createdAt _id');
+
+  const newIndividualNotifs = newIndividuals.map((row) => {
+    const who = [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An individual';
+    return {
+      id: `new-individual-${row._id}`,
+      type: 'new-registration',
+      title: 'New Individual Registration',
+      message: `${who} submitted a new registration for ${row.subscriptionPlan || 'a plan'}. Awaiting payment.`,
+      createdAt: toIso(row.createdAt),
+      severity: 'info',
+      link: '/admin/individuals',
+      entityId: String(row._id),
+    };
+  });
+
+  // 4. Recently paid airlines (last 24 hours) — payment confirmed
+  const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const paidAirlines = await Airlines.find({
+    paymentStatus: 'paid',
+    updatedAt: { $gte: cutoff24h },
+  })
+    .sort({ updatedAt: -1 })
+    .limit(5)
+    .select('airlineName firstName lastName subscriptionPlan updatedAt _id');
+
+  const paidAirlineNotifs = paidAirlines.map((row) => {
+    const who = row.airlineName || [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An airline';
+    return {
+      id: `paid-airline-${row._id}`,
+      type: 'payment-confirmed',
+      title: 'Payment Confirmed — Airline',
+      message: `${who} completed payment for ${row.subscriptionPlan || 'a plan'}.`,
+      createdAt: toIso(row.updatedAt),
+      severity: 'success',
+      link: '/admin/airlines',
+      entityId: String(row._id),
+    };
+  });
+
+  // 5. Recently paid individuals (last 24 hours)
+  const paidIndividuals = await Individual.find({
+    paymentStatus: 'paid',
+    updatedAt: { $gte: cutoff24h },
+  })
+    .sort({ updatedAt: -1 })
+    .limit(5)
+    .select('firstName lastName subscriptionPlan updatedAt _id');
+
+  const paidIndividualNotifs = paidIndividuals.map((row) => {
+    const who = [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An individual';
+    return {
+      id: `paid-individual-${row._id}`,
+      type: 'payment-confirmed',
+      title: 'Payment Confirmed — Individual',
+      message: `${who} completed payment for ${row.subscriptionPlan || 'a plan'}.`,
+      createdAt: toIso(row.updatedAt),
+      severity: 'success',
+      link: '/admin/individuals',
+      entityId: String(row._id),
+    };
+  });
+
+  // 6. Subscriptions expiring in next 14 days
+  const in14days = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  const expiringAirlines = await Airlines.find({
+    expirationDate: { $gte: new Date(), $lte: in14days },
+    paymentStatus: 'paid',
+  })
+    .sort({ expirationDate: 1 })
+    .limit(5)
+    .select('airlineName firstName lastName subscriptionPlan expirationDate _id');
+
+  const expiringAirlineNotifs = expiringAirlines.map((row) => {
+    const who = row.airlineName || [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An airline';
+    const days = daysUntil(row.expirationDate);
+    return {
+      id: `expiring-airline-${row._id}`,
+      type: 'expiry-soon',
+      title: 'Airline Subscription Expiring',
+      message: `${who}\'s subscription expires in ${days} day${days === 1 ? '' : 's'}.`,
+      createdAt: toIso(row.expirationDate),
+      severity: 'warn',
+      link: '/admin/airlines',
+      entityId: String(row._id),
+    };
+  });
+
+  const expiringIndividuals = await Individual.find({
+    expirationDate: { $gte: new Date(), $lte: in14days },
+    paymentStatus: 'paid',
+  })
+    .sort({ expirationDate: 1 })
+    .limit(5)
+    .select('firstName lastName subscriptionPlan expirationDate _id');
+
+  const expiringIndividualNotifs = expiringIndividuals.map((row) => {
+    const who = [row.firstName, row.lastName].filter(Boolean).join(' ') || 'An individual';
+    const days = daysUntil(row.expirationDate);
+    return {
+      id: `expiring-individual-${row._id}`,
+      type: 'expiry-soon',
+      title: 'Individual Subscription Expiring',
+      message: `${who}\'s subscription expires in ${days} day${days === 1 ? '' : 's'}.`,
+      createdAt: toIso(row.expirationDate),
+      severity: 'warn',
+      link: '/admin/individuals',
+      entityId: String(row._id),
+    };
+  });
+
+  // Merge: wire requests always first, then by recency
+  const all = [
+    ...wireNotifs,
+    ...newAirlineNotifs,
+    ...newIndividualNotifs,
+    ...paidAirlineNotifs,
+    ...paidIndividualNotifs,
+    ...expiringAirlineNotifs,
+    ...expiringIndividualNotifs,
+  ];
+
+  // De-duplicate by id
+  const seen = new Set();
+  const deduped = all.filter((n) => {
+    if (seen.has(n.id)) return false;
+    seen.add(n.id);
+    return true;
+  });
+
+  // Sort: high severity first, then by date desc
+  const severityOrder = { high: 0, warn: 1, success: 2, info: 3 };
+  deduped.sort((a, b) => {
+    const sa = severityOrder[a.severity] ?? 4;
+    const sb = severityOrder[b.severity] ?? 4;
+    if (sa !== sb) return sa - sb;
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  return deduped.slice(0, limit);
 }
 
 async function getAirlineNotifications(user, limit) {
@@ -80,7 +254,7 @@ async function getAirlineNotifications(user, limit) {
         id: `airline-wire-${s._id}`,
         type: 'wire-pending',
         title: 'Wire Request Submitted',
-        message: `Your wire-transfer invoice request for ${s.subscriptionPlan || 'this plan'} is pending admin review.`,
+        message: `Your wire-transfer invoice request for ${s.subscriptionPlan || 'this plan'} is pending admin review. You\'ll be contacted with payment instructions.`,
         createdAt: toIso(baseDate),
         severity: 'info',
         link: '/dashboard/subscription',
@@ -91,8 +265,8 @@ async function getAirlineNotifications(user, limit) {
       out.push({
         id: `airline-payment-${s._id}`,
         type: 'payment-pending',
-        title: 'Payment Pending',
-        message: `Complete card payment to activate your ${s.subscriptionPlan || 'subscription'}.`,
+        title: 'Payment Required',
+        message: `Complete card payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your certificate.`,
         createdAt: toIso(s.createdAt || new Date()),
         severity: 'warn',
         link: '/dashboard/subscription',
@@ -104,7 +278,7 @@ async function getAirlineNotifications(user, limit) {
         id: `airline-active-${s._id}`,
         type: 'subscription-active',
         title: 'Subscription Active',
-        message: `${s.subscriptionPlan || 'Your subscription'} is active.`,
+        message: `${s.subscriptionPlan || 'Your subscription'} is active. Your U.S. Agent for Service is registered.`,
         createdAt: toIso(s.createdAt || new Date()),
         severity: 'success',
         link: '/dashboard/subscription',
@@ -116,11 +290,24 @@ async function getAirlineNotifications(user, limit) {
       out.push({
         id: `airline-expiry-${s._id}`,
         type: 'expiry-soon',
-        title: 'Expiration Reminder',
-        message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}.`,
+        title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
+        message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew now to stay FAA-compliant.`,
         createdAt: toIso(s.expirationDate),
-        severity: 'warn',
+        severity: d <= 7 ? 'high' : 'warn',
         link: '/dashboard/subscription',
+      });
+    }
+
+    // Invoice ready reminder
+    if (s.invoiceGenerated && (s.paymentStatus === 'paid' || s.status === 'Active')) {
+      out.push({
+        id: `airline-invoice-${s._id}`,
+        type: 'invoice-ready',
+        title: 'Invoice Available',
+        message: `Your invoice for ${s.subscriptionPlan || 'your plan'} is ready. Download it from your subscription page.`,
+        createdAt: toIso(s.updatedAt || s.createdAt || new Date()),
+        severity: 'info',
+        link: '/dashboard/documents',
       });
     }
   });
@@ -152,8 +339,8 @@ async function getIndividualNotifications(user, limit) {
       out.push({
         id: `individual-payment-${s._id}`,
         type: 'payment-pending',
-        title: 'Payment Pending',
-        message: `Complete payment to activate your ${s.subscriptionPlan || 'subscription'}.`,
+        title: 'Payment Required',
+        message: `Complete payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your FAA compliance certificate.`,
         createdAt: toIso(s.createdAt || new Date()),
         severity: 'warn',
         link: '/dashboard/subscription',
@@ -165,7 +352,7 @@ async function getIndividualNotifications(user, limit) {
         id: `individual-active-${s._id}`,
         type: 'subscription-active',
         title: 'Subscription Active',
-        message: `${s.subscriptionPlan || 'Your subscription'} is active.`,
+        message: `${s.subscriptionPlan || 'Your subscription'} is active. IFOA USA is your registered U.S. Agent for Service.`,
         createdAt: toIso(s.createdAt || new Date()),
         severity: 'success',
         link: '/dashboard/subscription',
@@ -177,11 +364,24 @@ async function getIndividualNotifications(user, limit) {
       out.push({
         id: `individual-expiry-${s._id}`,
         type: 'expiry-soon',
-        title: 'Expiration Reminder',
-        message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}.`,
+        title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
+        message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew to maintain FAA compliance.`,
         createdAt: toIso(s.expirationDate),
-        severity: 'warn',
+        severity: d <= 7 ? 'high' : 'warn',
         link: '/dashboard/subscription',
+      });
+    }
+
+    // Invoice ready
+    if (s.invoiceGenerated && (s.paymentStatus === 'paid' || s.status === 'Active')) {
+      out.push({
+        id: `individual-invoice-${s._id}`,
+        type: 'invoice-ready',
+        title: 'Invoice Available',
+        message: `Your invoice for ${s.subscriptionPlan || 'your plan'} is ready. Download it from your documents page.`,
+        createdAt: toIso(s.updatedAt || s.createdAt || new Date()),
+        severity: 'info',
+        link: '/dashboard/documents',
       });
     }
   });

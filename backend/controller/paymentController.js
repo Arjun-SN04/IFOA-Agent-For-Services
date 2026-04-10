@@ -2,13 +2,25 @@
  * paymentController.js
  *
  * Handles all Stripe payment flows:
- *   POST /api/payments/create-intent        — create PaymentIntent, return clientSecret
- *   POST /api/payments/confirm              — called by frontend after Stripe succeeds;
- *                                             creates Payment record, marks subscription active
- *   POST /api/payments/webhook              — Stripe webhook (backup/authoritative confirm)
- *   GET  /api/payments/by-registration/:id  — fetch all Payment docs for a subscription
- *   GET  /api/payments/:id                  — fetch single Payment doc
- *   GET  /api/payments                      — admin: paginated list of all payments
+ *   POST /api/payments/create-intent          — create PaymentIntent, return clientSecret
+ *   POST /api/payments/confirm                — called by frontend after Stripe succeeds;
+ *                                               creates Payment record, marks subscription active
+ *   POST /api/payments/webhook                — Stripe webhook (backup/authoritative confirm)
+ *   PATCH /api/payments/:id/save-invoice-draft — admin saves invoice edits back to Payment doc
+ *   GET  /api/payments/by-registration/:id    — fetch all Payment docs for a subscription
+ *   GET  /api/payments/:id                    — fetch single Payment doc
+ *   GET  /api/payments                        — admin: paginated list of all payments
+ *
+ * SINGLE SOURCE OF TRUTH FOR INVOICES
+ * ─────────────────────────────────────
+ * The Payment document is the authoritative invoice record.
+ * When an admin edits an invoice the changes are saved as `invoiceDraft` on the
+ * Payment doc — NOT separately on the registration record.  Both the user-facing
+ * SubscriptionPage and the admin dashboard read from the same Payment doc, so
+ * everyone always sees the same invoice.  If no Payment doc exists (wire-transfer
+ * or legacy record) a draft can be stored on the registration via the existing
+ * PUT /api/airlines/:id and PUT /api/individuals/:id endpoints, but the
+ * SubscriptionPage always prefers the Payment doc when one is present.
  */
 
 const Stripe = require('stripe');
@@ -21,12 +33,6 @@ const AirlinesSubscription = require('../models/AirlinesSubscription');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Resolve a registration record from the correct model.
- * registrationModel is ALWAYS supplied by our own code (never user input for the
- * actual DB lookup), so we trust it here.  We do a final existence check and
- * return null if the document was not found so callers handle it gracefully.
- */
 async function findRegistration(registrationId, registrationModel) {
   try {
     if (registrationModel === 'Individual') {
@@ -36,7 +42,6 @@ async function findRegistration(registrationId, registrationModel) {
     if (registrationModel === 'Airlines') {
       const doc = await Airlines.findById(registrationId);
       if (doc) return { doc, Model: Airlines };
-      // Fall back to legacy AirlinesSubscription collection in case of old record
       const legacy = await AirlinesSubscription.findById(registrationId);
       return { doc: legacy || null, Model: legacy ? AirlinesSubscription : null };
     }
@@ -50,7 +55,6 @@ async function findRegistration(registrationId, registrationModel) {
   }
 }
 
-/** Compute subscription expiry based on plan and start date */
 function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
   const d = new Date(fromDate);
   if (subscriptionPlan === '1 Year Subscription Plan') {
@@ -65,16 +69,35 @@ function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
   return null; // Unlimited Plan — no expiry
 }
 
-/** Build the complete invoice snapshot from a registration document */
+/**
+ * Build the invoice snapshot stored permanently on the Payment document.
+ * For airlines the total is ALWAYS pricePerCert × committedCount so legacy
+ * DB records with the old flat-rate bug are corrected at payment-confirm time.
+ */
 function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
-  const isAirline = registrationModel !== 'Individual';
+  const isAirline      = registrationModel !== 'Individual';
   const expirationDate = computeExpiry(rec.subscriptionPlan, paidAt, rec.multiYearCount);
+
+  // Airline total: always recompute from price × count to avoid legacy bug
+  const pricePerCert = Number(rec.pricePerCertificate || rec.pricePerCert || 0);
+  const holderCount  = Number(
+    rec.committedCount || rec.holderCountValue || rec.certificateHolders?.length || 0
+  );
+
+  let correctTotal = amountDollars;
+  if (isAirline) {
+    // Unlimited Plan is still billed per-certificate × committedCount.
+    // Always recompute from price × count to avoid legacy flat-rate bug.
+    if (pricePerCert > 0 && holderCount > 0) {
+      correctTotal = pricePerCert * holderCount;
+    }
+  }
 
   return {
     name: isAirline
       ? (rec.airlineName ||
-         [rec.firstName, rec.lastName].filter(Boolean).join(' ') ||
          [rec.contactFirstName, rec.contactLastName].filter(Boolean).join(' ') ||
+         [rec.firstName, rec.lastName].filter(Boolean).join(' ') ||
          '')
       : [rec.firstName, rec.lastName].filter(Boolean).join(' '),
     email:   rec.email || rec.contactEmail || rec.paymentEmail || '',
@@ -92,19 +115,15 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
     faaCertificateNumber: rec.faaCertificateNumber  || '',
     iacraTrackingNumber:  rec.iacraTrackingNumber   || '',
 
-    holderCount:  rec.certificateHolders?.length || rec.committedCount || 0,
-    pricePerCert: rec.pricePerCertificate || rec.pricePerCert || 0,
+    holderCount,
+    pricePerCert,
 
-    subtotal:  amountDollars,
+    subtotal:  correctTotal,
     tax:       0,
-    totalPaid: amountDollars,
+    totalPaid: correctTotal,
   };
 }
 
-/**
- * Apply paid status to the registration document.
- * Called by both /confirm and webhook to keep them in sync.
- */
 async function applyPaymentToRegistration(registrationId, registrationModel, paymentDoc) {
   const { doc, Model } = await findRegistration(registrationId, registrationModel);
   if (!doc || !Model) return null;
@@ -125,9 +144,8 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   };
   if (expirationDate) update.expirationDate = expirationDate;
 
-  // For Airlines, also track the total amount paid
   if (registrationModel !== 'Individual') {
-    update.amountPaid = doc.totalAmount || 0;
+    update.amountPaid = paymentDoc.invoiceSnapshot?.totalPaid || paymentDoc.amountDollars || 0;
     update.wirePaymentRequested = false;
     update.wirePaymentRequestedAt = null;
   }
@@ -146,7 +164,6 @@ exports.createPaymentIntent = async (req, res) => {
         message: 'registrationId and registrationModel are required.',
       });
 
-    // Validate registrationModel value
     const VALID_MODELS = ['Individual', 'Airlines', 'AirlinesSubscription'];
     if (!VALID_MODELS.includes(registrationModel))
       return res.status(400).json({ success: false, message: 'Invalid registrationModel.' });
@@ -155,17 +172,27 @@ exports.createPaymentIntent = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
-    // Block if already paid
     if (doc.isPaid || doc.paymentStatus === 'paid')
       return res.status(400).json({
         success: false,
         message: 'This subscription is already paid.',
       });
 
-    const amountDollars = (registrationModel === 'Individual')
-      ? (doc.price || doc.totalAmount || 0)
-      : (doc.totalAmount || doc.totalServiceFees || 0);
-    const amountCents   = Math.round(amountDollars * 100);
+    // For airlines always compute from pricePerCert × committedCount for ALL plans
+    let amountDollars;
+    if (registrationModel !== 'Individual') {
+      const ppc   = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+      const count = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      if (ppc > 0 && count > 0) {
+        amountDollars = ppc * count;
+      } else {
+        amountDollars = Number(doc.totalAmount || doc.totalServiceFees || 0);
+      }
+    } else {
+      amountDollars = Number(doc.price || doc.totalAmount || 0);
+    }
+
+    const amountCents = Math.round(amountDollars * 100);
     if (amountCents <= 0)
       return res.status(400).json({ success: false, message: 'Invalid payment amount.' });
 
@@ -211,13 +238,11 @@ exports.confirmPayment = async (req, res) => {
         message: 'paymentIntentId, registrationId, and registrationModel are required.',
       });
 
-    // ── Idempotency: if Payment record already exists and is paid, return it ──
     const existing = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
     if (existing && existing.isPaid) {
       return res.json({ success: true, payment: existing, alreadyRecorded: true });
     }
 
-    // ── Fetch and verify PaymentIntent from Stripe ────────────────────────────
     let pi;
     try {
       pi = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -235,7 +260,6 @@ exports.confirmPayment = async (req, res) => {
       });
     }
 
-    // ── Fetch registration record for invoice snapshot ────────────────────────
     const { doc } = await findRegistration(registrationId, registrationModel);
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
@@ -245,11 +269,10 @@ exports.confirmPayment = async (req, res) => {
     const amountCents   = pi.amount_received || pi.amount;
     const amountDollars = amountCents / 100;
 
-    // ── Extract card/payment method details from charge ───────────────────────
     let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
     try {
       if (pi.latest_charge) {
-        const charge   = await stripe.charges.retrieve(pi.latest_charge);
+        const charge     = await stripe.charges.retrieve(pi.latest_charge);
         stripeChargeId   = charge.id    || '';
         stripeCustomerId = typeof charge.customer === 'string' ? charge.customer : '';
         const pm = charge.payment_method_details;
@@ -261,14 +284,12 @@ exports.confirmPayment = async (req, res) => {
           paymentMethodType = pm?.type || '';
         }
       }
-    } catch (_) {
-      // Non-critical — continue without card details
+    } catch (chargeErr) {
+      console.warn('[confirmPayment] Charge retrieval failed (non-critical):', chargeErr.message);
     }
 
-    // ── Build the invoice snapshot ────────────────────────────────────────────
     const invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
 
-    // ── Create or update the Payment document ─────────────────────────────────
     const paymentData = {
       stripePaymentIntentId: paymentIntentId,
       stripeChargeId,
@@ -280,27 +301,50 @@ exports.confirmPayment = async (req, res) => {
       isPaid:           true,
       paidAt:           now,
       amountCents,
-      amountDollars,
+      // Store the corrected amount (pricePerCert × count) not the raw Stripe amount
+      // so the invoice always shows the right total even for legacy records.
+      amountDollars:    invoiceSnapshot.totalPaid || amountDollars,
       currency:         pi.currency || 'usd',
       registrationId,
       registrationModel,
       invoiceNumber:    invoiceNum,
       invoiceSnapshot,
+      // invoiceDraft starts as null — admin populates it via save-invoice-draft
+      invoiceDraft:     null,
       description:      pi.description || '',
       ipAddress:        ipAddress || req.ip || '',
       userAgent:        userAgent || req.headers['user-agent'] || '',
       confirmedVia:     'frontend',
     };
 
+    // Use findOneAndUpdate with upsert to prevent duplicate Payment docs under
+    // concurrent requests (race condition guard — unique index on stripePaymentIntentId
+    // is the last line of defence but this avoids relying on error handling alone).
     let paymentDoc;
-    if (existing) {
-      Object.assign(existing, paymentData);
-      paymentDoc = await existing.save();
-    } else {
-      paymentDoc = await Payment.create(paymentData);
+    try {
+      paymentDoc = await Payment.findOneAndUpdate(
+        { stripePaymentIntentId: paymentIntentId },
+        { $setOnInsert: paymentData },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    } catch (dupErr) {
+      if (dupErr.code === 11000) {
+        // Duplicate key — another request already created it; return existing
+        paymentDoc = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+        if (paymentDoc && paymentDoc.isPaid) {
+          return res.json({ success: true, payment: paymentDoc, alreadyRecorded: true });
+        }
+      } else {
+        throw dupErr;
+      }
     }
 
-    // ── Mark the registration as paid/active ─────────────────────────────────
+    // If the doc already existed and was not yet marked paid, update it fully
+    if (paymentDoc && !paymentDoc.isPaid) {
+      Object.assign(paymentDoc, paymentData);
+      paymentDoc = await paymentDoc.save();
+    }
+
     const updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
 
     console.log(`[confirmPayment] Payment ${paymentDoc._id} confirmed for ${registrationModel} ${registrationId}`);
@@ -312,6 +356,60 @@ exports.confirmPayment = async (req, res) => {
     });
   } catch (err) {
     console.error('[confirmPayment]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ─── PATCH /api/payments/:id/save-invoice-draft ───────────────────────────────
+/**
+ * Admin saves edited invoice fields back to the Payment document.
+ * This is the single source of truth — both the admin dashboard and the
+ * airline/individual subscription page read `invoiceDraft` from the same
+ * Payment doc, so they always see the same invoice.
+ */
+exports.saveInvoiceDraft = async (req, res) => {
+  try {
+    const { invoiceDraft, invoiceNumber } = req.body;
+
+    const update = {};
+    if (invoiceDraft !== undefined) update.invoiceDraft = invoiceDraft;
+    if (invoiceNumber)              update.invoiceNumber = invoiceNumber;
+
+    const paymentDoc = await Payment.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true },
+    );
+
+    if (!paymentDoc)
+      return res.status(404).json({ success: false, message: 'Payment record not found.' });
+
+    // Also sync invoiceNumber back to the registration record so it appears
+    // in list views without a separate fetch.
+    if (invoiceNumber && paymentDoc.registrationId && paymentDoc.registrationModel) {
+      try {
+        const { doc, Model } = await findRegistration(
+          paymentDoc.registrationId,
+          paymentDoc.registrationModel,
+        );
+        if (doc && Model) {
+          await Model.findByIdAndUpdate(paymentDoc.registrationId, {
+            $set: {
+              invoiceNumber,
+              invoiceGenerated: true,
+              invoiceDraft: invoiceDraft || doc.invoiceDraft || null,
+            },
+          });
+        }
+      } catch (_) {
+        // Non-critical — registration sync failed but Payment doc is updated
+      }
+    }
+
+    res.json({ success: true, data: paymentDoc });
+  } catch (err) {
+    console.error('[saveInvoiceDraft]', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -333,7 +431,6 @@ exports.stripeWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ── payment_intent.succeeded ──────────────────────────────────────────────
   if (event.type === 'payment_intent.succeeded') {
     const pi = event.data.object;
     const { registrationId, registrationModel } = pi.metadata || {};
@@ -344,7 +441,6 @@ exports.stripeWebhook = async (req, res) => {
     }
 
     try {
-      // Idempotency check
       const existing = await Payment.findOne({ stripePaymentIntentId: pi.id });
       if (existing && existing.isPaid) {
         console.log(`[stripeWebhook] Already recorded: ${pi.id}`);
@@ -354,7 +450,7 @@ exports.stripeWebhook = async (req, res) => {
       const { doc } = await findRegistration(registrationId, registrationModel);
       if (!doc) {
         console.error(`[stripeWebhook] Registration not found: ${registrationModel} ${registrationId}`);
-        return res.json({ received: true }); // Ack to prevent Stripe retries
+        return res.json({ received: true });
       }
 
       const now           = new Date();
@@ -377,7 +473,9 @@ exports.stripeWebhook = async (req, res) => {
             paymentMethodType = pm?.type || '';
           }
         }
-      } catch (_) {}
+      } catch (chargeErr) {
+        console.warn('[stripeWebhook] Charge retrieval failed (non-critical):', chargeErr.message);
+      }
 
       const invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
 
@@ -392,12 +490,13 @@ exports.stripeWebhook = async (req, res) => {
         isPaid:         true,
         paidAt:         now,
         amountCents,
-        amountDollars,
+        amountDollars:  invoiceSnapshot.totalPaid || amountDollars,
         currency:       pi.currency || 'usd',
         registrationId,
         registrationModel,
         invoiceNumber:  invoiceNum,
         invoiceSnapshot,
+        invoiceDraft:   null,
         description:    pi.description || '',
         confirmedVia:   'webhook',
       };
@@ -414,11 +513,11 @@ exports.stripeWebhook = async (req, res) => {
       console.log(`[stripeWebhook] Payment ${paymentDoc._id} recorded for ${registrationModel} ${registrationId}`);
     } catch (err) {
       console.error('[stripeWebhook] Processing error:', err.message);
-      // Always return 200 — log errors, don't trigger Stripe retries
+      // Return 500 so Stripe retries — do NOT return 200 on DB errors
+      return res.status(500).send('Internal error processing payment. Will retry.');
     }
   }
 
-  // ── payment_intent.payment_failed ─────────────────────────────────────────
   if (event.type === 'payment_intent.payment_failed') {
     const pi = event.data.object;
     const { registrationId, registrationModel } = pi.metadata || {};
@@ -432,7 +531,6 @@ exports.stripeWebhook = async (req, res) => {
             { $set: { paymentStatus: 'failed', isFormCompleted: false, status: 'Inactive' } },
           );
         }
-        // Upsert a failed Payment record for audit trail
         await Payment.findOneAndUpdate(
           { stripePaymentIntentId: pi.id },
           {
@@ -443,7 +541,6 @@ exports.stripeWebhook = async (req, res) => {
               currency:              pi.currency || 'usd',
               registrationId,
               registrationModel,
-              // invoiceSnapshot must satisfy the schema — supply empty but valid object
               invoiceSnapshot: {
                 name: '', email: '', phone: '', address: '',
                 isAirline: registrationModel !== 'Individual',
@@ -454,6 +551,7 @@ exports.stripeWebhook = async (req, res) => {
                 subtotal: 0, tax: 0, totalPaid: 0,
               },
               invoiceNumber: `INV-FAILED-${Date.now()}`,
+              invoiceDraft:  null,
             },
             $set: {
               status:      'failed',
@@ -474,9 +572,23 @@ exports.stripeWebhook = async (req, res) => {
 
 
 // ─── GET /api/payments/by-registration/:id ────────────────────────────────────
+// Ownership enforced: non-admin users can only fetch payments for their own
+// registration IDs. Admins can access any record.
 exports.getPaymentsByRegistration = async (req, res) => {
   try {
-    const payments = await Payment.find({ registrationId: req.params.id })
+    const targetId = req.params.id;
+
+    // Authorization check — non-admins must own this registration
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const ownsRecord = userRegId === targetId || userSubIds.includes(targetId);
+      if (!ownsRecord) {
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+      }
+    }
+
+    const payments = await Payment.find({ registrationId: targetId })
       .sort({ createdAt: -1 });
     res.json({ success: true, data: payments });
   } catch (err) {

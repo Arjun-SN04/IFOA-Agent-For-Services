@@ -404,7 +404,9 @@ export function buildInvoice(sub, registrationModel, amountCents, paymentIntent,
     address: [sub?.addressLine1, sub?.city, sub?.state, sub?.postalCode, sub?.country].filter(Boolean).join(', '),
     isAirline,
     pricePerCert: sub?.pricePerCertificate || sub?.pricePerCert || null,
-    holderCount:  sub?.certificateHolders?.length || sub?.committedCount || null,
+    // committedCount is the billed quantity — always prefer it over the current
+    // certificateHolders length, which may be partially filled.
+    holderCount:  sub?.committedCount || sub?.holderCountValue || sub?.certificateHolders?.length || null,
     primaryCertificate: sub?.primaryCertificate || null,
     faaCertificateNumber: sub?.faaCertificateNumber || null,
     iacraTrackingNumber: sub?.iacraTrackingNumber || null,

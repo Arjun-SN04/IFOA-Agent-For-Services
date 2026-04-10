@@ -25,29 +25,29 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// Public
+// ── Public — registration form submit (unauthenticated users can register) ──
 router.post('/', createIndividual);
 
-// Admin create/import
-router.post('/admin/create-form', authMiddleware, requireAdmin, adminCreateIndividualForm);
+// ── Admin create / import ────────────────────────────────────────────────────
+router.post('/admin/create-form',  authMiddleware, requireAdmin, adminCreateIndividualForm);
 router.post('/admin/import-excel', authMiddleware, requireAdmin, upload.single('file'), adminImportIndividualsFromExcel);
 
-// ── Static/named routes MUST come before /:id to prevent "excel" being treated as an ID ──
+// ── Static / named routes BEFORE /:id ────────────────────────────────────────
 router.get('/export/excel', authMiddleware, requireAdmin, exportToExcel);
+router.get('/by-email',     authMiddleware, getIndividualByEmail);
 
-// Email lookup
-router.get('/by-email', authMiddleware, getIndividualByEmail);
-
-// Mark as paid immediately after Stripe payment completes on the frontend
-router.patch('/:id/mark-paid', authMiddleware, markIndividualPaid);
-
-// Mark invoice as generated (admin only)
+// ── Record-level actions ──────────────────────────────────────────────────────
+router.patch('/:id/mark-paid',              authMiddleware, markIndividualPaid);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
 
-// Admin CRUD
-router.get('/', getAllIndividuals);
-router.get('/:id', getIndividualById);
-router.put('/:id', updateIndividual);
-router.delete('/:id', deleteIndividual);
+// ── CRUD — all require authentication ────────────────────────────────────────
+// GET / is admin-only (list all)
+// GET /:id allows any authenticated user (dashboard fetches own record by ID)
+// PUT /:id allows any authenticated user (dashboard edit form)
+// DELETE /:id is admin-only
+router.get('/',    authMiddleware, requireAdmin, getAllIndividuals);
+router.get('/:id', authMiddleware, getIndividualById);
+router.put('/:id', authMiddleware, updateIndividual);
+router.delete('/:id', authMiddleware, requireAdmin, deleteIndividual);
 
 module.exports = router;

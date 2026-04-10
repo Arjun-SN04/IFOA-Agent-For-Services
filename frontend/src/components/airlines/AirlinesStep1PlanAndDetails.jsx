@@ -188,9 +188,8 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
 
   const selectedCount = Number(data.holderCountValue || 0)
   const pricePerCertificate = Number(data.pricePerCertificate || 0)
-  const payableTotal = data.subscriptionPlan === 'Unlimited Plan'
-    ? pricePerCertificate
-    : selectedCount > 0 ? (pricePerCertificate * selectedCount) : 0
+  // For both plans: $price × exact count selected
+  const payableTotal = selectedCount > 0 ? (pricePerCertificate * selectedCount) : 0
 
   const validate = () => {
     const e = {}
@@ -296,12 +295,12 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                 {data.subscriptionPlan === '1 Year Subscription Plan' && data.holderCount ? PRICE_LABEL[data.holderCount] : data.subscriptionPlan === 'Unlimited Plan' && data.holderCount ? UNLIMITED_PRICE_LABEL[data.holderCount] : '—'}
               </span>
               {data.subscriptionPlan === '1 Year Subscription Plan' && <span className="text-xs text-gray-400 font-normal ml-1.5">per certificate / year</span>}
-              {data.subscriptionPlan === 'Unlimited Plan' && <span className="text-xs text-gray-400 font-normal ml-1.5">per year</span>}
+              {data.subscriptionPlan === 'Unlimited Plan' && <span className="text-xs text-gray-400 font-normal ml-1.5">per certificate / unlimited</span>}
             </p>
             {payableTotal > 0 && (
               <p className="text-sm font-black text-blue-900 mt-1.5">
                 Payable Total: <span className="text-green-700">${payableTotal} USD</span>
-                {data.subscriptionPlan !== 'Unlimited Plan' && selectedCount > 0 ? ` (${selectedCount} holder${selectedCount !== 1 ? 's' : ''})` : ''}
+                {selectedCount > 0 ? ` (${selectedCount} holder${selectedCount !== 1 ? 's' : ''})` : ''}
               </p>
             )}
           </div>
