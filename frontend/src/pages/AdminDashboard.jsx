@@ -619,7 +619,12 @@ async function generateIFOAInvoicePDF(inv) {
   txt(inv.recipientCountry || '', ML, Y, { size: 9, color: MID })
   Y -= 26
 
-  txt('Invoice ' + inv.invoiceNumber, ML, Y, { size: 12, font: fontBold })
+  // Strip leading "Invoice " prefix if already present in the invoice number
+  // to avoid rendering "Invoice Invoice US-6-26"
+  const rawInvoiceNumber = String(inv.invoiceNumber || '')
+  const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
+
+  txt(displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
@@ -695,7 +700,6 @@ async function generateIFOAInvoicePDF(inv) {
   line(ML, FY + 18, ML + W, FY + 18, BORDER, 0.5)
   const footerText = 'Bank:  Bank of America     Account owner:  IFOA USA Corp     SWIFT:  BOFAUS3N     Account:  8981 5632 1560'
   const ftw = fontReg.widthOfTextAtSize(footerText, 7.5)
-  page.drawText(footerText, { x: (width - ftw) / 2, y: FY + 8, size: 7.5, font: fontReg, color: MID })
   const footer2 = 'Email:  agent@theifoa.com     Mobile:  +1 508 838 5880     Website:  theifoa.com'
   const ft2w = fontReg.widthOfTextAtSize(footer2, 7)
   page.drawText(footer2, { x: (width - ft2w) / 2, y: FY - 3, size: 7, font: fontReg, color: MUTED })

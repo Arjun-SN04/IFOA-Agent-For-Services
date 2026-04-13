@@ -104,7 +104,12 @@ export async function generateIFOAInvoicePDF(inv) {
   txt(inv.recipientCountry || '', ML, Y, { size: 9, color: MID })
   Y -= 26
 
-  txt('Invoice ' + inv.invoiceNumber, ML, Y, { size: 12, font: fontBold })
+  // Strip leading "Invoice " prefix if already present in the invoice number
+  // to avoid rendering "Invoice Invoice US-6-26"
+  const rawInvoiceNumber = String(inv.invoiceNumber || '')
+  const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
+
+  txt(displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
@@ -192,7 +197,8 @@ export async function generateIFOAInvoicePDF(inv) {
   const pdfBytes = await pdfDoc.save()
   const blob = new Blob([pdfBytes], { type: 'application/pdf' })
   const url = URL.createObjectURL(blob)
-  return { url, filename: `Invoice-${inv.invoiceNumber}.pdf` }
+  // Use the cleaned number (without "Invoice " prefix) for the filename
+  return { url, filename: `Invoice-${displayInvoiceNumber}.pdf` }
 }
 
 export function triggerInvoiceDownload({ url, filename }) {

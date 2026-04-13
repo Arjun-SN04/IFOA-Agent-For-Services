@@ -545,6 +545,29 @@ exports.updateAirlinesSubscription = async (req, res) => {
       payload.isFormCompleted = false;
     }
 
+    // Auto-compute expirationDate when marking as paid via wire transfer
+    // (Stripe flow sets it in applyPaymentToRegistration, but wire/manual does not).
+    // Only compute if not explicitly provided and the record is being marked paid.
+    if ((payload.isPaid === true || payload.paymentStatus === 'paid') && !payload.expirationDate) {
+      // Fetch the existing doc to get the subscriptionPlan
+      const existingForExpiry = await Airlines.findById(req.params.id).select('subscriptionPlan subscriptionDate expirationDate multiYearCount');
+      if (existingForExpiry && !existingForExpiry.expirationDate) {
+        const plan = payload.subscriptionPlan || existingForExpiry.subscriptionPlan;
+        const fromDate = payload.subscriptionDate || existingForExpiry.subscriptionDate || new Date();
+        if (plan === '1 Year Subscription Plan') {
+          const d = new Date(fromDate);
+          d.setFullYear(d.getFullYear() + 1);
+          payload.expirationDate = d;
+        } else if (plan === 'Multiple Years Subscription Plan') {
+          const years = existingForExpiry.multiYearCount || 3;
+          const d = new Date(fromDate);
+          d.setFullYear(d.getFullYear() + years);
+          payload.expirationDate = d;
+        }
+        // Unlimited Plan → no expiry (leave undefined)
+      }
+    }
+
     let doc = await Airlines.findByIdAndUpdate(
       req.params.id, payload, { new: true, runValidators: false },
     );
