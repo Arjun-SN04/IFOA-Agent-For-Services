@@ -18,6 +18,9 @@ import {
   savePaymentInvoiceDraft,
   updateAirlinesSubscription,
   updateIndividual,
+  generateInvoiceNumber,
+  getInvoiceByRegistration,
+  saveInvoiceDraftToDoc,
 } from '../services/api'
 
 const fmtDate = (v) =>
@@ -731,7 +734,17 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const payable = new Date(today); payable.setDate(payable.getDate() + 30)
   const fmtInput = (d) => d ? new Date(d).toISOString().slice(0, 10) : ''
 
-  const defaultInvoiceNumber = record.invoiceNumber || `US-${String(Math.floor(Math.random() * 900) + 100).padStart(3,'0')}-${String(today.getFullYear()).slice(2)}`
+  // Invoice number: prefer existing DB number, otherwise fetch a fresh unique one
+  // from the server (format: "Invoice US-350-26"). Never use a random placeholder.
+  const [fetchedInvoiceNumber, setFetchedInvoiceNumber] = React.useState(record.invoiceNumber || '')
+  React.useEffect(() => {
+    if (!record.invoiceNumber) {
+      generateInvoiceNumber()
+        .then(r => { if (r.data?.invoiceNumber) setFetchedInvoiceNumber(r.data.invoiceNumber) })
+        .catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const defaultInvoiceNumber = fetchedInvoiceNumber
   const holderCount = Number(
     record.committedCount || record.holderCountValue || record.certificateHolders?.length || 1
   ) || 1
@@ -796,19 +809,28 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     ],
   }
 
+  // If the admin has previously saved a draft, ALWAYS use the draft line items verbatim.
+  // The draft represents admin's deliberate edits and is the source of truth.
+  // Only fall back to subscription-computed lineItems when there is no saved draft at all.
   const draftItems = Array.isArray(record.invoiceDraft?.lineItems) ? record.invoiceDraft.lineItems : []
-  const draftTotal = draftItems.reduce((sum, it) => sum + (Number(it?.totalPrice) || 0), 0)
-  const hasStaleDraftTotal = paidConfirmed && totalAmt > 0 && Math.abs(draftTotal - totalAmt) > 0.009
+  const hasSavedDraft = draftItems.length > 0
 
   const mergedInvoice = {
     ...initialInvoice,
     ...(record.invoiceDraft || {}),
-    lineItems: draftItems.length && !hasStaleDraftTotal
-      ? draftItems
-      : initialInvoice.lineItems,
+    // Admin draft line items always win — never replace with subscription-computed data
+    lineItems: hasSavedDraft ? draftItems : initialInvoice.lineItems,
   }
 
   const [inv, setInv] = useState(mergedInvoice)
+
+  // When the server returns the real invoice number, push it into inv state
+  // so the form field always shows the canonical DB-backed number.
+  React.useEffect(() => {
+    if (fetchedInvoiceNumber && fetchedInvoiceNumber !== inv.invoiceNumber) {
+      setInv(p => ({ ...p, invoiceNumber: fetchedInvoiceNumber }))
+    }
+  }, [fetchedInvoiceNumber]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const serializeInvoice = (data) => JSON.stringify({
     invoiceNumber: data.invoiceNumber || '',
@@ -1778,19 +1800,44 @@ export default function AdminDashboard() {
 
   const handleSaveInvoice = async (id, type, payload) => {
     try {
-      if (type === 'airline') {
-        const res = await updateAirlinesSubscription(id, payload)
-        const saved = res.data?.data || payload
-        setAirlines(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
-        setInvoiceModal(prev => prev && prev.record._id === id ? { ...prev, record: { ...prev.record, ...saved } } : prev)
-      } else {
-        const res = await updateIndividual(id, payload)
-        const saved = res.data?.data || payload
-        setIndividuals(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
-        setInvoiceModal(prev => prev && prev.record._id === id ? { ...prev, record: { ...prev.record, ...saved } } : prev)
+      // Only persist invoice-specific fields to the registration doc.
+      // Do NOT spread the full payload (which contains invoiceDraft etc.) into
+      // updateAirlinesSubscription / updateIndividual — that clobbers subscription
+      // fields and causes the returned record to lose invoiceDraft on re-open.
+      const registrationUpdate = {
+        invoiceStatus:    payload.invoiceStatus,
+        invoiceGenerated: payload.invoiceGenerated,
+        invoiceNumber:    payload.invoiceNumber,
+        invoiceDraft:     payload.invoiceDraft,
       }
 
-      // Also sync invoice draft to Payment doc so user/airline sees updated invoice
+      if (type === 'airline') {
+        const res = await updateAirlinesSubscription(id, registrationUpdate)
+        const saved = res.data?.data || {}
+        // Merge carefully: keep all existing record fields, only update invoice-related ones
+        // AND carry the invoiceDraft forward in memory (API may not return it)
+        setAirlines(p => p.map(x => x._id === id
+          ? { ...x, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber }
+          : x
+        ))
+        setInvoiceModal(prev => prev && prev.record._id === id
+          ? { ...prev, record: { ...prev.record, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber } }
+          : prev
+        )
+      } else {
+        const res = await updateIndividual(id, registrationUpdate)
+        const saved = res.data?.data || {}
+        setIndividuals(p => p.map(x => x._id === id
+          ? { ...x, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber }
+          : x
+        ))
+        setInvoiceModal(prev => prev && prev.record._id === id
+          ? { ...prev, record: { ...prev.record, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber } }
+          : prev
+        )
+      }
+
+      // Sync to Payment.invoiceDraft (backward compat)
       try {
         const paymentsRes = await getPaymentsByRegistration(id)
         const payments = paymentsRes.data?.data || []
@@ -1800,6 +1847,18 @@ export default function AdminDashboard() {
         }
       } catch (paymentSyncErr) {
         console.warn('[handleSaveInvoice] Payment doc sync failed:', paymentSyncErr.message)
+      }
+
+      // Sync to canonical Invoice doc — this is the single source of truth
+      // that the user’s SubscriptionPage reads from.
+      try {
+        const invDocRes = await getInvoiceByRegistration(id)
+        const invDoc = (invDocRes.data?.data || [])[0]
+        if (invDoc?._id) {
+          await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        }
+      } catch (invSyncErr) {
+        console.warn('[handleSaveInvoice] Invoice doc sync failed:', invSyncErr.message)
       }
 
       showToast('Invoice saved — user will see updated invoice')

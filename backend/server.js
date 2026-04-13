@@ -46,6 +46,7 @@ app.use('/api/chat',        require('./routes/chatRoutes'));
 // Single endpoint that handles both individual and airline registrations.
 // The request body must include: { type: 'individual' | 'airline', ...formFields }
 app.use('/api/register',    require('./routes/registerRoute'));
+app.use('/api/invoices',    require('./routes/invoiceRoutes'));
 
 // Health check
 app.get('/', (req, res) => res.json({ message: 'Agent for Service API is running' }));

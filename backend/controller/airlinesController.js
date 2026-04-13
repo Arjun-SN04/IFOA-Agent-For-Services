@@ -3,6 +3,8 @@ const AirlinesSubscription = require('../models/AirlinesSubscription'); // legac
 const User = require('../models/User');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
+const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const { createOrUpdateInvoice } = require('../services/invoiceService');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -626,7 +628,7 @@ exports.markAirlinesPaid = async (req, res) => {
       status:           'Active',
       subscriptionDate: now,
       invoiceStatus:    'Paid',
-      invoiceNumber:    doc.invoiceNumber || `INV-${Date.now()}`,
+      invoiceNumber:    doc.invoiceNumber || await generateInvoiceNumber(),
       wirePaymentRequested: false,
       wirePaymentRequestedAt: null,
     };
@@ -639,6 +641,41 @@ exports.markAirlinesPaid = async (req, res) => {
       { $set: update },
       { new: true },
     );
+
+    // Create canonical Invoice document so admin and user see the same invoice.
+    try {
+      const holderCount  = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      const pricePerCert = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+      const totalAmount  = pricePerCert > 0 && holderCount > 0 ? pricePerCert * holderCount : Number(doc.totalAmount || 0);
+      await createOrUpdateInvoice({
+        registrationId:    doc._id,
+        registrationModel: doc.constructor.modelName || 'Airlines',
+        paymentId:         doc.paymentId || null,
+        snapshot: {
+          name:             [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+          email:            doc.email || doc.contactEmail || '',
+          phone:            doc.phone || doc.contactPhone || '',
+          address:          [doc.addressLine1, doc.city, doc.state, doc.postalCode, doc.country].filter(Boolean).join(', '),
+          isAirline:        true,
+          airlineName:      doc.airlineName || '',
+          subscriptionPlan: doc.subscriptionPlan || '',
+          subscriptionDate: now,
+          expirationDate:   update.expirationDate || null,
+          holderCount,
+          pricePerCert,
+          subtotal:   totalAmount,
+          tax:        0,
+          totalPaid:  totalAmount,
+        },
+        amountDollars:         totalAmount,
+        paidAt:                now,
+        paymentMethod:         'wire',
+        existingInvoiceNumber: update.invoiceNumber,
+      });
+    } catch (invErr) {
+      console.warn('[airlineMarkPaid] Invoice doc creation failed:', invErr.message);
+    }
+
     res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

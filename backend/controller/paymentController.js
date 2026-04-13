@@ -30,6 +30,8 @@ const Payment              = require('../models/Payment');
 const Individual           = require('../models/Individual');
 const Airlines             = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
+const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const { createOrUpdateInvoice } = require('../services/invoiceService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -265,7 +267,9 @@ exports.confirmPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
     const now           = new Date();
-    const invoiceNum    = doc.invoiceNumber || `INV-${Date.now()}`;
+    // Generate a unique, DB-backed invoice number (format: Invoice US-350-26).
+    // Reuse any number already on the registration (e.g. from a previous wire flow).
+    const invoiceNum    = doc.invoiceNumber || await generateInvoiceNumber();
     const amountCents   = pi.amount_received || pi.amount;
     const amountDollars = amountCents / 100;
 
@@ -347,6 +351,24 @@ exports.confirmPayment = async (req, res) => {
 
     const updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
 
+    // Create / update the canonical Invoice document (single source of truth).
+    // This is what both the admin dashboard and the user SubscriptionPage read.
+    try {
+      await createOrUpdateInvoice({
+        registrationId,
+        registrationModel,
+        paymentId:      paymentDoc._id,
+        snapshot:       paymentDoc.invoiceSnapshot || {},
+        amountDollars:  paymentDoc.amountDollars,
+        paidAt:         paymentDoc.paidAt,
+        paymentMethod:  paymentDoc.paymentMethodType || 'card',
+        existingInvoiceNumber: paymentDoc.invoiceNumber,
+      });
+    } catch (invoiceErr) {
+      // Non-critical — log but don't fail the payment response
+      console.warn('[confirmPayment] Invoice doc creation failed:', invoiceErr.message);
+    }
+
     console.log(`[confirmPayment] Payment ${paymentDoc._id} confirmed for ${registrationModel} ${registrationId}`);
 
     res.json({
@@ -385,9 +407,8 @@ exports.saveInvoiceDraft = async (req, res) => {
     if (!paymentDoc)
       return res.status(404).json({ success: false, message: 'Payment record not found.' });
 
-    // Also sync invoiceNumber back to the registration record so it appears
-    // in list views without a separate fetch.
-    if (invoiceNumber && paymentDoc.registrationId && paymentDoc.registrationModel) {
+    // Sync invoiceNumber + invoiceDraft back to the registration record.
+    if (paymentDoc.registrationId && paymentDoc.registrationModel) {
       try {
         const { doc, Model } = await findRegistration(
           paymentDoc.registrationId,
@@ -402,9 +423,36 @@ exports.saveInvoiceDraft = async (req, res) => {
             },
           });
         }
-      } catch (_) {
-        // Non-critical — registration sync failed but Payment doc is updated
+      } catch (_) { /* Non-critical */ }
+    }
+
+    // Also update (or create) the canonical Invoice document so the user
+    // SubscriptionPage always sees the same invoice the admin just saved.
+    try {
+      const Invoice = require('../models/Invoice');
+      const existingInvoice = await Invoice.findOne({ paymentId: paymentDoc._id });
+      if (existingInvoice) {
+        if (invoiceDraft)  existingInvoice.draft         = invoiceDraft;
+        if (invoiceNumber) existingInvoice.invoiceNumber  = invoiceNumber;
+        existingInvoice.adminGenerated = true;
+        await existingInvoice.save();
+      } else if (paymentDoc.registrationId && paymentDoc.registrationModel) {
+        // No Invoice doc yet (e.g. wire payment) — create one now.
+        await createOrUpdateInvoice({
+          registrationId:        paymentDoc.registrationId,
+          registrationModel:     paymentDoc.registrationModel,
+          paymentId:             paymentDoc._id,
+          snapshot:              paymentDoc.invoiceSnapshot || {},
+          amountDollars:         paymentDoc.amountDollars || 0,
+          paidAt:                paymentDoc.paidAt || new Date(),
+          paymentMethod:         paymentDoc.paymentMethodType || '',
+          draftOverrides:        invoiceDraft || null,
+          adminGenerated:        true,
+          existingInvoiceNumber: invoiceNumber || paymentDoc.invoiceNumber,
+        });
       }
+    } catch (invErr) {
+      console.warn('[saveInvoiceDraft] Invoice doc sync failed:', invErr.message);
     }
 
     res.json({ success: true, data: paymentDoc });
@@ -454,7 +502,8 @@ exports.stripeWebhook = async (req, res) => {
       }
 
       const now           = new Date();
-      const invoiceNum    = doc.invoiceNumber || `INV-${Date.now()}`;
+      // Reuse existing invoice number or generate a fresh unique one.
+      const invoiceNum    = doc.invoiceNumber || await generateInvoiceNumber();
       const amountCents   = pi.amount_received || pi.amount;
       const amountDollars = amountCents / 100;
 
@@ -510,6 +559,23 @@ exports.stripeWebhook = async (req, res) => {
       }
 
       await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+
+      // Create / update canonical Invoice document so admin and user see same invoice.
+      try {
+        await createOrUpdateInvoice({
+          registrationId,
+          registrationModel,
+          paymentId:      paymentDoc._id,
+          snapshot:       paymentDoc.invoiceSnapshot || {},
+          amountDollars:  paymentDoc.amountDollars,
+          paidAt:         paymentDoc.paidAt,
+          paymentMethod:  paymentDoc.paymentMethodType || 'card',
+          existingInvoiceNumber: paymentDoc.invoiceNumber,
+        });
+      } catch (invoiceErr) {
+        console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
+      }
+
       console.log(`[stripeWebhook] Payment ${paymentDoc._id} recorded for ${registrationModel} ${registrationId}`);
     } catch (err) {
       console.error('[stripeWebhook] Processing error:', err.message);

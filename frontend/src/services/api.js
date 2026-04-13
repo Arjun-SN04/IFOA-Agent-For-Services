@@ -75,6 +75,15 @@ export const getAllPayments = (params) => API.get('/payments', { params })
 export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) =>
   API.patch(`/payments/${paymentId}/save-invoice-draft`, { invoiceDraft, invoiceNumber })
 
+// ── Invoices (canonical Invoice model) ─────────────────────────────────────────────
+// Fetches a fresh DB-backed unique invoice number (format: Invoice US-350-26)
+export const generateInvoiceNumber     = ()           => API.get('/invoices/generate-number')
+export const getInvoiceByPayment       = (paymentId)  => API.get(`/invoices/by-payment/${paymentId}`)
+export const getInvoiceByRegistration  = (regId)      => API.get(`/invoices/by-registration/${regId}`)
+// Admin saves edits into the canonical Invoice doc (+ syncs to Payment.invoiceDraft)
+export const saveInvoiceDraftToDoc     = (invoiceId, draft, invoiceNumber) =>
+  API.patch(`/invoices/${invoiceId}/draft`, { draft, invoiceNumber })
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)
 export const signup            = (data) => API.post('/auth/signup', data)

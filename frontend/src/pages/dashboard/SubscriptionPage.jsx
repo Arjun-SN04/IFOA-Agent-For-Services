@@ -1129,13 +1129,73 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
 
   const handleInvoiceClick = async () => {
+    // Priority 1: canonical Invoice doc (single source of truth — includes admin edits)
+    try {
+      const invRes = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const invDoc = (invRes.data?.data || [])[0]
+      if (invDoc) {
+        // Use admin draft verbatim if it exists (any non-null draft is authoritative).
+        // Do NOT require invoiceNumber on the draft — it may have been saved without it.
+        // buildPDFPayload in InvoiceModal will merge the invoiceNumber as fallback.
+        const invoiceDraft = invDoc.draft || null
+        onViewInvoice?.({
+          invoiceNumber:    invDoc.invoiceNumber,
+          paidAt:           invDoc.paidAt || invDoc.issueDate,
+          subscriptionPlan: invDoc.subscriptionPlan,
+          expirationDate:   invDoc.expirationDate  || null,
+          amount:           invDoc.totalAmount,
+          name:             invDoc.recipientName   || invDoc.recipientCompany || '',
+          email:            invDoc.recipientEmail  || '',
+          address:          invDoc.recipientAddress1 || '',
+          isAirline:        invDoc.isAirline,
+          airlineName:      invDoc.recipientCompany || '',
+          pricePerCert:     invDoc.lineItems?.[0]?.unitPrice  || null,
+          holderCount:      invDoc.lineItems?.[0]?.quantity   || null,
+          invoiceDraft,
+          _invoiceDocId:    invDoc._id,
+        })
+        return
+      }
+    } catch (_) { /* fall through to next priority */ }
+
+    // Priority 2: invoiceDraft stored directly on the subscription record
+    // (saved by admin via handleSaveInvoice — always accessible without auth issues,
+    //  and is the exact same data that was saved to the Invoice doc)
+    if (s.invoiceDraft && typeof s.invoiceDraft === 'object' &&
+        (s.invoiceDraft.lineItems?.length || s.invoiceDraft.invoiceNumber)) {
+      const draft = s.invoiceDraft
+      onViewInvoice?.({
+        invoiceNumber:    s.invoiceNumber || draft.invoiceNumber,
+        paidAt:           s.subscriptionDate || s.updatedAt,
+        subscriptionPlan: s.subscriptionPlan,
+        expirationDate:   s.expirationDate || null,
+        amount:           draft.lineItems?.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0) ||
+                          (isAirline ? getAirlineTotal(s) : (s.price || s.totalServiceFees || 0)),
+        name:             draft.recipientCompany || draft.recipientName || s.airlineName || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+        email:            s.email || '',
+        address:          draft.recipientAddress1 || s.addressLine1 || '',
+        isAirline,
+        airlineName:      s.airlineName || '',
+        pricePerCert:     s.pricePerCertificate || s.pricePerCert || null,
+        holderCount:      s.certificateHolders?.length || s.committedCount || null,
+        // Pass the draft verbatim — buildPDFPayload will use it directly (Path 1)
+        invoiceDraft: { ...draft, invoiceNumber: draft.invoiceNumber || s.invoiceNumber },
+      })
+      return
+    }
+
+    // Priority 3: Payment doc (Stripe card payments)
     try {
       const paymentDoc = await fetchPaymentRecord(s._id, token)
       if (paymentDoc?.isPaid) {
         onViewInvoice?.(serverPaymentToInvoice(paymentDoc))
         return
       }
-    } catch (_) {}
+    } catch (_) { /* fall through */ }
+
+    // Priority 4: local fallback built from registration data (legacy / edge cases)
     try {
       const paidDate = s.subscriptionDate || s.updatedAt || s.createdAt
       const correctAmountCents = isAirline

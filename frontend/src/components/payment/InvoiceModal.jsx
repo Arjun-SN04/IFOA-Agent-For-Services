@@ -61,8 +61,15 @@ export function resolveAirlineTotal(inv) {
  */
 export function buildPDFPayload(inv) {
   // ── Path 1: admin-edited draft is the authoritative invoice ──────────────
-  if (inv.invoiceDraft && typeof inv.invoiceDraft === 'object' && inv.invoiceDraft.invoiceNumber) {
-    return inv.invoiceDraft
+  // Accept any non-null draft that has either lineItems or an invoiceNumber.
+  // Always merge the parent invoiceNumber as a fallback so the PDF never shows
+  // a blank or auto-generated number when the admin didn't explicitly set one.
+  if (inv.invoiceDraft && typeof inv.invoiceDraft === 'object' &&
+      (inv.invoiceDraft.lineItems?.length || inv.invoiceDraft.invoiceNumber)) {
+    return {
+      ...inv.invoiceDraft,
+      invoiceNumber: inv.invoiceDraft.invoiceNumber || inv.invoiceNumber,
+    }
   }
 
   // ── Path 2: build from payment/snapshot fields ────────────────────────────

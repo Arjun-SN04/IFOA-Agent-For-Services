@@ -2,6 +2,8 @@ const Individual = require('../models/Individual');
 const User = require('../models/User');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
+const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const { createOrUpdateInvoice } = require('../services/invoiceService');
 
 function toBool(v, defaultValue = false) {
   if (v === undefined || v === null || v === '') return defaultValue;
@@ -475,7 +477,7 @@ exports.markIndividualPaid = async (req, res) => {
       subscriptionDate: now,
       invoiceStatus: 'Paid',
       // Preserve an existing invoiceNumber (set by /payments/confirm) — only generate new if missing
-      invoiceNumber: individual.invoiceNumber || `INV-${Date.now()}`,
+      invoiceNumber: individual.invoiceNumber || await generateInvoiceNumber(),
     };
 
     if (individual.subscriptionPlan === '1 Year Subscription Plan') {
@@ -495,6 +497,43 @@ exports.markIndividualPaid = async (req, res) => {
       { $set: update },
       { new: true },
     );
+
+    // Create canonical Invoice document for wire/manual payments so the user's
+    // SubscriptionPage and admin always see the same invoice.
+    try {
+      const price = Number(individual.price || individual.totalServiceFees || 0);
+      await createOrUpdateInvoice({
+        registrationId:    individual._id,
+        registrationModel: 'Individual',
+        paymentId:         individual.paymentId || null,
+        snapshot: {
+          name:             [individual.firstName, individual.lastName].filter(Boolean).join(' '),
+          email:            individual.email || '',
+          phone:            individual.phone || '',
+          address:          [individual.addressLine1, individual.city, individual.state, individual.postalCode, individual.country].filter(Boolean).join(', '),
+          isAirline:        false,
+          airlineName:      '',
+          subscriptionPlan: individual.subscriptionPlan || '',
+          subscriptionDate: now,
+          expirationDate:   update.expirationDate || null,
+          primaryCertificate:   individual.primaryCertificate   || '',
+          faaCertificateNumber: individual.faaCertificateNumber || '',
+          iacraTrackingNumber:  individual.iacraTrackingNumber  || '',
+          holderCount:  1,
+          pricePerCert: price,
+          subtotal:     price,
+          tax:          0,
+          totalPaid:    price,
+        },
+        amountDollars:         price,
+        paidAt:                now,
+        paymentMethod:         'wire',
+        existingInvoiceNumber: update.invoiceNumber,
+      });
+    } catch (invErr) {
+      console.warn('[individualMarkPaid] Invoice doc creation failed:', invErr.message);
+    }
+
     res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
