@@ -624,7 +624,7 @@ async function generateIFOAInvoicePDF(inv) {
   const rawInvoiceNumber = String(inv.invoiceNumber || '')
   const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
 
-  txt(displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
+  txt('Invoice  ' + displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
@@ -1035,6 +1035,17 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
                   <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
                   Generating invoice preview…
+                </div>
+              )}
+
+              {/* Invoice-only edit warning — only shown when editing an already-generated invoice */}
+              {record.invoiceGenerated && (
+                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                  <div>
+                    <p className="text-xs font-black text-amber-800 mb-0.5">Invoice changes only</p>
+                    <p className="text-[11px] text-amber-700 leading-snug">Saving updates the invoice document only — it does <strong>not</strong> change the registration data (payment status, subscription plan, holder count, etc.). The user will see the updated invoice on their Subscription page.</p>
+                  </div>
                 </div>
               )}
 
@@ -1478,6 +1489,16 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 // ─── Grouped Airlines Table ────────────────────────────────────────────────────
 function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
   const [expanded, setExpanded] = useState({})
+  const highlightRef = useRef(null)
+
+  // Scroll highlighted row into view whenever it changes
+  useEffect(() => {
+    if (highlightedId && highlightRef.current) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
+    }
+  }, [highlightedId])
 
   const groups = useMemo(() => {
     const map = {}
@@ -1525,9 +1546,10 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
               return (
                 <React.Fragment key={key}>
                   <tr
+                    ref={String(primary._id) === String(highlightedId) ? highlightRef : null}
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${
                       String(primary._id) === String(highlightedId)
-                        ? 'bg-amber-50 ring-2 ring-inset ring-amber-400'
+                        ? 'bg-blue-50 ring-2 ring-inset ring-blue-500'
                         : isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'
                     }`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
@@ -1710,7 +1732,22 @@ export default function AdminDashboard() {
           ? 'add-individual'
           : 'overview'
   const [tab, setTab] = useState(tabFromPath)
-  useEffect(() => { setTab(tabFromPath) }, [pathname])
+  const prevTab = useRef(tabFromPath)
+  useEffect(() => {
+    setTab(prev => {
+      prevTab.current = prev  // capture previous tab BEFORE updating
+      return tabFromPath
+    })
+  }, [pathname])
+
+  // After admin adds a record and navigates back, immediately reload data
+  useEffect(() => {
+    if (tab !== 'add-airline' && tab !== 'add-individual') {
+      if (prevTab.current === 'add-airline' || prevTab.current === 'add-individual') {
+        loadData(true)
+      }
+    }
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep-link: ?highlight=<airlineId> — auto-opens the view modal for that record
   const highlightId = useMemo(() => {
@@ -1739,18 +1776,27 @@ export default function AdminDashboard() {
   // invoiceModal state: { record, type, initialStep, autoPreview }
   const [invoiceModal, setInvoiceModal] = useState(null)
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    loadData()
+    // Poll every 30 seconds so new registrations appear without manual refresh
+    const pollTimer = setInterval(() => loadData(false), 30000)
+    return () => clearInterval(pollTimer)
+  }, [])
 
   // Wire notification: switch to Airlines tab and highlight the row
   useEffect(() => {
     if (!highlightId || loading || airlines.length === 0) return
     const record = airlines.find(a => String(a._id) === String(highlightId))
     if (record) {
-      setTab('airlines')
+      // Clear filters so highlighted row is never hidden
+      setSearch('')
+      setFilterPlan('All')
+      setFilterPayment('All')
+      setFilterStatus('All')
       setHighlightedAirlineId(highlightId)
       navigate('/admin/airlines', { replace: true })
-      // Auto-clear the highlight after 6 seconds
-      setTimeout(() => setHighlightedAirlineId(null), 6000)
+      // Auto-clear the highlight after 8 seconds
+      setTimeout(() => setHighlightedAirlineId(null), 8000)
     }
   }, [highlightId, airlines, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1759,15 +1805,42 @@ export default function AdminDashboard() {
     setTimeout(() => setToast(null), 3500)
   }
 
-  const loadData = async () => {
-    setLoading(true); setLoadErr('')
+  const loadData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true)
+    setLoadErr('')
     try {
       const [ir, ar] = await Promise.all([getAllIndividuals(), getAllAirlinesSubscriptions()])
-      setIndividuals(Array.isArray(ir.data?.data) ? ir.data.data : Array.isArray(ir.data) ? ir.data : [])
-      setAirlines(Array.isArray(ar.data?.data) ? ar.data.data : Array.isArray(ar.data) ? ar.data : [])
+      const newInds  = Array.isArray(ir.data?.data) ? ir.data.data : Array.isArray(ir.data) ? ir.data : []
+      const newAirs  = Array.isArray(ar.data?.data) ? ar.data.data : Array.isArray(ar.data) ? ar.data : []
+
+      // When background-polling, detect truly new records and toast
+      if (!showSpinner) {
+        setIndividuals(prev => {
+          const prevIds = new Set(prev.map(x => x._id))
+          const added = newInds.filter(x => !prevIds.has(x._id))
+          if (added.length > 0) {
+            const name = [added[0].firstName, added[0].lastName].filter(Boolean).join(' ') || 'Individual'
+            // defer toast outside state updater
+            setTimeout(() => showToast(`New individual: ${name}`, 'individual'), 0)
+          }
+          return newInds
+        })
+        setAirlines(prev => {
+          const prevIds = new Set(prev.map(x => x._id))
+          const added = newAirs.filter(x => !prevIds.has(x._id))
+          if (added.length > 0) {
+            const name = added[0].airlineName || [added[0].firstName, added[0].lastName].filter(Boolean).join(' ') || 'Airline'
+            setTimeout(() => showToast(`New airline: ${name}`, 'airline'), 0)
+          }
+          return newAirs
+        })
+      } else {
+        setIndividuals(newInds)
+        setAirlines(newAirs)
+      }
     } catch {
-      setLoadErr('Could not connect to the server. Is the backend running on port 5000?')
-    } finally { setLoading(false) }
+      if (showSpinner) setLoadErr('Could not connect to the server. Is the backend running on port 5000?')
+    } finally { if (showSpinner) setLoading(false) }
   }
 
   const handleSave = async (id, data, type) => {
@@ -1941,10 +2014,21 @@ export default function AdminDashboard() {
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
-            className={`fixed top-6 right-6 z-[100] flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}>
-            {toast.type === 'error'
-              ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
-              : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+            className={`fixed top-6 right-6 z-[100] flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white ${
+              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
+            }`}>
+            {toast.type === 'error' && (
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+            )}
+            {toast.type === 'airline' && (
+              <Plane className="w-4 h-4 flex-shrink-0" />
+            )}
+            {toast.type === 'individual' && (
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="3.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.582-6 8-6s8 2 8 6" /></svg>
+            )}
+            {toast.type === 'success' && (
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            )}
             {toast.msg}
           </motion.div>
         )}
@@ -2046,7 +2130,7 @@ export default function AdminDashboard() {
               </button>
             )}
 
-            <button onClick={loadData} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+            <button onClick={() => loadData(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
               <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
               </svg>
@@ -2059,6 +2143,7 @@ export default function AdminDashboard() {
 
       {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && !loading && (
         <div className="flex items-center gap-3 mb-4 px-1">
+         
           <p className="text-sm text-slate-500">
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
             <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>

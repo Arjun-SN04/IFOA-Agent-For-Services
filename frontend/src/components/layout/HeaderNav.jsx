@@ -121,8 +121,8 @@ export default function HeaderNav() {
     }
 
     loadNotifications(true)
-    // Poll every 60s instead of 15s — notifications are not real-time critical
-    timer = setInterval(() => loadNotifications(false), 60000)
+    // Poll every 20s for near-real-time updates (wire requests, new registrations)
+    timer = setInterval(() => loadNotifications(false), 20000)
 
     return () => {
       active = false
@@ -382,7 +382,7 @@ export default function HeaderNav() {
                   {visibleNotifications.length > 0 && (
                     <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
                       <p className="text-[11px] text-slate-400">{visibleNotifications.length} notification{visibleNotifications.length !== 1 ? 's' : ''}</p>
-                      <p className="text-[11px] text-slate-400">Auto-refreshes every 60s</p>
+                      
                     </div>
                   )}
                 </div>

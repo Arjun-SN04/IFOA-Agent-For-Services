@@ -428,7 +428,7 @@ export default function Home() {
                   className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                   style={{ background: `linear-gradient(90deg, ${C.blue} 0%, ${C.blueLight} 100%)` }}
                 />
-                <p className="text-6xl font-black leading-none mb-4" style={{ color: '#c7dbf7' }}>
+                <p className="text-6xl font-black leading-none mb-4" style={{ color: '#0000ff' }}>
                   {String(s.num).padStart(2, '0')}
                 </p>
                 <h3 className="text-[28px] leading-[1.12] font-black mb-3" style={{ color: C.dark }}>{s.title}</h3>

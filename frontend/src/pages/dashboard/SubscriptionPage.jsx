@@ -1123,8 +1123,8 @@ export default function SubscriptionPage() {
 // ── Per-subscription card ────────────────────────────────────────────────────
 function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm }) {
   const isAirline = user?.role === 'airline'
-  const isPaid   = s.isPaid === true || s.paymentStatus === 'paid' || s.status === 'Active'
-  const pending  = !isPaid && s.status !== 'Active'
+  const isPaid   = s.isPaid === true || s.paymentStatus === 'paid'
+  const pending  = !isPaid
   const active   = isPaid
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
 
@@ -1217,6 +1217,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
     ? 'bg-gradient-to-r from-slate-900 to-slate-700'
     : inactive
     ? 'bg-gradient-to-r from-slate-700 to-slate-600'
+    : s.status === 'Active'
+    ? 'bg-gradient-to-r from-slate-800 to-slate-600'  // admin-activated but payment still pending
     : 'bg-gradient-to-r from-blue-700 to-blue-600'
 
   return (
@@ -1260,7 +1262,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
       <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${bannerCls}`}>
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-2">
-            {active ? 'Active Subscription' : inactive ? 'Inactive Subscription' : 'Pending Subscription'}
+            {active ? 'Active Subscription' : inactive ? 'Inactive Subscription' : s.status === 'Active' ? 'Active — Payment Pending' : 'Pending Subscription'}
           </p>
           <PlanBadge plan={s.subscriptionPlan} />
         </div>

@@ -321,35 +321,50 @@ function WrongRoleBanner({ type }) {
 }
 
 // ── Existing Form Banner ─────────────────────────────────────────────────────
-function ExistingFormBanner({ regType }) {
+function ExistingFormBanner({ regType, data }) {
   const isIndividual = regType === 'individual'
+  const isPaid = data?.isPaid === true || data?.paymentStatus === 'paid' || data?.status === 'Active'
   return (
-    <div className="rounded-3xl border px-6 py-5" style={{ background: BM, borderColor: BXL }}>
-      <div className="flex items-start gap-3.5">
-        <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: '#bfdbfe' }}>
-          <svg className="w-4 h-4" style={{ color: B }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-3-3v6m7 4H5a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l6.414 6.414a1 1 0 01.293.707V17a2 2 0 01-2 2z" />
+    <div className="rounded-2xl overflow-hidden" style={{ border: `1.5px solid ${RX}`, background: RM }}>
+      {/* Alert header */}
+      <div className="flex items-start gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${RX}` }}>
+        <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5" style={{ background: RX }}>
+          <svg className="w-4 h-4" style={{ color: R }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
         </div>
         <div className="flex-1">
-          <p className="text-sm font-black mb-1" style={{ color: '#1e3a8a' }}>
-            {isIndividual ? 'Your Individual form is already filled' : 'Your Company form is already filled'}
+          <p className="text-sm font-black mb-0.5" style={{ color: RD }}>
+            {isIndividual ? 'Individual registration already submitted' : 'Company registration already submitted'}
           </p>
-          <p className="text-xs leading-relaxed" style={{ color: '#1d4ed8' }}>
-            You cannot submit a new registration again. Please edit your submitted form from your Subscription dashboard.
+          <p className="text-xs leading-relaxed" style={{ color: '#991b1b' }}>
+            Only one subscription is allowed per account. Your form is already on file.
+            {!isPaid && ' Complete your pending payment from the Subscription page.'}
           </p>
-          <div className="mt-4">
-            <Link
-              to="/dashboard/subscription"
-              className="inline-flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-xl text-white transition-all"
-              style={{ background: B }}
-              onMouseEnter={e => e.currentTarget.style.background = BD}
-              onMouseLeave={e => e.currentTarget.style.background = B}
-            >
-              Go to Subscription
-            </Link>
-          </div>
         </div>
+      </div>
+
+      {/* CTA row */}
+      <div className="flex items-center gap-3 px-5 py-3.5" style={{ background: '#fff1f2' }}>
+        <div className="flex-1">
+          <p className="text-[11px] font-semibold" style={{ color: RD }}>
+            {isPaid
+              ? 'Your subscription is active. Manage it from your dashboard.'
+              : 'Payment is pending — go to Subscription to complete it.'}
+          </p>
+        </div>
+        <Link
+          to="/dashboard/subscription"
+          className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl text-white transition-all"
+          style={{ background: R }}
+          onMouseEnter={e => e.currentTarget.style.background = RD}
+          onMouseLeave={e => e.currentTarget.style.background = R}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
+          </svg>
+          Go to Subscription
+        </Link>
       </div>
     </div>
   )
@@ -387,9 +402,18 @@ function ExistingOrderSummary({ regType, data }) {
   )
 }
 
+// A record counts as "already submitted" if:
+// 1. The backend explicitly marked it completed (isFormCompleted), OR
+// 2. Payment is done (isPaid / paymentStatus=paid / status=Active), OR
+// 3. The record simply exists with a _id — meaning the form was submitted
+//    (even if payment is still pending). One submission per account.
 const isRecordCompleted = (record) => {
   if (!record) return false
-  return record.isFormCompleted === true || (record.isFormCompleted == null && (record.isPaid === true || record.paymentStatus === 'paid'))
+  if (record.isFormCompleted === true) return true
+  if (record.isPaid === true || record.paymentStatus === 'paid' || record.status === 'Active') return true
+  // Any record with an _id is a submitted form — block re-registration
+  if (record._id) return true
+  return false
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -811,7 +835,7 @@ export default function RegisterPage() {
               <div className="px-6 py-6 rounded-b-3xl">
                 {showExistingSummaryOnly ? (
                   <div className="space-y-4">
-                    <ExistingFormBanner regType={regType} />
+                    <ExistingFormBanner regType={regType} data={existingSummaryData} />
                     <ExistingOrderSummary regType={regType} data={existingSummaryData} />
                   </div>
                 ) : (

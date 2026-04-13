@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createAdminIndividualForm, importIndividualsFromExcel } from '../../services/api'
 
 const C = {
@@ -62,6 +63,7 @@ const initialForm = {
 }
 
 export default function AdminIndividualForm() {
+  const navigate = useNavigate()
   const [formData, setFormData] = useState(initialForm)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(null)
@@ -91,6 +93,8 @@ export default function AdminIndividualForm() {
       const res = await createAdminIndividualForm(payload)
       setSuccess(res.data?.data || { message: 'Individual form created successfully.' })
       setFormData(initialForm)
+      // Auto-navigate back to individuals tab after 3 seconds
+      setTimeout(() => navigate('/admin/individuals'), 3000)
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to create individual form.')
     } finally {
@@ -179,6 +183,7 @@ export default function AdminIndividualForm() {
               <p><strong>Password:</strong> {success.loginCredentials.password}</p>
             </div>
           )}
+          <p className="text-xs mt-3 font-semibold" style={{ color: '#166534' }}>↩ Returning to Individuals list in 3 seconds…</p>
         </div>
       )}
 

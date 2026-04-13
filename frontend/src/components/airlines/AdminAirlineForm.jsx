@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import axios from 'axios'
 import { importAirlinesFromExcel } from '../../services/api'
@@ -72,6 +73,7 @@ const EMPTY_HOLDER = {
 }
 
 export default function AdminAirlineForm() {
+  const navigate = useNavigate()
   const [airlines, setAirlines] = useState([])
   const [isNewAirline, setIsNewAirline] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -262,6 +264,8 @@ export default function AdminAirlineForm() {
         })
         setErrors({})
         setIsNewAirline(false)
+        // Auto-navigate back to airlines tab after 3 seconds so admin sees credentials
+        setTimeout(() => navigate('/admin/airlines'), 3000)
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Error creating airline form')
@@ -319,6 +323,7 @@ export default function AdminAirlineForm() {
               <p><strong>Password:</strong> {success.credentials.password}</p>
             </div>
           )}
+          <p className="text-xs mt-3 font-semibold" style={{ color: '#166534' }}>↩ Returning to Airlines list in 3 seconds…</p>
         </div>
       )}
 

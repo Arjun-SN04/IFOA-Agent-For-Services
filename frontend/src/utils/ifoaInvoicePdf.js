@@ -109,7 +109,7 @@ export async function generateIFOAInvoicePDF(inv) {
   const rawInvoiceNumber = String(inv.invoiceNumber || '')
   const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
 
-  txt(displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
+  txt('Invoice  ' + displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
