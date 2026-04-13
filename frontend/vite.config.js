@@ -9,22 +9,24 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core React — cached aggressively, never changes
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          // Framer Motion — large lib, isolated so pages don't pull it unless needed
-          'vendor-motion': ['framer-motion'],
-          // Stripe / payment — only loaded when user reaches payment flow
-          'vendor-stripe': ['@stripe/react-stripe-js', '@stripe/stripe-js'],
-          // Other UI libs
-          'vendor-ui': ['lucide-react', 'axios'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor-react'
+            }
+            if (id.includes('framer-motion')) {
+              return 'vendor-motion'
+            }
+            if (id.includes('@stripe')) {
+              return 'vendor-stripe'
+            }
+            return 'vendor-ui'
+          }
         },
       },
     },
-    // Raise the chunk warning threshold — some pages are legitimately larger
     chunkSizeWarningLimit: 800,
   },
-  // Only used in local dev — in production the env var VITE_API_URL points to Render
   server: {
     proxy: {
       '/api': {
