@@ -160,7 +160,8 @@ function PortalCards({ regType }) {
   )
 }
 
-// ── Right Sidebar (Fixed) ─────────────────────────────────────────────────────
+// ── Right Sidebar ─────────────────────────────────────────────────────────────
+// Fixed to the right edge of the viewport — always full height, never scrolls with form.
 function RightSidebar({ regType }) {
   const isIndividual = regType === 'individual'
   return (
@@ -171,10 +172,12 @@ function RightSidebar({ regType }) {
         minWidth: 400,
         maxWidth: 480,
         height: '100vh',
-        maxHeight: '100vh',
-        overflow: 'hidden',
-        position: 'relative',
         background: 'linear-gradient(170deg, #020617 0%, #0f172a 60%, #111827 100%)',
+        overflow: 'hidden',
+        flexShrink: 0,
+        alignSelf: 'flex-start',
+        position: 'sticky',
+        top: 0,
       }}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -184,8 +187,8 @@ function RightSidebar({ regType }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: isIndividual ? 24 : -24 }}
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          className={`flex-1 p-5 overflow-y-auto`}
-          style={{ scrollbarWidth: 'none', maxHeight: '100vh' }}
+          className="flex-1 p-5 overflow-y-auto"
+          style={{ scrollbarWidth: 'none', height: '100vh' }}
         >
           <div className="pb-3 mb-3 border-b border-white/10">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Guided Help</p>
@@ -424,16 +427,12 @@ export default function RegisterPage() {
   const findExistingSubmission = useCallback(async (type) => {
     if (!user) return null
     const headers = token ? { Authorization: `Bearer ${token}` } : {}
-
     const endpointBase = type === 'individual' ? 'individuals' : 'airlines'
-
-    // First, check all linked IDs for this model path. This is the fastest and most reliable signal.
     const ids = [...(user.subscriptionIds || [])]
     if (user.registrationId) {
       const regId = String(user.registrationId)
       if (!ids.map((i) => String(i)).includes(regId)) ids.push(user.registrationId)
     }
-
     if (ids.length > 0) {
       const probes = await Promise.allSettled(
         ids.map((id) => axios.get(`${BASE_URL}/${endpointBase}/${id}`, { headers }))
@@ -445,8 +444,6 @@ export default function RegisterPage() {
       const completedById = byId.filter(isRecordCompleted)
       if (completedById.length > 0) return completedById[0]
     }
-
-    // Fallback by email for older accounts that may not have linked ids.
     if (!user?.email) return false
     try {
       const byEmail = await axios.get(`${BASE_URL}/${endpointBase}/by-email`, {
@@ -461,7 +458,6 @@ export default function RegisterPage() {
       }
       return isRecordCompleted(byEmail?.data?.data) ? byEmail.data.data : null
     } catch (e) {
-      // 404 by-email means no existing submission for this email.
       if (e?.response?.status === 404) return null
       return null
     }
@@ -469,52 +465,34 @@ export default function RegisterPage() {
 
   useEffect(() => {
     let cancelled = false
-
     const run = async () => {
       if (!user) {
-        if (!cancelled) {
-          setHasIndividualSubmission(false)
-          setHasAirlineSubmission(false)
-        }
+        if (!cancelled) { setHasIndividualSubmission(false); setHasAirlineSubmission(false) }
         return
       }
-
       if (user.role === 'individual') {
         const existing = await findExistingSubmission('individual')
-        if (!cancelled) {
-          setHasIndividualSubmission(!!existing)
-          setExistingIndividualRecord(existing || null)
-        }
-
+        if (!cancelled) { setHasIndividualSubmission(!!existing); setExistingIndividualRecord(existing || null) }
         if (existing) {
           const hydrated = hydrateIndividualFormFromExisting(existing)
           if (hydrated && !cancelled) setIndData((prev) => ({ ...prev, ...hydrated }))
         }
       } else if (user.role === 'airline') {
         const existing = await findExistingSubmission('airline')
-        if (!cancelled) {
-          setHasAirlineSubmission(!!existing)
-          setExistingAirlineRecord(existing || null)
-        }
-
+        if (!cancelled) { setHasAirlineSubmission(!!existing); setExistingAirlineRecord(existing || null) }
         if (existing) {
           const hydrated = hydrateAirlineFormFromExisting(existing)
           if (hydrated && !cancelled) setAirData((prev) => ({ ...prev, ...hydrated }))
         }
       }
     }
-
     run()
     return () => { cancelled = true }
   }, [user, token, findExistingSubmission])
 
   useEffect(() => {
-    if (regType === 'individual' && hasIndividualSubmission && indStep < 4) {
-      setIndStep(4)
-    }
-    if (regType === 'airline' && hasAirlineSubmission && airStep < 4) {
-      setAirStep(4)
-    }
+    if (regType === 'individual' && hasIndividualSubmission && indStep < 4) setIndStep(4)
+    if (regType === 'airline' && hasAirlineSubmission && airStep < 4) setAirStep(4)
   }, [regType, hasIndividualSubmission, hasAirlineSubmission, indStep, airStep])
 
   const scrollToTop = () => {
@@ -527,12 +505,7 @@ export default function RegisterPage() {
 
   const goIndStep = (n) => { setTransitionMode('step'); setIndStep(n); scrollToTop() }
   const goAirStep = (n) => { setTransitionMode('step'); setAirStep(n); scrollToTop() }
-
-  const requireAuth = () => {
-    if (!user) { setShowAuthModal(true); return false }
-    return true
-  }
-
+  const requireAuth = () => { if (!user) { setShowAuthModal(true); return false }; return true }
   const updateInd = (fields) => setIndData(prev => ({ ...prev, ...fields }))
   const updateAir = (fields) => setAirData(prev => ({ ...prev, ...fields }))
 
@@ -552,12 +525,7 @@ export default function RegisterPage() {
       const res = await register('individual', { ...indData, paymentStatus: opts.paymentStatus || 'pending' })
       const newId = res?.data?.data?._id
       if (user && newId) {
-        try {
-          if (!user.registrationId) await linkRegistration(newId, 'Individual')
-          else await addSubscription(newId)
-        } catch {
-          void 0
-        }
+        try { if (!user.registrationId) await linkRegistration(newId, 'Individual'); else await addSubscription(newId) } catch { void 0 }
       }
       if (opts.returnId) return newId
       setIndSubmitted(true); return null
@@ -571,9 +539,7 @@ export default function RegisterPage() {
     try {
       await axios.patch(`${BASE_URL}/individuals/${regId}/mark-paid`, {},
         { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch {
-      void 0
-    }
+    } catch { void 0 }
     setIndSubmitted(true)
   }
 
@@ -582,9 +548,6 @@ export default function RegisterPage() {
       setAirError('You already submitted this form. Please edit your submitted form from Subscription dashboard.')
       return null
     }
-
-    // In payment flows we need a registration ID. If this account already has one,
-    // return it so downstream wire/card handlers can continue.
     if (hasAirlineSubmission && opts.returnId && user?.email) {
       try {
         const byEmail = await axios.get(`${BASE_URL}/airlines/by-email`, {
@@ -595,46 +558,26 @@ export default function RegisterPage() {
         if (existing?._id) {
           const hydrated = hydrateAirlineFormFromExisting(existing)
           if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
-          try {
-            if (!user.registrationId) await linkRegistration(existing._id, 'Airlines')
-            else await addSubscription(existing._id)
-          } catch {
-            void 0
-          }
+          try { if (!user.registrationId) await linkRegistration(existing._id, 'Airlines'); else await addSubscription(existing._id) } catch { void 0 }
           return existing._id
         }
-      } catch {
-        void 0
-      }
+      } catch { void 0 }
     }
-
     if (!user) { setShowAuthModal(true); return }
     setAirSubmitting(true); setAirError('')
     try {
       const res = await register('airline', { ...airData, paymentStatus: opts.paymentStatus || 'pending' })
       const newId = res?.data?.data?._id
       if (user && newId) {
-        try {
-          if (!user.registrationId) await linkRegistration(newId, 'Airlines')
-          else await addSubscription(newId)
-        } catch {
-          void 0
-        }
+        try { if (!user.registrationId) await linkRegistration(newId, 'Airlines'); else await addSubscription(newId) } catch { void 0 }
       }
       if (opts.returnId) return newId
-      setAirSubmitted(true)
-      return null
+      setAirSubmitted(true); return null
     } catch (e) {
-      // If server reports duplicate submission (409), reuse existing record ID.
       if (e?.response?.status === 409) {
         const existingId = e?.response?.data?.data?._id
         if (existingId) {
-          try {
-            if (!user.registrationId) await linkRegistration(existingId, 'Airlines')
-            else await addSubscription(existingId)
-          } catch {
-            void 0
-          }
+          try { if (!user.registrationId) await linkRegistration(existingId, 'Airlines'); else await addSubscription(existingId) } catch { void 0 }
           setHasAirlineSubmission(true)
           setAirError('You already submitted this form. Updating your existing submission.')
           if (opts.returnId) return existingId
@@ -652,19 +595,17 @@ export default function RegisterPage() {
       await fetch(`${BASE_URL}/airlines/${id}/mark-paid`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       })
-    } catch {
-      void 0
-    }
+    } catch { void 0 }
     setAirSubmitted(true)
   }
 
   if (indSubmitted) return <SuccessPage name={indData.firstName} />
   if (airSubmitted) return <AirlinesSuccessPage airlineName={airData.airlineName} />
 
-  const STEPS     = regType === 'individual' ? INDIVIDUAL_STEPS : AIRLINES_STEPS
-  const step      = regType === 'individual' ? indStep : airStep
+  const STEPS      = regType === 'individual' ? INDIVIDUAL_STEPS : AIRLINES_STEPS
+  const step       = regType === 'individual' ? indStep : airStep
   const activeStep = STEPS[step - 1]
-  const progress  = Math.round((step / STEPS.length) * 100)
+  const progress   = Math.round((step / STEPS.length) * 100)
   const showExistingSummaryOnly = hasExistingSubmissionForType
   const existingSummaryData = regType === 'individual'
     ? (existingIndividualRecord ? hydrateIndividualFormFromExisting(existingIndividualRecord) : indData)
@@ -687,8 +628,6 @@ export default function RegisterPage() {
       </AnimatePresence>
 
       {/* ── Full-height two-column layout ─────────────────────────────────── */}
-      {/* Outer wrapper: fixed viewport height, no overflow — ensures only the left
-           column scrolls. The right sidebar never causes the page to scroll. */}
       <div
         className="flex"
         style={{
@@ -700,17 +639,23 @@ export default function RegisterPage() {
           inset: 0,
         }}
       >
-
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 flex flex-col"
-          style={{ overflowY: 'auto', overflowX: 'hidden', height: '100vh' }}
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
-
           {/* Top nav bar */}
-          <div className="sticky top-0 z-40 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between"
-            style={{ boxShadow: '0 1px 6px rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)' }}>
+          <div
+            className="sticky top-0 z-40 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between"
+            style={{ boxShadow: '0 1px 6px rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)', flexShrink: 0 }}
+          >
             <Link to="/">
               <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
             </Link>
@@ -721,8 +666,7 @@ export default function RegisterPage() {
                 </span>
               ) : (
                 <>
-                  <Link to="/login"
-                    className="text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors">
+                  <Link to="/login" className="text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors">
                     Sign In
                   </Link>
                   <Link to="/signup"
@@ -737,9 +681,11 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Form content */}
-          <div ref={formRef} className="flex-1 px-5 sm:px-8 lg:px-10 py-8 max-w-2xl mx-auto w-full">
-
+          {/* Form content — natural height, no flex-1 stretch */}
+          <div
+            ref={formRef}
+            className="px-5 sm:px-8 lg:px-10 py-8 max-w-2xl mx-auto w-full"
+          >
             {/* Page heading */}
             <div className="mb-6">
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-1.5" style={{ color: DARK }}>
@@ -759,18 +705,9 @@ export default function RegisterPage() {
               {/* Type toggle — Company / Individual */}
               <div className="grid grid-cols-2 gap-3 mb-6">
                 <button
-                  onClick={() => {
-                    setTransitionMode('type')
-                    setSwitchDirection(1)
-                    setRegType('airline')
-                    setAirStep(1)
-                    scrollToTop()
-                  }}
+                  onClick={() => { setTransitionMode('type'); setSwitchDirection(1); setRegType('airline'); setAirStep(1); scrollToTop() }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
-                  style={{
-                    borderColor: regType === 'airline' ? B : '#e5e7eb',
-                    background: regType === 'airline' ? BM : '#fff',
-                  }}>
+                  style={{ borderColor: regType === 'airline' ? B : '#e5e7eb', background: regType === 'airline' ? BM : '#fff' }}>
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <div className="flex items-center gap-2">
@@ -790,18 +727,9 @@ export default function RegisterPage() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setTransitionMode('type')
-                    setSwitchDirection(-1)
-                    setRegType('individual')
-                    setIndStep(1)
-                    scrollToTop()
-                  }}
+                  onClick={() => { setTransitionMode('type'); setSwitchDirection(-1); setRegType('individual'); setIndStep(1); scrollToTop() }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
-                  style={{
-                    borderColor: regType === 'individual' ? B : '#e5e7eb',
-                    background: regType === 'individual' ? BM : '#fff',
-                  }}>
+                  style={{ borderColor: regType === 'individual' ? B : '#e5e7eb', background: regType === 'individual' ? BM : '#fff' }}>
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <div className="flex items-center gap-2">
@@ -832,8 +760,7 @@ export default function RegisterPage() {
               </div>
               <div className="flex justify-between">
                 {STEPS.map((s, i) => (
-                  <p key={s.label} className="text-[10px] font-bold"
-                    style={{ color: i + 1 <= step ? B : '#cbd5e1' }}>
+                  <p key={s.label} className="text-[10px] font-bold" style={{ color: i + 1 <= step ? B : '#cbd5e1' }}>
                     {s.label}
                   </p>
                 ))}
@@ -845,12 +772,16 @@ export default function RegisterPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="rounded-3xl bg-white overflow-hidden mb-6"
-              style={{ border: '1.5px solid #e5e7eb', boxShadow: '0 8px 40px -12px rgba(15,23,42,0.10)' }}>
-              {(regType === 'individual' ? isIndBlocked : isAirBlocked) && <WrongRoleBanner type={regType} />}
+              className="rounded-3xl bg-white mb-6"
+              style={{ border: '1.5px solid #e5e7eb', boxShadow: '0 8px 40px -12px rgba(15,23,42,0.10)', overflow: 'visible' }}>
+              {(regType === 'individual' ? isIndBlocked : isAirBlocked) && (
+                <div className="rounded-t-3xl overflow-hidden">
+                  <WrongRoleBanner type={regType} />
+                </div>
+              )}
 
               {/* Card header */}
-              <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: '#f3f4f6' }}>
+              <div className="px-5 pt-5 pb-4 border-b rounded-t-3xl" style={{ borderColor: '#f3f4f6' }}>
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-1" style={{ color: B }}>
@@ -860,20 +791,24 @@ export default function RegisterPage() {
                     <p className="text-sm mt-1 max-w-xs" style={{ color: '#6b7280' }}>{activeStep.detail}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <span className="text-xl font-black tabular-nums" style={{ color: B }}>{step}<span className="text-sm font-bold text-gray-400">/{STEPS.length}</span></span>
+                    <span className="text-xl font-black tabular-nums" style={{ color: B }}>
+                      {step}<span className="text-sm font-bold text-gray-400">/{STEPS.length}</span>
+                    </span>
                   </div>
                 </div>
-
                 {!user && (
-                  <div className="mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: BM, border: `1px solid ${BXL}`, color: B }}>
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
+                    style={{ background: BM, border: `1px solid ${BXL}`, color: B }}>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
                     Sign in required to proceed past Step 2
                   </div>
                 )}
               </div>
 
               {/* Form body */}
-              <div className="px-6 py-6">
+              <div className="px-6 py-6 rounded-b-3xl">
                 {showExistingSummaryOnly ? (
                   <div className="space-y-4">
                     <ExistingFormBanner regType={regType} />
@@ -928,8 +863,8 @@ export default function RegisterPage() {
               </div>
             </Motion.div>
 
-            {/* Bottom trust row */}
-            <div className="flex flex-wrap gap-2 justify-center pb-6">
+            {/* Bottom trust badges */}
+            <div className="flex flex-wrap gap-2 justify-center pb-8">
               {[
                 { icon: <Lock className="w-3 h-3" />, text: 'Secure & Encrypted' },
                 { icon: <ShieldCheck className="w-3 h-3" />, text: 'FAA Compliant' },
@@ -942,13 +877,12 @@ export default function RegisterPage() {
                 </div>
               ))}
             </div>
-
           </div>
+          {/* End of scrollable content — no flex-1 filler below */}
         </div>
 
-        {/* ── RIGHT: Fixed sidebar (desktop only) ──────────────────────────── */}
+        {/* ── RIGHT: Sticky sidebar — stays at top while left column scrolls ── */}
         <RightSidebar regType={regType} />
-
       </div>
     </>
   )

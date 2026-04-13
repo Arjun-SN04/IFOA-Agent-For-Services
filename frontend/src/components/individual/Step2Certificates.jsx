@@ -62,8 +62,8 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
   const inputCls = (field) =>
     `w-full rounded-2xl border px-4 py-3 text-sm text-slate-900 outline-none transition-all duration-150 placeholder:text-slate-400 ${
       errors[field]
-        ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-4 focus:ring-red-100'
-        : 'border-slate-200 bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100'
+        ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-100'
+        : 'border-slate-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
     }`
 
   return (
@@ -104,7 +104,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                     key={value}
                     className={`cursor-pointer rounded-3xl border p-5 transition-all ${
                       selected
-                        ? 'border-blue-600 bg-white shadow-[0_16px_45px_-30px_rgba(0,0,255,0.55)]'
+                        ? 'border-blue-600 bg-white'
                         : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40'
                     }`}
                   >

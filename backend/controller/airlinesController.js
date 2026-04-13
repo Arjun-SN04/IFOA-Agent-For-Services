@@ -469,8 +469,9 @@ exports.getAirlinesSubscriptionByEmail = async (req, res) => {
       })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    // Return 200 with empty array when no records found (avoids noisy 404s in browser console)
     if (all.length === 0)
-      return res.status(404).json({ success: false, message: 'Not found' });
+      return res.json({ success: true, data: null, all: [] });
 
     res.json({ success: true, data: all[0], all });
   } catch (err) {
@@ -479,12 +480,25 @@ exports.getAirlinesSubscriptionByEmail = async (req, res) => {
 };
 
 // ── Read One ──────────────────────────────────────────────────────────────────
+// Returns 200+null (not 404) when the ID is not found so that dashboard pages
+// with stale registrationId / subscriptionIds values in the JWT don't generate
+// noisy browser-console network errors. The frontend already handles null gracefully.
 exports.getAirlinesSubscriptionById = async (req, res) => {
   try {
-    let doc = await Airlines.findById(req.params.id);
-    if (!doc) doc = await AirlinesSubscription.findById(req.params.id);
-    if (!doc)
-      return res.status(404).json({ success: false, message: 'Not found' });
+    // Validate that the id is a well-formed ObjectId before hitting the DB.
+    // An invalid id (e.g. undefined or a bad string) would throw a CastError.
+    const { id } = req.params;
+    if (!id || !/^[a-f\d]{24}$/i.test(id)) {
+      return res.status(200).json({ success: true, data: null });
+    }
+
+    let doc = await Airlines.findById(id);
+    if (!doc) doc = await AirlinesSubscription.findById(id);
+
+    // Return 200+null for missing records so stale IDs stored in user JWT
+    // tokens fail silently — the caller already falls back to email lookup.
+    if (!doc) return res.status(200).json({ success: true, data: null });
+
     res.json({ success: true, data: doc });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1115,6 +1129,22 @@ exports.markAirlinesInvoiceGenerated = async (req, res) => {
     const doc = await Airlines.findByIdAndUpdate(
       req.params.id,
       { $set: { invoiceGenerated: true } },
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─── PATCH /api/airlines/:id/request-invoice ─────────────────────────────────
+// Called by airline user to request an invoice from admin.
+exports.requestAirlineInvoice = async (req, res) => {
+  try {
+    const doc = await Airlines.findByIdAndUpdate(
+      req.params.id,
+      { $set: { invoiceRequested: true, invoiceRequestedAt: new Date() } },
       { new: true }
     );
     if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });

@@ -290,82 +290,172 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
           {isAirline ? (
             <>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Airline Name" value={form.airlineName} onChange={(e) => setField('airlineName', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="First Name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Last Name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
-                <input type="date" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 1" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 2" value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Postal Code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+              {/* ── Section: Company & Contact ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Company &amp; Contact</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airline Name</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="e.g. Air India" value={form.airlineName} onChange={(e) => setField('airlineName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Email Address</label>
+                    <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="contact@airline.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Name</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
+                    <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Certificate Holders</p>
-                  <button
-                    onClick={addHolder}
-                    className="text-xs font-bold text-blue-600 hover:underline"
-                  >
-                    + Add Holder
-                  </button>
+              {/* ── Section: Address ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 2 <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Suite, floor, etc." value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">City</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">State / Province</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Postal / ZIP Code</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Section: Certificate Holders ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Holders</p>
+                  <button onClick={addHolder} className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline">+ Add Holder</button>
                 </div>
                 {maxHolders > 0 && (
-                  <p className="text-[11px] text-slate-500 mb-2">
-                    Exact holder count selected: <span className="font-bold text-slate-700">{maxHolders}</span> · current: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
+                  <p className="text-[11px] text-slate-500">
+                    Committed slots: <span className="font-bold text-slate-700">{maxHolders}</span> &nbsp;·&nbsp; Currently filled: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
                   </p>
                 )}
                 {limitWarning && (
-                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                    {limitWarning}
-                  </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{limitWarning}</div>
                 )}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {(form.certificateHolders || []).map((h, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-bold text-slate-700">Holder #{i + 1}</p>
-                        <button onClick={() => removeHolder(i)} className="text-xs text-red-600 hover:underline">Remove</button>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Full Name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
-                        <input type="date" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
-                        <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
-                          <option value="">Certificate Type</option>
-                          {AIRLINE_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
-                          <option value="EXISTING">EXISTING</option>
-                          <option value="NEW">NEW</option>
-                        </select>
-                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
-                        <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="IACRA FTN #" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
-                      </div>
-
-                      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={!!h.hasSecondaryCertificate}
-                          onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
-                        />
-                        This user has a secondary FAA certificate
-                      </label>
-
-                      {h.hasSecondaryCertificate && (
-                        <div className="mt-2 grid sm:grid-cols-2 gap-2">
-                          <select className="rounded-lg border border-slate-200 px-3 py-2 text-xs" value={h.secondaryCertificateType || ''} onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}>
-                            <option value="">Secondary Certificate Type</option>
-                            {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                          <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Secondary FAA Certificate #" value={h.secondaryFaaCertificateNumber || ''} onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)} />
-                          <input className="rounded-lg border border-slate-200 px-3 py-2 text-xs sm:col-span-2" placeholder="Secondary IACRA FTN #" value={h.secondaryIacraFtnNumber || ''} onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)} />
+                    <div key={i} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      {/* Holder header */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">{i + 1}</div>
+                          <span className="text-xs font-bold text-slate-700">{h.fullName?.trim() || `Holder #${i + 1}`}</span>
                         </div>
-                      )}
+                        <button onClick={() => removeHolder(i)} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline">Remove</button>
+                      </div>
+
+                      {/* Holder fields with labels */}
+                      <div className="p-4 space-y-3">
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full Name <span className="text-red-400">*</span></label>
+                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Full legal name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
+                            <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Type <span className="text-red-400">*</span></label>
+                            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
+                              <option value="">Select type…</option>
+                              {AIRLINE_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Status</label>
+                            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
+                              <option value="EXISTING">EXISTING</option>
+                              <option value="NEW">NEW</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">FAA Certificate # <span className="text-red-400">*</span></label>
+                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">IACRA FTN # <span className="text-red-400">*</span></label>
+                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
+                          </div>
+                          <div className="flex flex-col gap-1 sm:col-span-2">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Holder Email</label>
+                            <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="holder@airline.com" value={h.email || ''} onChange={(e) => setHolder(i, 'email', e.target.value)} />
+                          </div>
+                        </div>
+
+                        {/* Secondary certificate toggle */}
+                        <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-lg border select-none transition-all ${
+                          h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
+                        }`}>
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                            h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
+                          }`}>
+                            {h.hasSecondaryCertificate && (
+                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            )}
+                          </div>
+                          <input type="checkbox" className="sr-only" checked={!!h.hasSecondaryCertificate} onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)} />
+                          <span className="text-xs font-semibold text-slate-700">This holder has a secondary FAA certificate</span>
+                        </label>
+
+                        {/* Secondary fields — full-width block below toggle, no grid overflow */}
+                        {h.hasSecondaryCertificate && (
+                          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate</p>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type <span className="text-red-400">*</span></label>
+                              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.secondaryCertificateType || ''} onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}>
+                                <option value="">Select secondary type…</option>
+                                {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Cert #</label>
+                                <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Secondary FAA Cert #" value={h.secondaryFaaCertificateNumber || ''} onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)} />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
+                                <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={h.secondaryIacraFtnNumber || ''} onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)} />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -373,44 +463,131 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             </>
           ) : (
             <>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="First Name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Last Name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Middle Name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
-                <input type="date" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Address Line 1" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Postal Code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
-                <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.primaryAirmanCertificate} onChange={(e) => setField('primaryAirmanCertificate', e.target.value)}>
-                  <option value="EXISTING">EXISTING</option>
-                  <option value="NEW">NEW</option>
-                </select>
-                <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.primaryCertificate} onChange={(e) => setField('primaryCertificate', e.target.value)}>
-                  <option value="">Primary Certificate</option>
-                  {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="FAA Certificate #" value={form.faaCertificateNumber} onChange={(e) => setField('faaCertificateNumber', e.target.value)} />
-                <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="IACRA Tracking #" value={form.iacraTrackingNumber} onChange={(e) => setField('iacraTrackingNumber', e.target.value)} />
+              {/* ── Section: Personal Info ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Information</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name <span className="text-red-400">*</span></label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Name <span className="text-red-400">*</span></label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Middle Name <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Middle name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
+                    <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Email Address <span className="text-red-400">*</span></label>
+                    <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="your@email.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number <span className="text-red-400">*</span></label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                  </div>
+                </div>
               </div>
 
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 pt-1">
-                <input type="checkbox" checked={form.hasSecondaryCertificate} onChange={(e) => setField('hasSecondaryCertificate', e.target.checked)} />
-                Has secondary certificate
-              </label>
-              {form.hasSecondaryCertificate && (
+              {/* ── Section: Address ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <select className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" value={form.secondaryCertificate} onChange={(e) => setField('secondaryCertificate', e.target.value)}>
-                    <option value="">Secondary Certificate</option>
-                    {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Secondary FAA Certificate #" value={form.secondaryFaaCertificateNumber} onChange={(e) => setField('secondaryFaaCertificateNumber', e.target.value)} />
-                  <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm sm:col-span-2" placeholder="Secondary IACRA Tracking #" value={form.secondaryIacraTrackingNumber} onChange={(e) => setField('secondaryIacraTrackingNumber', e.target.value)} />
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">City</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">State / Province</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Postal / ZIP Code</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* ── Section: Certificate ── */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Information</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airman Certificate Status</label>
+                    <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.primaryAirmanCertificate} onChange={(e) => setField('primaryAirmanCertificate', e.target.value)}>
+                      <option value="EXISTING">EXISTING</option>
+                      <option value="NEW">NEW</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Primary Certificate Type</label>
+                    <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.primaryCertificate} onChange={(e) => setField('primaryCertificate', e.target.value)}>
+                      <option value="">Select certificate…</option>
+                      {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">FAA Certificate Number</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FAA Certificate #" value={form.faaCertificateNumber} onChange={(e) => setField('faaCertificateNumber', e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">IACRA Tracking # (FTN)</label>
+                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={form.iacraTrackingNumber} onChange={(e) => setField('iacraTrackingNumber', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Secondary certificate toggle */}
+                <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-lg border select-none transition-all ${
+                  form.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
+                }`}>
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                    form.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
+                  }`}>
+                    {form.hasSecondaryCertificate && (
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    )}
+                  </div>
+                  <input type="checkbox" className="sr-only" checked={form.hasSecondaryCertificate} onChange={(e) => setField('hasSecondaryCertificate', e.target.checked)} />
+                  <span className="text-sm font-semibold text-slate-700">Has secondary FAA certificate</span>
+                </label>
+
+                {/* Secondary fields — full-width block, no grid overflow */}
+                {form.hasSecondaryCertificate && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate</p>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type</label>
+                      <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.secondaryCertificate} onChange={(e) => setField('secondaryCertificate', e.target.value)}>
+                        <option value="">Select certificate…</option>
+                        {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Certificate #</label>
+                        <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Secondary FAA Cert #" value={form.secondaryFaaCertificateNumber} onChange={(e) => setField('secondaryFaaCertificateNumber', e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
+                        <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={form.secondaryIacraTrackingNumber} onChange={(e) => setField('secondaryIacraTrackingNumber', e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -702,16 +879,6 @@ export default function SubscriptionPage() {
 
   const isPending = (s) => s && s.paymentStatus !== 'paid' && s.status !== 'Active'
 
-  // Invalidate cache every time this page is mounted so the user always
-  // sees fresh data without needing to manually refresh the browser.
-  useEffect(() => {
-    if (user) {
-      invalidate(`subs_${user.id || user.email}`)
-      invalidate(`sub_${user.id || user.email}`)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // run once on mount only
-
   useEffect(() => {
     if (!user) { setLoading(false); return }
 
@@ -722,8 +889,6 @@ export default function SubscriptionPage() {
     const cacheKey = `subs_${user.id || user.email}`
 
     // Always invalidate on mount so navigating to this page fetches fresh data.
-    // Without this, stale cache can show old payment/subscription state until
-    // the 5-second TTL naturally expires.
     invalidate(cacheKey)
 
     const mergeAndSort = (...groups) => {
@@ -740,15 +905,14 @@ export default function SubscriptionPage() {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     }
 
-    const fetchByIds = async () => {
-      const ids = [...(user.subscriptionIds || [])]
-      if (user.registrationId) {
-        const regId = user.registrationId?.toString()
-        if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
-      }
-      if (ids.length === 0) return []
+    // Only fetch IDs that weren't already resolved by the email lookup.
+    // This prevents firing GET /api/airlines/:id for stale legacy IDs
+    // (from the old AirlinesSubscription collection) that no longer exist,
+    // which causes a flood of 404s in the console on every page load.
+    const fetchByIds = async (idsToFetch) => {
+      if (!idsToFetch || idsToFetch.length === 0) return []
       const fetched = await Promise.allSettled(
-        ids.map(id => API.get(`${basePath}/${id}`, { headers }))
+        idsToFetch.map(id => API.get(`${basePath}/${id}`, { headers }))
       )
       return fetched
         .filter(r => r.status === 'fulfilled' && r.value?.data?.data)
@@ -758,12 +922,30 @@ export default function SubscriptionPage() {
     const load = async () => {
       try {
         const merged = await getOrFetch(cacheKey, async () => {
-          const emailPromise = user.email
-            ? API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+          // 1. Fetch by email first — this is the canonical lookup and avoids
+          //    hitting stale IDs stored in user.subscriptionIds.
+          const emailSubs = user.email
+            ? await API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
                 .then((r) => r.data.all || (r.data.data ? [r.data.data] : []))
                 .catch(() => [])
-            : Promise.resolve([])
-          const [idSubs, emailSubs] = await Promise.all([fetchByIds(), emailPromise])
+            : []
+
+          // 2. Collect IDs already found by email lookup.
+          const resolvedIds = new Set(emailSubs.map(s => s._id?.toString()).filter(Boolean))
+
+          // 3. Only fetch IDs not already found — filters out stale legacy IDs
+          //    that would produce 404s.
+          const remainingIds = [
+            ...(user.subscriptionIds || []),
+            ...(user.registrationId ? [user.registrationId] : []),
+          ]
+            .map(id => id?.toString())
+            .filter(Boolean)
+            .filter(id => !resolvedIds.has(id))
+
+          const uniqueRemainingIds = [...new Set(remainingIds)]
+          const idSubs = await fetchByIds(uniqueRemainingIds)
+
           return mergeAndSort(idSubs, emailSubs)
         })
         setSubs(merged)
@@ -830,7 +1012,6 @@ export default function SubscriptionPage() {
           </>
         ) : (
           <div className="space-y-8">
-            {/* Add another plan CTA when user already has subscriptions */}
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
               {subs.length} subscription{subs.length !== 1 ? 's' : ''} found
@@ -853,8 +1034,6 @@ export default function SubscriptionPage() {
                    Number(s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0)) ||
                   Number(s.totalAmount || s.totalServiceFees || 0)
                 : Number(s.price || s.totalServiceFees || 0)
-              // Build the enriched sub object BEFORE opening the modal so
-              // PaymentModal always receives the correct amount on first render.
               const enrichedSub = { ...s, _computedTotal: correctTotal }
               setSub(enrichedSub)
               setPayTarget(enrichedSub)
@@ -879,9 +1058,7 @@ export default function SubscriptionPage() {
             subscriptionData={sub}
             onClose={() => { setShowPayModal(false); setPayTarget(null); setPayingId(null) }}
             onSuccess={async (inv) => {
-              // Invalidate cache so next visit re-fetches fresh data
               invalidate(`subs_${user?.id || user?.email}`)
-              // Optimistic update
               const updated = { ...sub, paymentStatus: 'paid', status: 'Active', isPaid: true }
               setSubs(prev => prev.map(s => s._id === updated._id ? updated : s))
               setSub(updated)
@@ -889,8 +1066,6 @@ export default function SubscriptionPage() {
               setPayTarget(null)
               setPayingId(null)
               if (inv) setViewInvoice(inv)
-              // Re-fetch authoritative data from server so profile & subscription pages
-              // both reflect the real DB state when the user navigates around
               try {
                 const headers = { Authorization: `Bearer ${token}` }
                 const isAirline = user?.role === 'airline'
@@ -909,7 +1084,6 @@ export default function SubscriptionPage() {
         )}
       </AnimatePresence>
 
-      {/* Invoice preview modal (from subscription panel) */}
       {viewInvoice && (
         <InvoiceModal
           invoice={viewInvoice}
@@ -949,27 +1123,19 @@ export default function SubscriptionPage() {
 // ── Per-subscription card ────────────────────────────────────────────────────
 function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm }) {
   const isAirline = user?.role === 'airline'
-  // Source of truth: isPaid field (set only after Payment record is saved in DB)
-  // Fall back to legacy paymentStatus/status for records that predate this change
   const isPaid   = s.isPaid === true || s.paymentStatus === 'paid' || s.status === 'Active'
   const pending  = !isPaid && s.status !== 'Active'
   const active   = isPaid
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
 
-  // Load payment record from DB for invoice (async, on button click)
   const handleInvoiceClick = async () => {
     try {
-      // Try to get the authoritative Payment record from DB first
       const paymentDoc = await fetchPaymentRecord(s._id, token)
       if (paymentDoc?.isPaid) {
         onViewInvoice?.(serverPaymentToInvoice(paymentDoc))
         return
       }
     } catch (_) {}
-    // Fallback: build invoice locally from subscription data.
-    // For airlines we MUST use getAirlineTotal() (pricePerCert × committedCount)
-    // because the DB's stored totalAmount / price was historically saved with
-    // the flat per-cert price bug (e.g. $265 instead of $795).
     try {
       const paidDate = s.subscriptionDate || s.updatedAt || s.createdAt
       const correctAmountCents = isAirline
@@ -995,7 +1161,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
 
   return (
     <div className="space-y-5">
-      {/* Label when multiple subs */}
       {total > 1 && (
         <div className="flex items-center gap-2">
           <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center">
@@ -1007,7 +1172,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         </div>
       )}
 
-      {/* Pay Now banner */}
       {pending && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-3 flex-1">
@@ -1033,7 +1197,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         </div>
       )}
 
-      {/* Plan banner */}
       <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${bannerCls}`}>
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-2">
@@ -1053,7 +1216,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         </div>
       </div>
 
-      {/* Details card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan Details</p>

@@ -72,6 +72,52 @@
 .bg-blue-500 { background-color: var(--brand-primary-light) !important; }
 .focus\:border-blue-500:focus { border-color: var(--brand-primary) !important; }
 
+/* ── Remove focus glow/ring on date inputs — keep it clean ── */
+input[type="date"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  --tw-ring-color: transparent !important;
+}
+/* Also suppress Tailwind ring utilities on date inputs */
+input[type="date"].focus\:ring-3:focus,
+input[type="date"].focus\:ring-2:focus,
+input[type="date"].focus\:ring-blue-100:focus,
+input[type="date"].focus\:ring-blue-500\/20:focus {
+  --tw-ring-offset-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Layout: ensure register page left column always fills and scrolls ── */
+/* The register page uses position:fixed on the outer wrapper.
+   We make sure the left scrollable column stretches to fill the remaining
+   height and the right sidebar never collapses the left content. */
+.register-layout {
+  display: flex;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+
+.register-layout__left {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100vh;
+}
+
+.register-layout__right {
+  flex-shrink: 0;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
 /* ── Responsive dashboard ── */
 @media (max-width: 767px) {
   aside[class*='fixed'] {
@@ -116,13 +162,13 @@
 
 .react-tel-input .form-control:focus {
   border-color: var(--brand-primary) !important;
-  box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.10) !important;
+  box-shadow: 0 0 0 3px rgba(0, 0, 255, 0.08) !important;
   outline: none !important;
 }
 
 .react-tel-input .form-control.error-field {
   border-color: var(--brand-secondary-light) !important;
-  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.10) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08) !important;
 }
 
 .react-tel-input .country-list {

@@ -73,17 +73,23 @@ export default function UserDashboard() {
           const endpointById    = isAirline ? '/airlines'          : '/individuals'
           const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
 
+          // 1. Email lookup first — always canonical and avoids stale ID 404s.
+          if (user.email) {
+            try {
+              const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
+              if (r.data?.data) return r.data.data
+            } catch { /* fall through to ID lookup */ }
+          }
+
+          // 2. Fall back to registrationId only when email lookup returned nothing.
+          //    The backend now returns 200+null for missing IDs, so no 404 noise.
           if (user.registrationId) {
             try {
               const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
               if (r.data?.data) return r.data.data
-            } catch { /* fall through */ }
+            } catch { /* no record */ }
           }
 
-          if (user.email) {
-            const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
-            if (r.data?.data) return r.data.data
-          }
           return null
         })
         setSub(result)

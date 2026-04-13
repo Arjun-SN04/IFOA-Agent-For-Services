@@ -95,6 +95,10 @@ const AirlinesSchema = new mongoose.Schema({
   // Invoice generation tracking — set to true by admin after first PDF download
   invoiceGenerated: { type: Boolean, default: false, index: true },
 
+  // Invoice request tracking — set to true when airline user requests an invoice
+  invoiceRequested:    { type: Boolean, default: false, index: true },
+  invoiceRequestedAt:  { type: Date, default: null },
+
   agreedToTerms: { type: Boolean, required: true },
   submittedAt:   { type: Date, default: Date.now },
 }, { timestamps: true });

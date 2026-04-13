@@ -33,7 +33,6 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
 
   const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
   const payableCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
-  // Unlimited plan is priced per certificate too — always multiply by count
   const numericTotal = (data.pricePerCertificate || 0) * payableCount
 
   const syncHolders = (newHolders) => update({ certificateHolders: newHolders })
@@ -79,15 +78,11 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
     })
     setErrors(errs)
 
-    // Scroll to the first holder card that has errors.
-    // Use the closest scrollable ancestor instead of window.scrollIntoView
-    // so the RegisterPage left-column container scrolls, not the whole page.
     const firstInvalidIdx = errs.findIndex(e => Object.keys(e).length > 0)
     if (firstInvalidIdx !== -1) {
       setTimeout(() => {
         const el = document.getElementById(`holder-card-${firstInvalidIdx}`)
         if (el) {
-          // Walk up the DOM to find the nearest scrollable ancestor
           let scrollParent = el.parentElement
           while (scrollParent && scrollParent !== document.body) {
             const { overflowY } = window.getComputedStyle(scrollParent)
@@ -95,14 +90,12 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
             scrollParent = scrollParent.parentElement
           }
           if (scrollParent && scrollParent !== document.body) {
-            // Scroll the container directly without triggering window scroll
             const elTop = el.getBoundingClientRect().top
             const containerTop = scrollParent.getBoundingClientRect().top
             scrollParent.scrollBy({ top: elTop - containerTop - 16, behavior: 'smooth' })
           } else {
             el.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }
-          // Focus the first invalid input
           const firstField = Object.keys(errs[firstInvalidIdx])[0]
           const input = el.querySelector(`[data-field="${firstField}"]`)
           if (input) setTimeout(() => input.focus({ preventScroll: true }), 350)
@@ -113,8 +106,12 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
     return errs.every(e => Object.keys(e).length === 0)
   }
 
+  // No focus ring — clean, simple border transition only
   const inputCls = (idx, field) =>
-    `w-full px-3 py-2.5 border rounded-lg text-sm text-gray-900 bg-white outline-none transition-all duration-150 focus:ring-2 focus:ring-blue-600/15 placeholder:text-gray-400 ${
+    `w-full px-3 py-2.5 border rounded-lg text-sm text-gray-900 bg-white outline-none transition-all duration-150 placeholder:text-gray-400
+    [&::-webkit-calendar-picker-indicator]:opacity-70
+    [&::-webkit-calendar-picker-indicator]:cursor-pointer
+    [color-scheme:light] ${
       errors[idx]?.[field]
         ? 'border-red-300 focus:border-red-400 bg-red-50/30'
         : 'border-gray-200 focus:border-blue-600 hover:border-gray-300'
@@ -254,7 +251,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
 
               {/* Secondary Certificate toggle */}
               <div className="pt-1">
-                <label className={`flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 ${h.hasSecondaryCertificate ? 'border-blue-200 bg-blue-50/50' : 'border-gray-200 hover:border-blue-200 bg-white'}`}>
+                <label className={`flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 select-none ${h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:border-blue-200 bg-white'}`}>
                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 flex-shrink-0 ${h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
                     {h.hasSecondaryCertificate && (
                       <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -268,7 +265,9 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                 </label>
 
                 {h.hasSecondaryCertificate && (
-                  <div className="mt-3 ml-2 pl-4 border-l-2 border-blue-200 space-y-4">
+                  <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate Details</p>
+
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Secondary Certificate Type <span className="text-red-400">*</span></label>
                       <select value={h.secondaryCertificateType || ''}
@@ -282,6 +281,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                       </select>
                       {errors[i]?.secondaryCertificateType && <p className="text-red-500 text-xs">{errors[i].secondaryCertificateType}</p>}
                     </div>
+
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Secondary FAA Cert #</label>

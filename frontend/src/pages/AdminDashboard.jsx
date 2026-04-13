@@ -14,6 +14,8 @@ import {
   exportIndividualsExcel,
   getAllAirlinesSubscriptions,
   getAllIndividuals,
+  getPaymentsByRegistration,
+  savePaymentInvoiceDraft,
   updateAirlinesSubscription,
   updateIndividual,
 } from '../services/api'
@@ -890,33 +892,20 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     setStep('edit')
   }
 
-  // ── Save invoice changes first, then ask whether to show preview ──────────────
+  // ── Save invoice — delegates to onSaveInvoice prop from AdminDashboard ─────
   const handleSaveInvoice = async () => {
     setSavingInvoice(true)
+    const payload = {
+      invoiceNumber:    inv.invoiceNumber,
+      invoiceStatus:    'Generated',
+      invoiceGenerated: true,
+      invoiceDraft:     inv,
+    }
     try {
-      await onSaveInvoice(record._id, type, {
-        invoiceNumber: inv.invoiceNumber,
-        invoiceGenerated: true,
-        invoiceDraft: inv,
-      })
-
-      // Keep local modal state in sync so edit mode knows there are no unsaved changes.
+      await onSaveInvoice(record._id, type, payload)
       setSavedSnapshot(serializeInvoice(inv))
-
-      const wantsPreview = window.confirm('Invoice updated successfully. Do you want to see the preview?')
-      if (wantsPreview) {
-        setPreviewLoading(true)
-        const result = await generateIFOAInvoicePDF(inv)
-        setPreviewData(result)
-      } else {
-        onClose()
-      }
-    } catch (err) {
-      console.error('Invoice save failed:', err)
-      alert('Could not save invoice changes. Please try again.')
     } finally {
       setSavingInvoice(false)
-      setPreviewLoading(false)
     }
   }
 
@@ -1800,7 +1789,20 @@ export default function AdminDashboard() {
         setIndividuals(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
         setInvoiceModal(prev => prev && prev.record._id === id ? { ...prev, record: { ...prev.record, ...saved } } : prev)
       }
-      showToast('Invoice updated successfully')
+
+      // Also sync invoice draft to Payment doc so user/airline sees updated invoice
+      try {
+        const paymentsRes = await getPaymentsByRegistration(id)
+        const payments = paymentsRes.data?.data || []
+        const paidDoc = payments.find(p => p.isPaid) || payments[0]
+        if (paidDoc?._id && payload.invoiceDraft) {
+          await savePaymentInvoiceDraft(paidDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        }
+      } catch (paymentSyncErr) {
+        console.warn('[handleSaveInvoice] Payment doc sync failed:', paymentSyncErr.message)
+      }
+
+      showToast('Invoice saved — user will see updated invoice')
     } catch (e) {
       showToast(e?.response?.data?.message || 'Could not save invoice changes', 'error')
       throw e

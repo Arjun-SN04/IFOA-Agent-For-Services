@@ -220,6 +220,9 @@ export default function ProfilePage() {
     const isAirline = user.role === 'airline'
     const cacheKey = `subs_${user.id || user.email}`
 
+    // Invalidate on mount so navigating to this page always fetches fresh data
+    invalidate(cacheKey)
+
     const mergeAndSort = (...groups) => {
       const seen = new Set()
       return groups
@@ -234,15 +237,10 @@ export default function ProfilePage() {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     }
 
-    const fetchByIds = async (basePath) => {
-      const ids = [...(user.subscriptionIds || [])]
-      if (user.registrationId) {
-        const regId = user.registrationId?.toString()
-        if (!ids.map(i => i?.toString()).includes(regId)) ids.push(user.registrationId)
-      }
-      if (ids.length === 0) return []
+    const fetchByIds = async (basePath, resolvedIds) => {
+      if (!resolvedIds || resolvedIds.length === 0) return []
       const fetched = await Promise.allSettled(
-        ids.map(id => API.get(`${basePath}/${id}`, { headers }))
+        resolvedIds.map(id => API.get(`${basePath}/${id}`, { headers }))
       )
       return fetched
         .filter(r => r.status === 'fulfilled' && r.value?.data?.data)
@@ -252,25 +250,28 @@ export default function ProfilePage() {
     const load = async () => {
       try {
         const merged = await getOrFetch(cacheKey, async () => {
-          if (isAirline) {
-            const idSubs = await fetchByIds('/airlines')
-            let emailSubs = []
-            if (user.email) {
-              try {
-                const r = await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-                emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
-              } catch {}
-            }
-            return mergeAndSort(idSubs, emailSubs)
-          }
-          const idSubs = await fetchByIds('/individuals')
-          let emailSubs = []
-          if (user.email) {
-            try {
-              const r = await API.get(`/individuals/by-email?email=${encodeURIComponent(user.email)}`, { headers })
-              emailSubs = r.data.all || (r.data.data ? [r.data.data] : [])
-            } catch {}
-          }
+          const basePath = isAirline ? '/airlines' : '/individuals'
+          const emailEndpoint = isAirline ? '/airlines/by-email' : '/individuals/by-email'
+
+          // 1. Email lookup first — canonical and avoids stale IDs
+          const emailSubs = user.email
+            ? await API.get(`${emailEndpoint}?email=${encodeURIComponent(user.email)}`, { headers })
+                .then(r => r.data.all || (r.data.data ? [r.data.data] : []))
+                .catch(() => [])
+            : []
+
+          // 2. Only fetch IDs not already found by email lookup
+          const resolvedIds = new Set(emailSubs.map(s => s._id?.toString()).filter(Boolean))
+          const remainingIds = [
+            ...(user.subscriptionIds || []),
+            ...(user.registrationId ? [user.registrationId] : []),
+          ]
+            .map(id => id?.toString())
+            .filter(Boolean)
+            .filter(id => !resolvedIds.has(id))
+          const uniqueRemainingIds = [...new Set(remainingIds)]
+          const idSubs = await fetchByIds(basePath, uniqueRemainingIds)
+
           return mergeAndSort(idSubs, emailSubs)
         })
         setSubs(merged)
@@ -283,7 +284,7 @@ export default function ProfilePage() {
       }
     }
     load()
-  }, [user, token, getOrFetch])
+  }, [user, token, getOrFetch, invalidate])
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
   const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
