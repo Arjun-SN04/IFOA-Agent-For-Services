@@ -4,9 +4,9 @@ export default function DocumentsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8 text-center">
+        <div className="mb-6 sm:mb-8 text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">My Account</p>
-          <h1 className="text-2xl font-black text-slate-900">Documents</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Documents</h1>
           <p className="text-slate-500 text-sm mt-1">FAA correspondence and scanned documents forwarded to you.</p>
         </div>
 

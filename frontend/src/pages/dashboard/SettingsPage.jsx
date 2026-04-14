@@ -79,18 +79,18 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-xl mx-auto">
-        <div className="mb-8 text-center">
+        <div className="mb-6 sm:mb-8 text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
-          <h1 className="text-2xl font-black text-slate-900">Settings</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Settings</h1>
           <p className="text-slate-500 text-sm mt-1">Update your login credentials.</p>
         </div>
 
         {/* Current account info */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Account</p>
           </div>
-          <div className="px-6 py-5 flex items-center gap-4">
+          <div className="px-4 sm:px-6 py-5 flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white text-lg font-black flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/20">
               {(user?.firstName?.[0] || user?.email?.[0] || '?').toUpperCase()}
             </div>
@@ -108,11 +108,11 @@ export default function SettingsPage() {
 
         {/* Update credentials form */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Update Credentials</p>
           </div>
 
-          <div className="px-6 py-6 space-y-5">
+          <div className="px-4 sm:px-6 py-6 space-y-5">
             {/* Success message */}
             {success && (
               <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
@@ -212,13 +212,13 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
-            <p className="text-xs text-slate-400">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50">
+            <p className="text-xs text-slate-400 text-center sm:text-left">
               Need help?{' '}
               <a href="mailto:agent@theifoa.com" className="text-blue-600 hover:underline font-medium">Contact support</a>
             </p>
             <button onClick={handleSave} disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 w-full sm:w-auto">
               {saving ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

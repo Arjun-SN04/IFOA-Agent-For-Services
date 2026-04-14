@@ -215,9 +215,9 @@ export default function HeaderNav() {
       `}</style>
 
       {/* ── Main header bar ── */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-[72px] bg-white border-b border-slate-100"
+      <header className="fixed top-0 left-0 right-0 z-50 h-[60px] sm:h-[72px] bg-white border-b border-slate-100"
         style={{ boxShadow: '0 1px 12px rgba(0,0,0,0.06)' }}>
-        <div className="h-full max-w-screen-2xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
+        <div className="h-full max-w-screen-2xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-3 sm:gap-4">
 
           {/* Logo */}
           <Link to="/" className="flex-shrink-0 flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-slate-50 transition-colors">
@@ -225,7 +225,7 @@ export default function HeaderNav() {
           </Link>
 
           {/* Centre nav — pills */}
-          <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2.5 py-1 border border-slate-100">
+          <nav className="hidden md:flex h-11 items-center gap-1 absolute left-1/2 -translate-x-1/2 bg-slate-50 rounded-full px-2 sm:px-2.5 py-1 border border-slate-100">
             {nav.map(item => <NavLink key={item.to} item={item} />)}
           </nav>
 
@@ -494,7 +494,7 @@ export default function HeaderNav() {
             className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm md:hidden"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="mob-in fixed top-[72px] left-0 right-0 z-40 bg-white border-b border-slate-100 shadow-xl md:hidden">
+          <div className="mob-in fixed top-[60px] sm:top-[72px] left-0 right-0 z-40 bg-white border-b border-slate-100 shadow-xl md:hidden">
             <nav className="p-3 space-y-0.5">
               {nav.map(item => {
                 const { pathname } = window.location

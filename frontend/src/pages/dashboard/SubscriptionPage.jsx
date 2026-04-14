@@ -26,14 +26,12 @@ const CERTIFICATE_TYPES = [
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
 
-// Attach JWT token to every request from this local API instance
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem('ifoa_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// Fetch the server-stored Payment record for a registration
 async function fetchPaymentRecord(registrationId, token) {
   try {
     const res = await axios.get(`${BASE_URL}/payments/by-registration/${registrationId}`, {
@@ -75,7 +73,7 @@ function Row({ label, value }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-start gap-1 py-3 border-b border-slate-100 last:border-0">
       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-52 flex-shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm font-medium text-slate-800">{value ?? '—'}</span>
+      <span className="text-sm font-medium text-slate-800 break-words min-w-0">{value ?? '—'}</span>
     </div>
   )
 }
@@ -95,6 +93,9 @@ const AIRLINE_CERT_TYPES = [
   'Part 65 - Aircraft Dispatcher',
 ]
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  EditSubscriptionFormModal                                                   */
+/* ─────────────────────────────────────────────────────────────────────────── */
 function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   const isAirline = role === 'airline'
   const [saving, setSaving] = useState(false)
@@ -273,86 +274,111 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
     }
   }
 
+  /* input / select shared style */
+  const inp = 'rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition w-full'
+  const inpSm = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition w-full'
+
+  /* Lock body scroll when modal is open */
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    /* Backdrop */
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-hidden">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col">
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+
+      {/* Modal card — scrollable internally */}
+      <div className="relative z-10 w-full max-w-4xl my-8 rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto">
+
+        {/* Header */}
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between rounded-t-2xl sticky top-0 z-10">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Edit Form Details</p>
-            <h3 className="text-lg font-black text-slate-900">{isAirline ? 'Airline Registration Data' : 'Individual Registration Data'}</h3>
+            <h3 className="text-base sm:text-lg font-black text-slate-900">
+              {isAirline ? 'Airline Registration Data' : 'Individual Registration Data'}
+            </h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100">✕</button>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-4">
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {/* Body */}
+        <div className="p-4 sm:p-6 space-y-4">
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          )}
 
           {isAirline ? (
             <>
-              {/* ── Section: Company & Contact ── */}
+              {/* ── Company & Contact ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Company &amp; Contact</p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airline Name</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="e.g. Air India" value={form.airlineName} onChange={(e) => setField('airlineName', e.target.value)} />
+                    <input className={inp} placeholder="e.g. Air India" value={form.airlineName} onChange={(e) => setField('airlineName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Email Address</label>
-                    <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="contact@airline.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                    <input type="email" className={inp} placeholder="contact@airline.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                    <input className={inp} placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Name</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                    <input className={inp} placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                    <input className={inp} placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
-                    <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                    <input type="date" className={inp + ' [color-scheme:light]'} value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* ── Section: Address ── */}
+              {/* ── Address ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                    <input className={inp} placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 2 <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Suite, floor, etc." value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
+                    <input className={inp} placeholder="Suite, floor, etc." value={form.addressLine2} onChange={(e) => setField('addressLine2', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">City</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                    <input className={inp} placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">State / Province</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                    <input className={inp} placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Postal / ZIP Code</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                    <input className={inp} placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                    <input className={inp} placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* ── Section: Certificate Holders ── */}
+              {/* ── Certificate Holders ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Holders</p>
@@ -360,7 +386,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                 </div>
                 {maxHolders > 0 && (
                   <p className="text-[11px] text-slate-500">
-                    Committed slots: <span className="font-bold text-slate-700">{maxHolders}</span> &nbsp;·&nbsp; Currently filled: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
+                    Committed slots: <span className="font-bold text-slate-700">{maxHolders}</span>&nbsp;·&nbsp;Currently filled: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
                   </p>
                 )}
                 {limitWarning && (
@@ -368,52 +394,52 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                 )}
                 <div className="space-y-4">
                   {(form.certificateHolders || []).map((h, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <div key={i} className="rounded-xl border border-slate-200 bg-white">
                       {/* Holder header */}
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 rounded-t-xl">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">{i + 1}</div>
-                          <span className="text-xs font-bold text-slate-700">{h.fullName?.trim() || `Holder #${i + 1}`}</span>
+                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</div>
+                          <span className="text-xs font-bold text-slate-700 truncate">{h.fullName?.trim() || `Holder #${i + 1}`}</span>
                         </div>
-                        <button onClick={() => removeHolder(i)} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline">Remove</button>
+                        <button onClick={() => removeHolder(i)} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline flex-shrink-0 ml-2">Remove</button>
                       </div>
 
-                      {/* Holder fields with labels */}
+                      {/* Holder fields */}
                       <div className="p-4 space-y-3">
-                        <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full Name <span className="text-red-400">*</span></label>
-                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Full legal name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
+                            <input className={inpSm} placeholder="Full legal name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
-                            <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
+                            <input type="date" className={inpSm + ' [color-scheme:light]'} value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Type <span className="text-red-400">*</span></label>
-                            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
+                            <select className={inpSm + ' cursor-pointer'} value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
                               <option value="">Select type…</option>
                               {AIRLINE_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Status</label>
-                            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
+                            <select className={inpSm + ' cursor-pointer'} value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
                               <option value="EXISTING">EXISTING</option>
                               <option value="NEW">NEW</option>
                             </select>
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">FAA Certificate # <span className="text-red-400">*</span></label>
-                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
+                            <input className={inpSm} placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">IACRA FTN # <span className="text-red-400">*</span></label>
-                            <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
+                            <input className={inpSm} placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1 sm:col-span-2">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Holder Email</label>
-                            <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="holder@airline.com" value={h.email || ''} onChange={(e) => setHolder(i, 'email', e.target.value)} />
+                            <input type="email" className={inpSm} placeholder="holder@airline.com" value={h.email || ''} onChange={(e) => setHolder(i, 'email', e.target.value)} />
                           </div>
                         </div>
 
@@ -425,32 +451,55 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                             h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
                           }`}>
                             {h.hasSecondaryCertificate && (
-                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
                             )}
                           </div>
-                          <input type="checkbox" className="sr-only" checked={!!h.hasSecondaryCertificate} onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)} />
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={!!h.hasSecondaryCertificate}
+                            onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
+                          />
                           <span className="text-xs font-semibold text-slate-700">This holder has a secondary FAA certificate</span>
                         </label>
 
-                        {/* Secondary fields — full-width block below toggle, no grid overflow */}
+                        {/* Secondary fields — rendered BELOW toggle, outside any overflow container */}
                         {h.hasSecondaryCertificate && (
-                          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
+                          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3 mt-2">
                             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate</p>
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type <span className="text-red-400">*</span></label>
-                              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={h.secondaryCertificateType || ''} onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}>
+                              <select
+                                className={inpSm + ' cursor-pointer'}
+                                value={h.secondaryCertificateType || ''}
+                                onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}
+                              >
                                 <option value="">Select secondary type…</option>
-                                {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => <option key={t} value={t}>{t}</option>)}
+                                {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
                               </select>
                             </div>
-                            <div className="grid sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div className="flex flex-col gap-1">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Cert #</label>
-                                <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Secondary FAA Cert #" value={h.secondaryFaaCertificateNumber || ''} onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)} />
+                                <input
+                                  className={inpSm}
+                                  placeholder="Secondary FAA Cert #"
+                                  value={h.secondaryFaaCertificateNumber || ''}
+                                  onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)}
+                                />
                               </div>
                               <div className="flex flex-col gap-1">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
-                                <input className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={h.secondaryIacraFtnNumber || ''} onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)} />
+                                <input
+                                  className={inpSm}
+                                  placeholder="FTN-XXXXXXXX"
+                                  value={h.secondaryIacraFtnNumber || ''}
+                                  onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)}
+                                />
                               </div>
                             </div>
                           </div>
@@ -463,89 +512,89 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             </>
           ) : (
             <>
-              {/* ── Section: Personal Info ── */}
+              {/* ── Personal Info ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Information</p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name <span className="text-red-400">*</span></label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
+                    <input className={inp} placeholder="First name" value={form.firstName} onChange={(e) => setField('firstName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Name <span className="text-red-400">*</span></label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
+                    <input className={inp} placeholder="Last name" value={form.lastName} onChange={(e) => setField('lastName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Middle Name <span className="text-slate-300 font-normal normal-case">(optional)</span></label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Middle name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
+                    <input className={inp} placeholder="Middle name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
-                    <input type="date" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition [color-scheme:light]" value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
+                    <input type="date" className={inp + ' [color-scheme:light]'} value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Email Address <span className="text-red-400">*</span></label>
-                    <input type="email" className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="your@email.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+                    <input type="email" className={inp} placeholder="your@email.com" value={form.email} onChange={(e) => setField('email', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number <span className="text-red-400">*</span></label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                    <input className={inp} placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* ── Section: Address ── */}
+              {/* ── Address ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1 sm:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
+                    <input className={inp} placeholder="Street address" value={form.addressLine1} onChange={(e) => setField('addressLine1', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">City</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                    <input className={inp} placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">State / Province</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
+                    <input className={inp} placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Postal / ZIP Code</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
+                    <input className={inp} placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                    <input className={inp} placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
                   </div>
                 </div>
               </div>
 
-              {/* ── Section: Certificate ── */}
+              {/* ── Certificate ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Information</p>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airman Certificate Status</label>
-                    <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.primaryAirmanCertificate} onChange={(e) => setField('primaryAirmanCertificate', e.target.value)}>
+                    <select className={inp + ' cursor-pointer'} value={form.primaryAirmanCertificate} onChange={(e) => setField('primaryAirmanCertificate', e.target.value)}>
                       <option value="EXISTING">EXISTING</option>
                       <option value="NEW">NEW</option>
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Primary Certificate Type</label>
-                    <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.primaryCertificate} onChange={(e) => setField('primaryCertificate', e.target.value)}>
+                    <select className={inp + ' cursor-pointer'} value={form.primaryCertificate} onChange={(e) => setField('primaryCertificate', e.target.value)}>
                       <option value="">Select certificate…</option>
                       {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">FAA Certificate Number</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FAA Certificate #" value={form.faaCertificateNumber} onChange={(e) => setField('faaCertificateNumber', e.target.value)} />
+                    <input className={inp} placeholder="FAA Certificate #" value={form.faaCertificateNumber} onChange={(e) => setField('faaCertificateNumber', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">IACRA Tracking # (FTN)</label>
-                    <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={form.iacraTrackingNumber} onChange={(e) => setField('iacraTrackingNumber', e.target.value)} />
+                    <input className={inp} placeholder="FTN-XXXXXXXX" value={form.iacraTrackingNumber} onChange={(e) => setField('iacraTrackingNumber', e.target.value)} />
                   </div>
                 </div>
 
@@ -557,32 +606,43 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                     form.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
                   }`}>
                     {form.hasSecondaryCertificate && (
-                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
                     )}
                   </div>
-                  <input type="checkbox" className="sr-only" checked={form.hasSecondaryCertificate} onChange={(e) => setField('hasSecondaryCertificate', e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={form.hasSecondaryCertificate}
+                    onChange={(e) => setField('hasSecondaryCertificate', e.target.checked)}
+                  />
                   <span className="text-sm font-semibold text-slate-700">Has secondary FAA certificate</span>
                 </label>
 
-                {/* Secondary fields — full-width block, no grid overflow */}
+                {/* Secondary fields — rendered inline, never clipped */}
                 {form.hasSecondaryCertificate && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate</p>
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type</label>
-                      <select className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition cursor-pointer" value={form.secondaryCertificate} onChange={(e) => setField('secondaryCertificate', e.target.value)}>
+                      <select
+                        className={inp + ' cursor-pointer'}
+                        value={form.secondaryCertificate}
+                        onChange={(e) => setField('secondaryCertificate', e.target.value)}
+                      >
                         <option value="">Select certificate…</option>
                         {INDIVIDUAL_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Certificate #</label>
-                        <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Secondary FAA Cert #" value={form.secondaryFaaCertificateNumber} onChange={(e) => setField('secondaryFaaCertificateNumber', e.target.value)} />
+                        <input className={inp} placeholder="Secondary FAA Cert #" value={form.secondaryFaaCertificateNumber} onChange={(e) => setField('secondaryFaaCertificateNumber', e.target.value)} />
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
-                        <input className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="FTN-XXXXXXXX" value={form.secondaryIacraTrackingNumber} onChange={(e) => setField('secondaryIacraTrackingNumber', e.target.value)} />
+                        <input className={inp} placeholder="FTN-XXXXXXXX" value={form.secondaryIacraTrackingNumber} onChange={(e) => setField('secondaryIacraTrackingNumber', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -592,9 +652,19 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white">
+        {/* Footer */}
+        <div className="px-4 sm:px-6 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl sticky bottom-0 z-10">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white w-full sm:w-auto"
+          >
             {saving ? 'Saving...' : 'Save Form Data'}
           </button>
         </div>
@@ -603,6 +673,9 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  AddHoldersModal                                                             */
+/* ─────────────────────────────────────────────────────────────────────────── */
 function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
   const API = axios.create({ baseURL: BASE_URL })
@@ -643,18 +716,13 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   }
 
   const removeRow = (i) => {
-    // Existing rows can be edited but not removed from this modal.
     if (i < existingCount) return
     if (holders.length > 1) setHolders(prev => prev.filter((_, idx) => idx !== i))
   }
 
   const isHolderEmpty = (h) =>
-    !h.fullName?.trim() &&
-    !h.dateOfBirth &&
-    !h.certificateType &&
-    !h.iacraFtnNumber?.trim() &&
-    !h.faaCertificateNumber?.trim() &&
-    !h.email?.trim()
+    !h.fullName?.trim() && !h.dateOfBirth && !h.certificateType &&
+    !h.iacraFtnNumber?.trim() && !h.faaCertificateNumber?.trim() && !h.email?.trim()
 
   const validate = (rows) => {
     const errs = rows.map(h => {
@@ -671,21 +739,16 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
 
   const handleSubmit = async () => {
     const cleaned = holders.filter((h) => !isHolderEmpty(h))
-    if (cleaned.length === 0) {
-      setApiError('Add at least one member.')
-      return
-    }
+    if (cleaned.length === 0) { setApiError('Add at least one member.'); return }
     if (cleaned.length > committedCount) {
-      setApiError(`You selected ${committedCount} committed slot${committedCount !== 1 ? 's' : ''}.`) 
+      setApiError(`You selected ${committedCount} committed slot${committedCount !== 1 ? 's' : ''}.`)
       return
     }
     if (!validate(cleaned)) return
     setSubmitting(true)
     setApiError('')
     try {
-      // Use the dedicated add-holders PATCH endpoint which enforces slot limits
-      // and correctly accumulates amountPaid.
-      const newHolders = cleaned.slice(existingCount) // only the truly new rows
+      const newHolders = cleaned.slice(existingCount)
       const res = newHolders.length > 0
         ? await API.patch(`/airlines/${sub._id}/add-holders`, { newHolders })
         : await API.put(`/airlines/${sub._id}`, { certificateHolders: cleaned })
@@ -700,23 +763,23 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   const inp = (err) => `w-full px-3 py-2 border rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-600/15 ${err ? 'border-red-300 bg-red-50/30' : 'border-gray-200 focus:border-blue-600'}`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8 flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-black text-gray-900">Add Team Members</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {remainingSlots} slot{remainingSlots !== 1 ? 's' : ''} remaining · already covered by your committed plan
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Cost banner */}
-        <div className="mx-6 mt-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm flex items-center justify-between">
+        <div className="mx-4 sm:mx-6 mt-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm flex items-center justify-between">
           <span className="text-blue-700 font-semibold">
             {existingCount > 0
               ? `Editing ${existingCount} existing member${existingCount !== 1 ? 's' : ''}${newMembersCount > 0 ? ` + adding ${newMembersCount}` : ''}`
@@ -725,7 +788,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
         </div>
 
         {/* Holder forms */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="px-4 sm:px-6 py-4 space-y-4">
           {holders.map((h, i) => (
             <div key={i} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
               <div className="flex items-center justify-between mb-1">
@@ -735,7 +798,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
                   <input type="text" placeholder="Full legal name" value={h.fullName}
@@ -749,7 +812,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                   {errors[i]?.dateOfBirth && <p className="text-red-500 text-xs mt-0.5">{errors[i].dateOfBirth}</p>}
                 </div>
               </div>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Certificate Type *</label>
                   <select value={h.certificateType} onChange={e => onChange(i, 'certificateType', e.target.value)} className={inp(errors[i]?.certificateType) + ' cursor-pointer'}>
@@ -761,7 +824,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Certificate Status</label>
                   <div className="flex gap-2 pt-1">
-                    {['NEW','EXISTING'].map(v => (
+                    {['NEW', 'EXISTING'].map(v => (
                       <label key={v} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex-1 justify-center ${
                         h.certificateStatus === v ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                       }`}>
@@ -772,7 +835,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                   </div>
                 </div>
               </div>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">FAA Certificate #</label>
                   <input type="text" placeholder="FAA Cert #" value={h.faaCertificateNumber}
@@ -808,7 +871,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
               </label>
 
               {h.hasSecondaryCertificate && (
-                <div className="ml-2 pl-3 border-l-2 border-blue-200 space-y-3">
+                <div className="ml-2 pl-3 border-l-2 border-blue-200 space-y-3 mt-2">
                   <div>
                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Secondary Certificate Type *</label>
                     <select value={h.secondaryCertificateType || ''}
@@ -818,7 +881,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                       {CERTIFICATE_TYPES.filter(t => t !== h.certificateType).map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
-                  <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Secondary FAA Cert #</label>
                       <input type="text" placeholder="Secondary FAA Cert #" value={h.secondaryFaaCertificateNumber || ''}
@@ -848,10 +911,10 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center px-6 py-4 border-t border-gray-100">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 px-4 sm:px-6 py-4 border-t border-gray-100">
           <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition-all">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50">
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50">
             {submitting ? 'Saving…' : 'Add Members'}
           </button>
         </div>
@@ -860,6 +923,9 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  SubscriptionPage (main export)                                              */
+/* ─────────────────────────────────────────────────────────────────────────── */
 export default function SubscriptionPage() {
   const { user, token, linkRegistration } = useAuth()
   const { getOrFetch, set: cacheSet, invalidate } = useDataCache()
@@ -868,7 +934,7 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true)
   const [showPayModal,  setShowPayModal]  = useState(false)
   const [payTarget,     setPayTarget]     = useState(null)
-  const [payingId,      setPayingId]      = useState(null) // prevents double-click
+  const [payingId,      setPayingId]      = useState(null)
   const [showAddHolders, setShowAddHolders] = useState(false)
   const [viewInvoice,   setViewInvoice]   = useState(null)
   const [editTarget, setEditTarget] = useState(null)
@@ -888,27 +954,18 @@ export default function SubscriptionPage() {
     const modelName = isAirline ? 'Airlines' : 'Individual'
     const cacheKey = `subs_${user.id || user.email}`
 
-    // Always invalidate on mount so navigating to this page fetches fresh data.
     invalidate(cacheKey)
 
     const mergeAndSort = (...groups) => {
       const seen = new Set()
-      return groups
-        .flat()
-        .filter(Boolean)
-        .filter((item) => {
-          const key = item?._id?.toString()
-          if (!key || seen.has(key)) return false
-          seen.add(key)
-          return true
-        })
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      return groups.flat().filter(Boolean).filter((item) => {
+        const key = item?._id?.toString()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     }
 
-    // Only fetch IDs that weren't already resolved by the email lookup.
-    // This prevents firing GET /api/airlines/:id for stale legacy IDs
-    // (from the old AirlinesSubscription collection) that no longer exist,
-    // which causes a flood of 404s in the console on every page load.
     const fetchByIds = async (idsToFetch) => {
       if (!idsToFetch || idsToFetch.length === 0) return []
       const fetched = await Promise.allSettled(
@@ -922,19 +979,13 @@ export default function SubscriptionPage() {
     const load = async () => {
       try {
         const merged = await getOrFetch(cacheKey, async () => {
-          // 1. Fetch by email first — this is the canonical lookup and avoids
-          //    hitting stale IDs stored in user.subscriptionIds.
           const emailSubs = user.email
             ? await API.get(`${basePath}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
                 .then((r) => r.data.all || (r.data.data ? [r.data.data] : []))
                 .catch(() => [])
             : []
 
-          // 2. Collect IDs already found by email lookup.
           const resolvedIds = new Set(emailSubs.map(s => s._id?.toString()).filter(Boolean))
-
-          // 3. Only fetch IDs not already found — filters out stale legacy IDs
-          //    that would produce 404s.
           const remainingIds = [
             ...(user.subscriptionIds || []),
             ...(user.registrationId ? [user.registrationId] : []),
@@ -942,10 +993,8 @@ export default function SubscriptionPage() {
             .map(id => id?.toString())
             .filter(Boolean)
             .filter(id => !resolvedIds.has(id))
-
           const uniqueRemainingIds = [...new Set(remainingIds)]
           const idSubs = await fetchByIds(uniqueRemainingIds)
-
           return mergeAndSort(idSubs, emailSubs)
         })
         setSubs(merged)
@@ -965,10 +1014,10 @@ export default function SubscriptionPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-8 text-center">
+      <div className="max-w-3xl mx-auto px-0 sm:px-0">
+        <div className="mb-6 sm:mb-8 text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">My Account</p>
-          <h1 className="text-2xl font-black text-slate-900">Subscription</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Subscription</h1>
           <p className="text-slate-500 text-sm mt-1">Your current plan and subscription details.</p>
         </div>
 
@@ -983,10 +1032,10 @@ export default function SubscriptionPage() {
         ) : subs.length === 0 ? (
           <>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Plan</p>
               </div>
-              <div className="px-6 py-8 text-center">
+              <div className="px-4 sm:px-6 py-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto mb-4">
                   <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
@@ -994,7 +1043,7 @@ export default function SubscriptionPage() {
                 </div>
                 <p className="text-slate-700 font-bold mb-1">No active subscription</p>
                 <p className="text-slate-400 text-sm mb-5">Register to activate your FAA compliance service.</p>
-                <Link to={user?.role === 'airline' ? '/register' : '/register'}
+                <Link to="/register"
                   className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all">
                   Register Now
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -1014,7 +1063,7 @@ export default function SubscriptionPage() {
           <div className="space-y-8">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-              {subs.length} subscription{subs.length !== 1 ? 's' : ''} found
+                {subs.length} subscription{subs.length !== 1 ? 's' : ''} found
               </p>
             </div>
 
@@ -1027,19 +1076,19 @@ export default function SubscriptionPage() {
                 user={user}
                 token={token}
                 onPay={() => {
-              if (payingId === s._id) return // double-click guard
-              const isAirSub = user?.role === 'airline'
-              const correctTotal = isAirSub
-                ? (Number(s.pricePerCertificate || s.pricePerCert || 0) *
-                   Number(s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0)) ||
-                  Number(s.totalAmount || s.totalServiceFees || 0)
-                : Number(s.price || s.totalServiceFees || 0)
-              const enrichedSub = { ...s, _computedTotal: correctTotal }
-              setSub(enrichedSub)
-              setPayTarget(enrichedSub)
-              setPayingId(s._id)
-              setShowPayModal(true)
-            }}
+                  if (payingId === s._id) return
+                  const isAirSub = user?.role === 'airline'
+                  const correctTotal = isAirSub
+                    ? (Number(s.pricePerCertificate || s.pricePerCert || 0) *
+                       Number(s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0)) ||
+                      Number(s.totalAmount || s.totalServiceFees || 0)
+                    : Number(s.price || s.totalServiceFees || 0)
+                  const enrichedSub = { ...s, _computedTotal: correctTotal }
+                  setSub(enrichedSub)
+                  setPayTarget(enrichedSub)
+                  setPayingId(s._id)
+                  setShowPayModal(true)
+                }}
                 onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onEditForm={() => setEditTarget(s)}
@@ -1078,17 +1127,14 @@ export default function SubscriptionPage() {
                   setSubs(prev => prev.map(s => s._id === fresh._id ? fresh : s))
                   setSub(fresh)
                 }
-              } catch (_) { /* non-critical — optimistic state is already set */ }
+              } catch (_) { /* non-critical */ }
             }}
           />
         )}
       </AnimatePresence>
 
       {viewInvoice && (
-        <InvoiceModal
-          invoice={viewInvoice}
-          onClose={() => setViewInvoice(null)}
-        />
+        <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
       )}
 
       {showAddHolders && sub && (
@@ -1120,7 +1166,9 @@ export default function SubscriptionPage() {
   )
 }
 
-// ── Per-subscription card ────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  SubscriptionCard                                                             */
+/* ─────────────────────────────────────────────────────────────────────────── */
 function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm }) {
   const isAirline = user?.role === 'airline'
   const isPaid   = s.isPaid === true || s.paymentStatus === 'paid'
@@ -1129,16 +1177,12 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
 
   const handleInvoiceClick = async () => {
-    // Priority 1: canonical Invoice doc (single source of truth — includes admin edits)
     try {
       const invRes = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const invDoc = (invRes.data?.data || [])[0]
       if (invDoc) {
-        // Use admin draft verbatim if it exists (any non-null draft is authoritative).
-        // Do NOT require invoiceNumber on the draft — it may have been saved without it.
-        // buildPDFPayload in InvoiceModal will merge the invoiceNumber as fallback.
         const invoiceDraft = invDoc.draft || null
         onViewInvoice?.({
           invoiceNumber:    invDoc.invoiceNumber,
@@ -1158,11 +1202,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         })
         return
       }
-    } catch (_) { /* fall through to next priority */ }
+    } catch (_) { /* fall through */ }
 
-    // Priority 2: invoiceDraft stored directly on the subscription record
-    // (saved by admin via handleSaveInvoice — always accessible without auth issues,
-    //  and is the exact same data that was saved to the Invoice doc)
     if (s.invoiceDraft && typeof s.invoiceDraft === 'object' &&
         (s.invoiceDraft.lineItems?.length || s.invoiceDraft.invoiceNumber)) {
       const draft = s.invoiceDraft
@@ -1180,13 +1221,11 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         airlineName:      s.airlineName || '',
         pricePerCert:     s.pricePerCertificate || s.pricePerCert || null,
         holderCount:      s.certificateHolders?.length || s.committedCount || null,
-        // Pass the draft verbatim — buildPDFPayload will use it directly (Path 1)
         invoiceDraft: { ...draft, invoiceNumber: draft.invoiceNumber || s.invoiceNumber },
       })
       return
     }
 
-    // Priority 3: Payment doc (Stripe card payments)
     try {
       const paymentDoc = await fetchPaymentRecord(s._id, token)
       if (paymentDoc?.isPaid) {
@@ -1195,7 +1234,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
       }
     } catch (_) { /* fall through */ }
 
-    // Priority 4: local fallback built from registration data (legacy / edge cases)
     try {
       const paidDate = s.subscriptionDate || s.updatedAt || s.createdAt
       const correctAmountCents = isAirline
@@ -1218,7 +1256,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
     : inactive
     ? 'bg-gradient-to-r from-slate-700 to-slate-600'
     : s.status === 'Active'
-    ? 'bg-gradient-to-r from-slate-800 to-slate-600'  // admin-activated but payment still pending
+    ? 'bg-gradient-to-r from-slate-800 to-slate-600'
     : 'bg-gradient-to-r from-blue-700 to-blue-600'
 
   return (
@@ -1235,7 +1273,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
       )}
 
       {pending && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1249,7 +1287,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
           </div>
           <button
             onClick={onPay}
-            className="flex-shrink-0 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 whitespace-nowrap"
+            className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 w-full sm:w-auto"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
@@ -1259,29 +1297,27 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
         </div>
       )}
 
-      <div className={`rounded-2xl p-6 text-white flex items-center justify-between ${bannerCls}`}>
+      <div className={`rounded-2xl p-4 sm:p-6 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${bannerCls}`}>
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-2">
             {active ? 'Active Subscription' : inactive ? 'Inactive Subscription' : s.status === 'Active' ? 'Active — Payment Pending' : 'Pending Subscription'}
           </p>
           <PlanBadge plan={s.subscriptionPlan} />
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">
             {isAirline ? 'Total Amount' : 'Plan Price'}
           </p>
-          <p className="text-3xl font-black">
-            {isAirline
-              ? money(getAirlineTotal(s))
-              : money(s.price || s.totalServiceFees)}
+          <p className="text-2xl sm:text-3xl font-black">
+            {isAirline ? money(getAirlineTotal(s)) : money(s.price || s.totalServiceFees)}
           </p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 sm:justify-between">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan Details</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onEditForm}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
@@ -1305,7 +1341,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
             <PayBadge status={s.paymentStatus || s.status} />
           </div>
         </div>
-        <div className="px-6 py-2">
+        <div className="px-4 sm:px-6 py-2">
           {isAirline ? (
             <>
               <Row label="Airline Name" value={s.airlineName} />
@@ -1329,13 +1365,13 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
                 if (remaining > 0) return (
                   <div className="py-3 border-b border-slate-100">
-                    <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                       <div>
                         <p className="text-xs font-bold text-blue-800">{remaining} slot{remaining !== 1 ? 's' : ''} not yet filled</p>
                         <p className="text-xs text-blue-600 mt-0.5">Total payment covers all committed slots.</p>
                       </div>
                       <button onClick={onAddHolders}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-all">
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-all w-full sm:w-auto">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                         Add Members
                       </button>
@@ -1351,14 +1387,14 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-3">Certificate Holders</p>
                   <div className="space-y-2">
                     {s.certificateHolders.map((h, i) => (
-                      <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 flex items-start justify-between gap-3">
+                      <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-slate-900">{h.fullName}</p>
                           <p className="text-xs text-slate-500 mt-0.5">{h.certificateType}</p>
                           {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
                           {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
                         </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border flex-shrink-0 ${
+                        <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border flex-shrink-0 self-start ${
                           h.certificateStatus === 'EXISTING' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-300 text-slate-600'
                         }`}>{h.certificateStatus}</span>
                       </div>

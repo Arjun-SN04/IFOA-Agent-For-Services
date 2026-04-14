@@ -119,10 +119,10 @@ export default function UserDashboard() {
           className="relative rounded-2xl overflow-hidden border border-slate-200"
           style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}
         >
-          <div className="relative z-10 px-7 py-6 flex flex-col items-center text-center gap-4">
+          <div className="relative z-10 px-5 sm:px-7 py-5 sm:py-6 flex flex-col items-center text-center gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Welcome back</p>
-              <h1 className="text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900">Hello, {user?.firstName || fullName} 👋</h1>
               <p className="text-slate-500 text-sm mt-1">Here's an overview of your IFOA USA account.</p>
             </div>
             {!subLoading && !sub && (
@@ -181,7 +181,7 @@ export default function UserDashboard() {
         >
           {/* Account info */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <circle cx="12" cy="8" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
@@ -190,7 +190,7 @@ export default function UserDashboard() {
               </div>
               <Link to="/dashboard/profile" className="text-xs text-slate-500 font-semibold hover:text-slate-700 hover:underline">Edit →</Link>
             </div>
-            <div className="px-5 py-4 space-y-3">
+            <div className="px-4 sm:px-5 py-4 space-y-3">
               {[
                 { label: 'Full Name', value: fullName },
                 { label: 'Email', value: user?.email },
@@ -206,7 +206,7 @@ export default function UserDashboard() {
 
           {/* Quick actions */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
               <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>

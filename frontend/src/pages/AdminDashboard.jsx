@@ -1261,61 +1261,68 @@ function EmptyState({ message = 'No records found' }) {
 //                            + emerald "Edit Invoice" button (opens modal at step 'edit', no auto-preview)
 function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGenerated, isDeleting }) {
   return (
-    <div className="flex flex-nowrap items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+    <div className="flex flex-nowrap items-center justify-center gap-1.5" onClick={e => e.stopPropagation()}>
       {/* View */}
       <button onClick={onView}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap flex-shrink-0">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /></svg>
         View
       </button>
 
-      {/* Invoice buttons */}
+      {/* Invoice area — fixed width so the divider and Del button never shift */}
       {onInvoice && (
-        invoiceGenerated ? (
-          <>
-            {/* Eye icon — immediately previews the invoice PDF in a new tab */}
-            <button
-              onClick={onInvoicePreview}
-              title="Preview Invoice PDF"
-              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300 transition"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="3" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-              </svg>
-            </button>
-            {/* Edit invoice — opens edit form directly */}
+        <div className="flex items-center justify-center gap-1.5 flex-shrink-0" style={{ width: '7.5rem' }}>
+          {invoiceGenerated ? (
+            <>
+              {/* PDF/document icon — immediately previews the invoice PDF */}
+              <button
+                onClick={onInvoicePreview}
+                title="Preview Invoice PDF"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300 transition flex-shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6M9 17h4" />
+                </svg>
+              </button>
+              {/* Edit invoice — opens edit form directly */}
+              <button
+                onClick={onInvoice}
+                title="Edit Invoice"
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap flex-shrink-0"
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+                </svg>
+                Invoice
+              </button>
+            </>
+          ) : (
+            /* Generate new invoice — fills the fixed-width container */
             <button
               onClick={onInvoice}
-              title="Edit Invoice"
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap"
+              title="Generate Invoice"
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition whitespace-nowrap w-full"
             >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Invoice
+              Generate
             </button>
-          </>
-        ) : (
-          /* Generate new invoice — opens payment method selector (step 1) */
-          <button
-            onClick={onInvoice}
-            title="Generate Invoice"
-            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition whitespace-nowrap"
-          >
-            <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Generate
-          </button>
-        )
+          )}
+        </div>
       )}
 
+      {/* Divider — always centered between invoice area and Del */}
+      <div className="w-px h-5 bg-slate-200 flex-shrink-0" />
+
       {/* Delete */}
-      <button onClick={onDelete} disabled={isDeleting}
-        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
-        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
-        {isDeleting ? '…' : 'Del'}
+      <button onClick={onDelete} disabled={isDeleting} title="Delete"
+        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition disabled:opacity-40 flex-shrink-0">
+        {isDeleting
+          ? <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+          : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
+        }
       </button>
     </div>
   )
@@ -1356,7 +1363,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Actions</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1409,14 +1416,12 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                     <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(primary.price)}</td>
                     <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
                     <td className="px-4 py-4">
-                      <div className="flex flex-col gap-1">
-                        <Badge value={primary.paymentStatus} isPaid={primary.isPaid} />
-                        {primary.wirePaymentRequested && (
-                          <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700 w-fit">
-                            Wire Requested
-                          </span>
-                        )}
-                      </div>
+                      <Badge value={primary.paymentStatus} isPaid={primary.isPaid} />
+                      {primary.wirePaymentRequested && (
+                        <span className="mt-1 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                          Wire Requested
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
@@ -1454,14 +1459,12 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
                       <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <Badge value={sub.paymentStatus} isPaid={sub.isPaid} />
-                          {sub.wirePaymentRequested && (
-                            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700 w-fit">
-                              Wire Requested
-                            </span>
-                          )}
-                        </div>
+                        <Badge value={sub.paymentStatus} isPaid={sub.isPaid} />
+                        {sub.wirePaymentRequested && (
+                          <span className="mt-1 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-blue-700">
+                            Wire Requested
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
                       <td className="px-4 py-3">
@@ -1531,7 +1534,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1763,6 +1766,7 @@ export default function AdminDashboard() {
   const [filterPlan, setFilterPlan]   = useState('All')
   const [filterPayment, setFilterPayment] = useState('All')
   const [filterStatus, setFilterStatus]   = useState('All')
+  const [sortOrder, setSortOrder]         = useState('desc') // 'asc' | 'desc'
 
   const [viewRec, setViewRec]   = useState(null)
   const [viewType, setViewType] = useState(null)
@@ -1988,7 +1992,11 @@ export default function AdminDashboard() {
       && (filterPlan === 'All' || r.subscriptionPlan === filterPlan)
       && (filterPayment === 'All' || r.paymentStatus === filterPayment)
       && (filterStatus === 'All' || r.status === filterStatus)
-  }), [src, search, filterPlan, filterPayment, filterStatus, tab])
+  }).sort((a, b) => {
+    const aDate = new Date(a.createdAt).getTime()
+    const bDate = new Date(b.createdAt).getTime()
+    return sortOrder === 'asc' ? aDate - bDate : bDate - aDate
+  }), [src, search, filterPlan, filterPayment, filterStatus, sortOrder, tab])
 
   const uniqueAccountCount = useMemo(() => {
     if (tab === 'overview') return 0
@@ -2006,8 +2014,8 @@ export default function AdminDashboard() {
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
 
-  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All') }
-  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All'
+  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setSortOrder('desc') }
+  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || sortOrder !== 'desc'
 
   return (
     <DashboardLayout>
@@ -2088,6 +2096,8 @@ export default function AdminDashboard() {
               className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
+            
+            
             </>
           )}
 

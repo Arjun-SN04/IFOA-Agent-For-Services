@@ -14,7 +14,7 @@ function InfoRow({ label, value }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-start gap-1 py-3 border-b border-slate-100 last:border-0">
       <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-48 flex-shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm font-medium text-slate-800">{value || '—'}</span>
+      <span className="text-sm font-medium text-slate-800 break-words min-w-0">{value || '—'}</span>
     </div>
   )
 }
@@ -34,12 +34,12 @@ function PlanBadge({ plan }) {
 
 function StatusBadge({ status }) {
   const map = {
-    paid:    'bg-emerald-50 border-emerald-200 text-emerald-700',
-    Active:  'bg-emerald-50 border-emerald-200 text-emerald-700',
-    pending: 'bg-blue-50 border-blue-200 text-blue-700',
-    Pending: 'bg-blue-50 border-blue-200 text-blue-700',
-    failed:  'bg-red-50 border-red-200 text-red-700',
-    Inactive:'bg-slate-100 border-slate-200 text-slate-600',
+    paid:     'bg-emerald-50 border-emerald-200 text-emerald-700',
+    Active:   'bg-emerald-50 border-emerald-200 text-emerald-700',
+    pending:  'bg-blue-50 border-blue-200 text-blue-700',
+    Pending:  'bg-blue-50 border-blue-200 text-blue-700',
+    failed:   'bg-red-50 border-red-200 text-red-700',
+    Inactive: 'bg-slate-100 border-slate-200 text-slate-600',
   }
   return (
     <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
@@ -48,7 +48,7 @@ function StatusBadge({ status }) {
   )
 }
 
-// ── Inline edit name modal ───────────────────────────────────────────────────
+/* ── Edit Name Modal ──────────────────────────────────────────────────────── */
 function EditNameModal({ user, onClose, onSave }) {
   const [firstName, setFirstName] = useState(user?.firstName || '')
   const [lastName, setLastName]   = useState(user?.lastName || '')
@@ -76,20 +76,15 @@ function EditNameModal({ user, onClose, onSave }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-slate-50">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 bg-slate-50">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">Edit Profile</p>
-            <h3 className="text-lg font-black text-slate-900">Change Your Name</h3>
+            <h3 className="text-base sm:text-lg font-black text-slate-900">Change Your Name</h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition flex-shrink-0">✕</button>
         </div>
-
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {err && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
-          )}
+        <div className="px-4 sm:px-6 py-5 space-y-4">
+          {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">First Name</label>
             <input
@@ -109,22 +104,14 @@ function EditNameModal({ user, onClose, onSave }) {
             />
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-          >
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 bg-slate-50 px-4 sm:px-6 py-4">
+          <button onClick={onClose} disabled={saving}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
             Cancel
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}
-          >
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}>
             {saving && (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
@@ -139,7 +126,7 @@ function EditNameModal({ user, onClose, onSave }) {
   )
 }
 
-// ── Edit Airline Name modal ────────────────────────────────────────────────
+/* ── Edit Airline Name Modal ──────────────────────────────────────────────── */
 function EditAirlineNameModal({ currentName, onClose, onSave }) {
   const [name, setName] = useState(currentName || '')
   const [saving, setSaving] = useState(false)
@@ -163,14 +150,14 @@ function EditAirlineNameModal({ currentName, onClose, onSave }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-slate-50">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 bg-slate-50">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-0.5">Airline Account</p>
-            <h3 className="text-lg font-black text-slate-900">Change Airline Name</h3>
+            <h3 className="text-base sm:text-lg font-black text-slate-900">Change Airline Name</h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition flex-shrink-0">✕</button>
         </div>
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-4 sm:px-6 py-5 space-y-4">
           {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <p className="text-xs font-semibold text-amber-800">
@@ -188,10 +175,13 @@ function EditAirlineNameModal({ currentName, onClose, onSave }) {
             />
           </div>
         </div>
-        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <button onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 bg-slate-50 px-4 sm:px-6 py-4">
+          <button onClick={onClose} disabled={saving}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+            Cancel
+          </button>
           <button onClick={handleSave} disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
             {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
@@ -201,6 +191,7 @@ function EditAirlineNameModal({ currentName, onClose, onSave }) {
   )
 }
 
+/* ── ProfilePage ──────────────────────────────────────────────────────────── */
 export default function ProfilePage() {
   const { user, token, updateProfile, updateAirlineName } = useAuth()
   const { getOrFetch, invalidate } = useDataCache()
@@ -219,22 +210,16 @@ export default function ProfilePage() {
     const headers = { Authorization: `Bearer ${token}` }
     const isAirline = user.role === 'airline'
     const cacheKey = `subs_${user.id || user.email}`
-
-    // Invalidate on mount so navigating to this page always fetches fresh data
     invalidate(cacheKey)
 
     const mergeAndSort = (...groups) => {
       const seen = new Set()
-      return groups
-        .flat()
-        .filter(Boolean)
-        .filter((item) => {
-          const key = item?._id?.toString()
-          if (!key || seen.has(key)) return false
-          seen.add(key)
-          return true
-        })
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      return groups.flat().filter(Boolean).filter((item) => {
+        const key = item?._id?.toString()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     }
 
     const fetchByIds = async (basePath, resolvedIds) => {
@@ -252,26 +237,17 @@ export default function ProfilePage() {
         const merged = await getOrFetch(cacheKey, async () => {
           const basePath = isAirline ? '/airlines' : '/individuals'
           const emailEndpoint = isAirline ? '/airlines/by-email' : '/individuals/by-email'
-
-          // 1. Email lookup first — canonical and avoids stale IDs
           const emailSubs = user.email
             ? await API.get(`${emailEndpoint}?email=${encodeURIComponent(user.email)}`, { headers })
                 .then(r => r.data.all || (r.data.data ? [r.data.data] : []))
                 .catch(() => [])
             : []
-
-          // 2. Only fetch IDs not already found by email lookup
           const resolvedIds = new Set(emailSubs.map(s => s._id?.toString()).filter(Boolean))
           const remainingIds = [
             ...(user.subscriptionIds || []),
             ...(user.registrationId ? [user.registrationId] : []),
-          ]
-            .map(id => id?.toString())
-            .filter(Boolean)
-            .filter(id => !resolvedIds.has(id))
-          const uniqueRemainingIds = [...new Set(remainingIds)]
-          const idSubs = await fetchByIds(basePath, uniqueRemainingIds)
-
+          ].map(id => id?.toString()).filter(Boolean).filter(id => !resolvedIds.has(id))
+          const idSubs = await fetchByIds(basePath, [...new Set(remainingIds)])
           return mergeAndSort(idSubs, emailSubs)
         })
         setSubs(merged)
@@ -292,11 +268,7 @@ export default function ProfilePage() {
   return (
     <DashboardLayout>
       {editNameOpen && (
-        <EditNameModal
-          user={user}
-          onClose={() => setEditNameOpen(false)}
-          onSave={updateProfile}
-        />
+        <EditNameModal user={user} onClose={() => setEditNameOpen(false)} onSave={updateProfile} />
       )}
       {editAirlineNameOpen && (
         <EditAirlineNameModal
@@ -308,65 +280,67 @@ export default function ProfilePage() {
 
       <div className="max-w-3xl mx-auto">
         {/* Page header */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 sm:mb-8 text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
-          <h1 className="text-2xl font-black text-slate-900">My Profile</h1>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">My Profile</h1>
           <p className="text-slate-500 text-sm mt-1">Your account information and active subscription plan.</p>
         </div>
 
-        {/* ── Avatar card — LIGHT THEME ── */}
+        {/* ── Avatar card ── */}
         <div
-          className="rounded-2xl border border-blue-100 p-6 mb-6 flex items-center gap-5 relative overflow-hidden"
+          className="rounded-2xl border border-blue-100 p-4 sm:p-6 mb-6 relative overflow-hidden"
           style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)' }}
         >
-          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20"
+          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20 pointer-events-none"
             style={{ background: 'radial-gradient(circle, #3333ff, transparent 70%)' }} />
-          {/* Avatar circle */}
-          <div className="w-16 h-16 rounded-2xl text-white text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md relative z-10"
-            style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)', boxShadow: '0 4px 16px rgba(0,0,255,0.30)' }}>
-            {initials}
+
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Avatar + info row */}
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl text-white text-xl sm:text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md"
+                style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)', boxShadow: '0 4px 16px rgba(0,0,255,0.30)' }}
+              >
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">{fullName}</h2>
+                <p className="text-slate-500 text-sm truncate">{user?.email}</p>
+                <span className="inline-flex items-center mt-1.5 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
+                  {user?.role}
+                </span>
+              </div>
+            </div>
+
+            {/* Edit button */}
+            <button
+              onClick={() => setEditNameOpen(true)}
+              className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-white transition-all shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+              </svg>
+              Edit Name
+            </button>
           </div>
-          <div className="relative z-10 flex-1 min-w-0">
-            <h2 className="text-xl font-black text-slate-900">{fullName}</h2>
-            <p className="text-slate-500 text-sm">{user?.email}</p>
-            <span className="inline-flex items-center mt-2 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
-              {user?.role}
-            </span>
-          </div>
-          {/* Edit name button */}
-          <button
-            onClick={() => setEditNameOpen(true)}
-            className="relative z-10 flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-white transition-all shadow-sm"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
-            </svg>
-            Edit Name
-          </button>
         </div>
 
-        {/* Account Details */}
+        {/* ── Account Details ── */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Details</p>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setEditNameOpen(true)}
-                className="text-xs text-blue-600 font-semibold hover:underline"
-              >
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={() => setEditNameOpen(true)} className="text-xs text-blue-600 font-semibold hover:underline">
                 Edit Name →
               </button>
               {user?.role === 'airline' && (
-                <button
-                  onClick={() => setEditAirlineNameOpen(true)}
-                  className="text-xs text-red-600 font-semibold hover:underline"
-                >
+                <button onClick={() => setEditAirlineNameOpen(true)} className="text-xs text-red-600 font-semibold hover:underline">
                   Edit Airline Name →
                 </button>
               )}
             </div>
           </div>
-          <div className="px-6 py-2">
+          <div className="px-4 sm:px-6 py-2">
             <InfoRow label="First Name" value={user?.firstName} />
             <InfoRow label="Last Name" value={user?.lastName} />
             <InfoRow label="Email Address" value={user?.email} />
@@ -376,19 +350,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ── SUBSCRIPTION PLAN SECTION ── */}
-        {viewInvoice && (
-          <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
-        )}
+        {/* ── Subscription Plan ── */}
+        {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription Plan</p>
             {sub && <StatusBadge status={sub.paymentStatus || sub.status} />}
           </div>
 
           {subLoading ? (
-            <div className="px-6 py-10 flex items-center justify-center">
+            <div className="px-4 sm:px-6 py-10 flex items-center justify-center">
               <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
                 <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
@@ -396,7 +368,7 @@ export default function ProfilePage() {
               <span className="ml-3 text-sm text-slate-400">Loading subscription…</span>
             </div>
           ) : subs.length === 0 ? (
-            <div className="px-6 py-8 text-center">
+            <div className="px-4 sm:px-6 py-8 text-center">
               <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
@@ -404,11 +376,9 @@ export default function ProfilePage() {
               </div>
               <p className="text-slate-700 font-bold mb-1">No active subscription</p>
               <p className="text-slate-500 text-sm mb-4">Register to activate your FAA compliance service.</p>
-              <Link
-                to={user?.role === 'airline' ? '/register' : '/register'}
+              <Link to="/register"
                 className="inline-flex items-center gap-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
-                style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}
-              >
+                style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}>
                 Register Now
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -416,8 +386,7 @@ export default function ProfilePage() {
               </Link>
             </div>
           ) : (
-            /* ── ALL SUBSCRIPTIONS (airline & individual) ── */
-            <div className="px-6 py-4 space-y-6">
+            <div className="px-4 sm:px-6 py-4 space-y-6">
               {subs.map((s, idx) => {
                 const isAirline = user?.role === 'airline'
                 const active = s.isPaid === true || s.paymentStatus === 'paid' || s.status === 'Active'
@@ -429,39 +398,40 @@ export default function ProfilePage() {
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription #{idx + 1}</p>
                       </div>
                     )}
+
+                    {/* Plan banner */}
                     <div className={`rounded-xl p-4 mb-3 border ${
-                      active
-                        ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100'
-                        : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-100'
+                      active ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100'
+                             : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-100'
                     }`}>
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div>
                           <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${active ? 'text-emerald-600' : 'text-blue-600'}`}>
                             {active ? 'Active Plan' : 'Pending Plan'}
                           </p>
                           <PlanBadge plan={s.subscriptionPlan} />
                         </div>
-                        <div className="text-right">
+                        <div className="sm:text-right">
                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                             {isAirline ? 'Total Amount' : 'Plan Price'}
                           </p>
-                          <p className="text-2xl font-black text-slate-900">
+                          <p className="text-xl sm:text-2xl font-black text-slate-900">
                             {isAirline ? money(s.totalAmount) : money(s.price || s.totalServiceFees)}
                           </p>
                         </div>
                       </div>
-                      {/* Expiry summary row */}
-                      <div className="mt-3 pt-3 border-t border-black/5 flex items-center justify-between gap-4">
-                        <div className="flex-1">
+
+                      {/* Expiry row */}
+                      <div className="mt-3 pt-3 border-t border-black/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
                           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Expires</p>
                           <p className={`text-xs font-bold ${
-                            s.subscriptionPlan === 'Unlimited Plan' ? 'text-emerald-600' :
-                            s.expirationDate ? 'text-slate-800' : 'text-slate-400'
+                            s.subscriptionPlan === 'Unlimited Plan' ? 'text-emerald-600'
+                              : s.expirationDate ? 'text-slate-800' : 'text-slate-400'
                           }`}>
                             {s.subscriptionPlan === 'Unlimited Plan'
                               ? 'Never (Unlimited ∞)'
-                              : s.expirationDate
-                              ? fmt(s.expirationDate)
+                              : s.expirationDate ? fmt(s.expirationDate)
                               : active ? '—' : 'Activates on payment'}
                           </p>
                         </div>
@@ -469,15 +439,14 @@ export default function ProfilePage() {
                           <button
                             onClick={() => {
                               const inv = buildInvoice(
-                                s,
-                                isAirline ? 'Airlines' : 'Individual',
+                                s, isAirline ? 'Airlines' : 'Individual',
                                 Math.round((s.price || s.totalAmount || s.totalServiceFees || 0) * 100),
                                 { id: s.invoiceNumber || '—' },
                                 s.subscriptionDate || s.updatedAt || s.createdAt
                               )
                               setViewInvoice(inv)
                             }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-white hover:border-red-300 hover:text-red-600 transition flex-shrink-0"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-white hover:border-red-300 hover:text-red-600 transition flex-shrink-0 self-start sm:self-auto"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -501,13 +470,9 @@ export default function ProfilePage() {
                         <InfoRow
                           label="Expiration Date"
                           value={
-                            s.subscriptionPlan === 'Unlimited Plan'
-                              ? 'Never (Unlimited)'
-                              : s.expirationDate
-                              ? fmt(s.expirationDate)
-                              : s.paymentStatus === 'paid'
-                              ? '—'
-                              : 'Activates on payment'
+                            s.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)'
+                              : s.expirationDate ? fmt(s.expirationDate)
+                              : s.paymentStatus === 'paid' ? '—' : 'Activates on payment'
                           }
                         />
                         <InfoRow label="Payment Status" value={<StatusBadge status={s.paymentStatus} />} />
@@ -517,15 +482,15 @@ export default function ProfilePage() {
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Certificate Holders</p>
                             <div className="space-y-2">
                               {s.certificateHolders.map((h, i) => (
-                                <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                                  <div className="flex items-start justify-between gap-3">
+                                <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-3 sm:px-4 py-3">
+                                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                                     <div>
                                       <p className="text-sm font-bold text-slate-900">{h.fullName}</p>
                                       <p className="text-xs text-slate-500 mt-0.5">{h.certificateType}</p>
                                       {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
                                       {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
                                     </div>
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border ${
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border self-start flex-shrink-0 ${
                                       h.certificateStatus === 'EXISTING' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-100 border-slate-300 text-slate-600'
                                     }`}>{h.certificateStatus}</span>
                                   </div>
@@ -542,10 +507,8 @@ export default function ProfilePage() {
                         <InfoRow
                           label="Expiration Date"
                           value={
-                            s.subscriptionPlan === 'Unlimited Plan'
-                              ? 'Never (Unlimited ∞)'
-                              : s.expirationDate
-                              ? fmt(s.expirationDate)
+                            s.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited ∞)'
+                              : s.expirationDate ? fmt(s.expirationDate)
                               : active ? '—' : 'Activates on payment'
                           }
                         />
@@ -574,17 +537,17 @@ export default function ProfilePage() {
 
         {/* Quick link to documents */}
         <Link to="/dashboard/documents"
-          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4">
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 hover:border-blue-200 hover:shadow-md transition-all flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" />
             </svg>
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-slate-900">Documents</p>
             <p className="text-xs text-slate-500">Access your FAA correspondence and uploaded files.</p>
           </div>
-          <svg className="w-4 h-4 text-slate-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </Link>

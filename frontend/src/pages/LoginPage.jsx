@@ -192,7 +192,7 @@ export default function LoginPage() {
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
           {/* Simple white header with logo */}
-          <div className="px-8 py-8 text-center border-b border-slate-100">
+          <div className="px-5 sm:px-8 py-7 sm:py-8 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
               <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
             </Link>
@@ -200,9 +200,9 @@ export default function LoginPage() {
           </div>
 
           {/* Form area */}
-          <div className="px-8 py-8">
+          <div className="px-5 sm:px-8 py-6 sm:py-8">
             <div className="mb-6">
-              <h2 className="text-2xl font-black mb-1" style={{ color: '#0f172a' }}>Welcome back</h2>
+              <h2 className="text-xl sm:text-2xl font-black mb-1" style={{ color: '#0f172a' }}>Welcome back</h2>
               <p className="text-sm" style={{ color: '#64748b' }}>Sign in to your account to continue.</p>
             </div>
 
