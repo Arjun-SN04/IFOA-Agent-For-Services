@@ -175,7 +175,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-white">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 sm:py-12 bg-white">
       {/* Forced password-change modal — shown on top of login page after first login */}
       <AnimatePresence>
         {awaitingPasswordChange && (

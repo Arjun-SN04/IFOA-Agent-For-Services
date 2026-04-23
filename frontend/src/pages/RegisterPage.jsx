@@ -673,28 +673,29 @@ export default function RegisterPage() {
             height: '100vh',
             display: 'flex',
             flexDirection: 'column',
+            minWidth: 0,
           }}
         >
           {/* Top nav bar */}
           <div
-            className="sticky top-0 z-40 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between"
+            className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between"
             style={{ boxShadow: '0 1px 6px rgba(15,23,42,0.06)', backdropFilter: 'blur(10px)', flexShrink: 0 }}
           >
             <Link to="/">
-              <img src={logo} alt="IFOA USA" className="h-10 w-auto" />
+              <img src={logo} alt="IFOA USA" className="h-8 sm:h-10 w-auto" />
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {user ? (
-                <span className="text-sm font-semibold text-gray-700">
+                <span className="text-xs sm:text-sm font-semibold text-gray-700 truncate max-w-[120px] sm:max-w-none">
                   👋 {user.firstName || user.email}
                 </span>
               ) : (
                 <>
-                  <Link to="/login" className="text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors">
+                  <Link to="/login" className="text-xs sm:text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors">
                     Sign In
                   </Link>
                   <Link to="/signup"
-                    className="text-sm font-bold px-4 py-2 rounded-xl text-white transition-all"
+                    className="text-xs sm:text-sm font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-white transition-all"
                     style={{ background: B }}
                     onMouseEnter={e => e.currentTarget.style.background = BD}
                     onMouseLeave={e => e.currentTarget.style.background = B}>
@@ -708,11 +709,11 @@ export default function RegisterPage() {
           {/* Form content — natural height, no flex-1 stretch */}
           <div
             ref={formRef}
-            className="px-5 sm:px-8 lg:px-10 py-8 max-w-2xl mx-auto w-full"
+            className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8 max-w-2xl mx-auto w-full"
           >
             {/* Page heading */}
-            <div className="mb-6">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-1.5" style={{ color: DARK }}>
+            <div className="mb-5">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight mb-1.5" style={{ color: DARK }}>
                 FAA Compliance — Register Now
               </h1>
               <p className="text-sm leading-relaxed" style={{ color: '#64748b' }}>
@@ -727,7 +728,7 @@ export default function RegisterPage() {
               </p>
 
               {/* Type toggle — Company / Individual */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3 mb-5 sm:mb-6">
                 <button
                   onClick={() => { setTransitionMode('type'); setSwitchDirection(1); setRegType('airline'); setAirStep(1); scrollToTop() }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
@@ -911,3 +912,4 @@ export default function RegisterPage() {
     </>
   )
 }
+

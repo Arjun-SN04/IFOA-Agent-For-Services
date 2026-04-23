@@ -710,7 +710,7 @@ async function generateIFOAInvoicePDF(inv) {
   return { url, filename: `Invoice-${inv.invoiceNumber}.pdf` }
 }
 
-// ─── Helper: download a blob URL ───────────────────────────────────────────────
+// ─── Helper: download a blob URL ──────────────────────────────────────────────
 function triggerDownload({ url, filename }) {
   const link = document.createElement('a')
   link.href = url
@@ -720,13 +720,6 @@ function triggerDownload({ url, filename }) {
   document.body.removeChild(link)
   setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
-
-// ─── Helper: open blob URL as preview in new tab ───────────────────────────────
-// Note: No longer used — preview shown in modal instead
-// function openPreview({ url }) {
-//   window.open(url, '_blank', 'noopener,noreferrer')
-//   setTimeout(() => URL.revokeObjectURL(url), 30000)
-// }
 
 // ─── Admin Invoice Modal ───────────────────────────────────────────────────────
 // initialStep: 'select' (default) | 'edit'  — which step to open at
@@ -738,8 +731,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const payable = new Date(today); payable.setDate(payable.getDate() + 30)
   const fmtInput = (d) => d ? new Date(d).toISOString().slice(0, 10) : ''
 
-  // Invoice number: prefer existing DB number, otherwise fetch a fresh unique one
-  // from the server (format: "Invoice US-350-26"). Never use a random placeholder.
   const [fetchedInvoiceNumber, setFetchedInvoiceNumber] = React.useState(record.invoiceNumber || '')
   React.useEffect(() => {
     if (!record.invoiceNumber) {
@@ -759,12 +750,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     ? Number(record.totalAmount ?? (pricePerCert * holderCount) ?? 0)
     : Number(record.price || record.totalServiceFees || 0)
 
-  // For airlines, always compute total as pricePerCert × holderCount.
-  // totalAmount in DB may have been stored with old flat-rate logic for Unlimited plan,
-  // so recompute it to ensure correctness.
   const computedAirlineTotal = isAirline ? (pricePerCert * holderCount) : 0
 
-  // Always trust confirmed paid totals first to prevent under-billing invoices.
   const paidTotal = Number(
     record.amountPaid || record.totalAmount || record.price || record.totalServiceFees || 0
   )
@@ -775,8 +762,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const unitPrice = isAirline ? Number((totalAmt / holderCount).toFixed(2)) : totalAmt
   const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
 
-  // Prefer saved invoiceDraft payment method; otherwise infer from payment record.
-  // For airlines, default to wire only when a wire request exists.
   const paidByCard = record?.paymentMethodType === 'card' || Boolean(record?.stripePaymentIntentId)
   const wireRequested = Boolean(record?.wirePaymentRequested || record?.invoiceStatus === 'Wire Requested')
   const defaultPaymentMethod = record?.invoiceDraft?.paymentMethod || (isAirline ? (wireRequested ? 'wire' : 'card') : 'card')
@@ -788,7 +773,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const autoPreviewFired = useRef(false)
   const [savingInvoice, setSavingInvoice] = useState(false)
 
-  // ── State for preview modal ────────────────────────────────────────────────────
   const [previewData, setPreviewData] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
@@ -813,23 +797,17 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     ],
   }
 
-  // If the admin has previously saved a draft, ALWAYS use the draft line items verbatim.
-  // The draft represents admin's deliberate edits and is the source of truth.
-  // Only fall back to subscription-computed lineItems when there is no saved draft at all.
   const draftItems = Array.isArray(record.invoiceDraft?.lineItems) ? record.invoiceDraft.lineItems : []
   const hasSavedDraft = draftItems.length > 0
 
   const mergedInvoice = {
     ...initialInvoice,
     ...(record.invoiceDraft || {}),
-    // Admin draft line items always win — never replace with subscription-computed data
     lineItems: hasSavedDraft ? draftItems : initialInvoice.lineItems,
   }
 
   const [inv, setInv] = useState(mergedInvoice)
 
-  // When the server returns the real invoice number, push it into inv state
-  // so the form field always shows the canonical DB-backed number.
   React.useEffect(() => {
     if (fetchedInvoiceNumber && fetchedInvoiceNumber !== inv.invoiceNumber) {
       setInv(p => ({ ...p, invoiceNumber: fetchedInvoiceNumber }))
@@ -859,11 +837,9 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
   const hasInvoiceChanges = serializeInvoice(inv) !== savedSnapshot
 
-  // ── Auto-preview on mount when triggered from the eye button ────────────────
   useEffect(() => {
     if (autoPreview && step === 'edit' && !autoPreviewFired.current) {
       autoPreviewFired.current = true
-      // Small delay so the modal renders first
       const timer = setTimeout(async () => {
         setPreviewLoading(true)
         try {
@@ -879,7 +855,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Preview-only mode (eye button): show existing invoice preview immediately ──
   useEffect(() => {
     if (previewOnly && !previewData && !previewLoading) {
       const timer = setTimeout(async () => {
@@ -918,7 +893,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     setStep('edit')
   }
 
-  // ── Save invoice — delegates to onSaveInvoice prop from AdminDashboard ─────
   const handleSaveInvoice = async () => {
     setSavingInvoice(true)
     const payload = {
@@ -935,13 +909,11 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     }
   }
 
-  // ── Download PDF from preview (invoice already saved) ────────────────────────
   const handleDownloadFromPreview = async () => {
     if (!previewData) return
     triggerDownload(previewData)
   }
 
-  // ── Close preview modal ────────────────────────────────────────────────────────
   const closePreviewModal = () => {
     setPreviewData(null)
     if (previewOnly) onClose()
@@ -1030,7 +1002,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
           {/* ── Step 2: Edit Invoice ── */}
           {step === 'edit' && (
             <div className="px-6 py-5 space-y-5 max-h-[72vh] overflow-y-auto">
-              {/* Auto-preview loading banner */}
               {autoPreview && previewLoading && (
                 <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
                   <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
@@ -1038,7 +1009,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               )}
 
-              {/* Invoice-only edit warning — only shown when editing an already-generated invoice */}
               {record.invoiceGenerated && (
                 <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -1057,7 +1027,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 {inv.paymentMethod === 'wire' ? 'Wire Transfer Invoice' : 'Card Payment Invoice'}
               </div>
 
-              {/* Invoice meta */}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Invoice Details</p>
                 <div className="grid sm:grid-cols-3 gap-3">
@@ -1067,7 +1036,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               </div>
 
-              {/* Recipient */}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Recipient</p>
                 <div className="grid sm:grid-cols-2 gap-3">
@@ -1079,7 +1047,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               </div>
 
-              {/* Line items */}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Line Items</p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
@@ -1111,7 +1078,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               </div>
 
-              {/* Invoice preview summary */}
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-5 py-4 text-xs text-slate-500 space-y-1">
                 <p className="font-black text-[9px] uppercase tracking-widest text-slate-400 mb-2">Invoice Summary</p>
                 <div className="flex justify-between"><span>Invoice #</span><span className="font-bold text-slate-800">{inv.invoiceNumber}</span></div>
@@ -1135,7 +1101,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 Cancel
               </button>
               <div className="flex items-center gap-2">
-                {/* Save is the source of truth; preview is optional after save */}
                 {(!record.invoiceGenerated || hasInvoiceChanges) && (
                   <button
                     onClick={handleSaveInvoice}
@@ -1168,8 +1133,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               exit={{ opacity: 0, y: 20, scale: 0.95 }} transition={{ duration: 0.2 }}
               className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
               onClick={e => e.stopPropagation()}>
-              
-              {/* Header */}
               <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Invoice {previewOnly ? 'Preview' : 'Saved'} ✓</p>
@@ -1178,8 +1141,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 <button onClick={closePreviewModal}
                   className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
               </div>
-
-              {/* PDF Viewer or Loading */}
               <div className="bg-slate-100 p-4 h-[72vh] max-h-[820px] min-h-[520px] overflow-hidden">
                 {previewLoading ? (
                   <div className="h-full flex flex-col items-center justify-center gap-3">
@@ -1195,8 +1156,6 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   />
                 )}
               </div>
-
-              {/* Footer Actions */}
               <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 flex justify-between items-center">
                 <p className="text-xs text-slate-500">Invoice has been {previewOnly ? 'generated' : 'saved'} successfully</p>
                 <div className="flex items-center gap-3">
@@ -1255,25 +1214,18 @@ function EmptyState({ message = 'No records found' }) {
 }
 
 // ─── RowActions ────────────────────────────────────────────────────────────────
-// Invoice buttons behaviour:
-//   invoiceGenerated = false → single red "Generate" button (opens modal at step 1)
-//   invoiceGenerated = true  → eye icon (opens modal at step 'edit' + auto-previews)
-//                            + emerald "Edit Invoice" button (opens modal at step 'edit', no auto-preview)
 function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGenerated, isDeleting }) {
   return (
     <div className="flex flex-nowrap items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-      {/* View */}
       <button onClick={onView}
         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /></svg>
         View
       </button>
 
-      {/* Invoice buttons */}
       {onInvoice && (
         invoiceGenerated ? (
           <>
-            {/* Eye icon — immediately previews the invoice PDF in a new tab */}
             <button
               onClick={onInvoicePreview}
               title="Preview Invoice PDF"
@@ -1284,7 +1236,6 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
               </svg>
             </button>
-            {/* Edit invoice — opens edit form directly */}
             <button
               onClick={onInvoice}
               title="Edit Invoice"
@@ -1297,7 +1248,6 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
             </button>
           </>
         ) : (
-          /* Generate new invoice — opens payment method selector (step 1) */
           <button
             onClick={onInvoice}
             title="Generate Invoice"
@@ -1311,7 +1261,6 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
         )
       )}
 
-      {/* Delete */}
       <button onClick={onDelete} disabled={isDeleting}
         className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
@@ -1344,12 +1293,12 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden">
-        <table className="w-full table-fixed text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-44">Name & Certificate</th>
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
+        <table className="w-full min-w-[900px] table-fixed text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+            <tr>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Email / Phone</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Price</th>
@@ -1486,12 +1435,10 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
   )
 }
 
-// ─── Grouped Airlines Table ────────────────────────────────────────────────────
 function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
   const [expanded, setExpanded] = useState({})
   const highlightRef = useRef(null)
 
-  // Scroll highlighted row into view whenever it changes
   useEffect(() => {
     if (highlightedId && highlightRef.current) {
       setTimeout(() => {
@@ -1515,7 +1462,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
   if (!data.length) return <EmptyState message="No airline records found" />
 
   const planLabel = (p) =>
-    p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || '—'
+    p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || 'â€”'
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -1559,20 +1506,24 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           <Plane className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
+                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || 'â€”'}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || 'â€”'}</p>
                           {hasMany && (
-                            <button onClick={e => { e.stopPropagation(); toggle(key) }}
-                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap">
-                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                            <button
+                              onClick={e => { e.stopPropagation(); toggle(key) }}
+                              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 py-0.5 text-[9px] font-black text-amber-700 hover:bg-amber-100 transition whitespace-nowrap"
+                            >
+                              <svg className={`w-2.5 h-2.5 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
                               Multiple Subscriptions ({group.length})
                             </button>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4"><p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || '—'}</p></td>
-                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
+                    <td className="px-4 py-4"><p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || 'â€”'}</p></td>
+                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || 'â€”'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs font-medium text-slate-700">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-0.5">
@@ -1598,9 +1549,11 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                   </tr>
 
                   {hasMany && isOpen && group.map((sub, si) => (
-                    <tr key={sub._id + '-sub'}
+                    <tr
+                      key={sub._id + '-sub'}
                       className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
-                      onClick={() => onView(sub)}>
+                      onClick={() => onView(sub)}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3 pl-4">
                           <div className="flex flex-col items-center flex-shrink-0">
@@ -1609,12 +1562,12 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           </div>
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
-                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[100px]">{sub.airlineName || '—'}</p>
+                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[100px]">{sub.airlineName || 'â€”'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[130px]">{sub.email || sub.contactEmail || '—'}</p></td>
-                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[130px]">{sub.email || sub.contactEmail || 'â€”'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || 'â€”'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
@@ -1648,35 +1601,66 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
 }
 
 function OverviewPanel({ individuals, airlines }) {
-  const indTotal   = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
-  const airTotal   = airlines.reduce((s, r) => s + getAirlineTotal(r), 0)
-  const indPaid    = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
-  const airPaid    = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
+  const indTotal = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
+  const airTotal = airlines.reduce((s, r) => s + getAirlineTotal(r), 0)
+  const indPaid = individuals.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
+  const airPaid = airlines.filter(r => r.isPaid === true || (r.isPaid == null && r.paymentStatus === 'paid')).length
   const allHolders = airlines.reduce((s, r) => s + (r.certificateHolders?.length || 0), 0)
   const allRegs = [...individuals, ...airlines]
   const planCounts = {
-    '1 Year':     allRegs.filter(r => r.subscriptionPlan === '1 Year Subscription Plan').length,
+    '1 Year': allRegs.filter(r => r.subscriptionPlan === '1 Year Subscription Plan').length,
     'Multi-Year': allRegs.filter(r => r.subscriptionPlan === 'Multiple Years Subscription Plan').length,
-    'Unlimited':  allRegs.filter(r => r.subscriptionPlan === 'Unlimited Plan').length,
+    'Unlimited': allRegs.filter(r => r.subscriptionPlan === 'Unlimited Plan').length,
   }
   const countryCounts = {}
   allRegs.forEach(r => { if (r.country) countryCounts[r.country] = (countryCounts[r.country] || 0) + 1 })
   const topCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard label="Individuals" value={individuals.length} sub="Registered" accent="blue"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="9.5" cy="7" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /></svg>} />
-        <StatCard label="Airlines" value={airlines.length} sub="Operators" accent="violet"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2 14 8.5-2.5L13 4l2 1-1 7 5.5 1.5a2 2 0 0 1 0 3L14 18l1 7-2 1-2.5-7.5L2 16v-2Z" /></svg>} />
-        <StatCard label="Cert Holders" value={allHolders} sub="Airline total" accent="amber"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="7" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 7V5a2 2 0 0 0-4 0v2M12 12v4M10 14h4" /></svg>} />
-        <StatCard label="Indiv. Revenue" value={'$' + indTotal.toLocaleString('en-US')} sub="Individual fees" accent="emerald"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M8 10h8M8 14h8" /></svg>} />
-        <StatCard label="Airline Revenue" value={'$' + airTotal.toLocaleString('en-US')} sub="Airline fees" accent="emerald"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>} />
-        <StatCard label="Paid" value={indPaid + airPaid} sub={`${indPaid} ind · ${airPaid} air`} accent="emerald"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>} />
+        <StatCard
+          label="Individuals"
+          value={individuals.length}
+          sub="Registered"
+          accent="blue"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="9.5" cy="7" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" /></svg>}
+        />
+        <StatCard
+          label="Airlines"
+          value={airlines.length}
+          sub="Operators"
+          accent="violet"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2 14 8.5-2.5L13 4l2 1-1 7 5.5 1.5a2 2 0 0 1 0 3L14 18l1 7-2 1-2.5-7.5L2 16v-2Z" /></svg>}
+        />
+        <StatCard
+          label="Cert Holders"
+          value={allHolders}
+          sub="Airline total"
+          accent="amber"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="7" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 7V5a2 2 0 0 0-4 0v2M12 12v4M10 14h4" /></svg>}
+        />
+        <StatCard
+          label="Indiv. Revenue"
+          value={'$' + indTotal.toLocaleString('en-US')}
+          sub="Individual fees"
+          accent="emerald"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M8 10h8M8 14h8" /></svg>}
+        />
+        <StatCard
+          label="Airline Revenue"
+          value={'$' + airTotal.toLocaleString('en-US')}
+          sub="Airline fees"
+          accent="emerald"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>}
+        />
+        <StatCard
+          label="Paid"
+          value={indPaid + airPaid}
+          sub={`${indPaid} ind Â· ${airPaid} air`}
+          accent="emerald"
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+        />
       </div>
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
@@ -1699,7 +1683,7 @@ function OverviewPanel({ individuals, airlines }) {
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries — All Registrations</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries â€” All Registrations</p>
           <div className="space-y-2">
             {topCountries.length === 0 ? <p className="text-sm text-slate-400">No data yet.</p> : topCountries.map(([country, count]) => (
               <div key={country} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
@@ -1733,72 +1717,36 @@ export default function AdminDashboard() {
           : 'overview'
   const [tab, setTab] = useState(tabFromPath)
   const prevTab = useRef(tabFromPath)
+
   useEffect(() => {
     setTab(prev => {
-      prevTab.current = prev  // capture previous tab BEFORE updating
+      prevTab.current = prev
       return tabFromPath
     })
   }, [pathname])
 
-  // After admin adds a record and navigates back, immediately reload data
-  useEffect(() => {
-    if (tab !== 'add-airline' && tab !== 'add-individual') {
-      if (prevTab.current === 'add-airline' || prevTab.current === 'add-individual') {
-        loadData(true)
-      }
-    }
-  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [individuals, setIndividuals] = useState([])
+  const [airlines, setAirlines] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadErr, setLoadErr] = useState('')
+  const [search, setSearch] = useState('')
+  const [filterPlan, setFilterPlan] = useState('All')
+  const [filterPayment, setFilterPayment] = useState('All')
+  const [filterStatus, setFilterStatus] = useState('All')
+  const [viewRec, setViewRec] = useState(null)
+  const [viewType, setViewType] = useState(null)
+  const [editRec, setEditRec] = useState(null)
+  const [editType, setEditType] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [highlightedAirlineId, setHighlightedAirlineId] = useState(null)
+  const [invoiceModal, setInvoiceModal] = useState(null)
 
-  // Deep-link: ?highlight=<airlineId> — auto-opens the view modal for that record
   const highlightId = useMemo(() => {
     const p = new URLSearchParams(locationSearch)
     return p.get('highlight') || null
   }, [locationSearch])
-
-  const [individuals, setIndividuals] = useState([])
-  const [airlines, setAirlines]       = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [loadErr, setLoadErr]         = useState('')
-  const [search, setSearch]           = useState('')
-  const [filterPlan, setFilterPlan]   = useState('All')
-  const [filterPayment, setFilterPayment] = useState('All')
-  const [filterStatus, setFilterStatus]   = useState('All')
-
-  const [viewRec, setViewRec]   = useState(null)
-  const [viewType, setViewType] = useState(null)
-  const [editRec, setEditRec]   = useState(null)
-  const [editType, setEditType] = useState(null)
-  const [saving, setSaving]     = useState(false)
-  const [deleting, setDeleting] = useState(null)
-  const [toast, setToast]       = useState(null)
-  const [highlightedAirlineId, setHighlightedAirlineId] = useState(null)
-
-  // invoiceModal state: { record, type, initialStep, autoPreview }
-  const [invoiceModal, setInvoiceModal] = useState(null)
-
-  useEffect(() => {
-    loadData()
-    // Poll every 30 seconds so new registrations appear without manual refresh
-    const pollTimer = setInterval(() => loadData(false), 30000)
-    return () => clearInterval(pollTimer)
-  }, [])
-
-  // Wire notification: switch to Airlines tab and highlight the row
-  useEffect(() => {
-    if (!highlightId || loading || airlines.length === 0) return
-    const record = airlines.find(a => String(a._id) === String(highlightId))
-    if (record) {
-      // Clear filters so highlighted row is never hidden
-      setSearch('')
-      setFilterPlan('All')
-      setFilterPayment('All')
-      setFilterStatus('All')
-      setHighlightedAirlineId(highlightId)
-      navigate('/admin/airlines', { replace: true })
-      // Auto-clear the highlight after 8 seconds
-      setTimeout(() => setHighlightedAirlineId(null), 8000)
-    }
-  }, [highlightId, airlines, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -1810,17 +1758,15 @@ export default function AdminDashboard() {
     setLoadErr('')
     try {
       const [ir, ar] = await Promise.all([getAllIndividuals(), getAllAirlinesSubscriptions()])
-      const newInds  = Array.isArray(ir.data?.data) ? ir.data.data : Array.isArray(ir.data) ? ir.data : []
-      const newAirs  = Array.isArray(ar.data?.data) ? ar.data.data : Array.isArray(ar.data) ? ar.data : []
+      const newInds = Array.isArray(ir.data?.data) ? ir.data.data : Array.isArray(ir.data) ? ir.data : []
+      const newAirs = Array.isArray(ar.data?.data) ? ar.data.data : Array.isArray(ar.data) ? ar.data : []
 
-      // When background-polling, detect truly new records and toast
       if (!showSpinner) {
         setIndividuals(prev => {
           const prevIds = new Set(prev.map(x => x._id))
           const added = newInds.filter(x => !prevIds.has(x._id))
           if (added.length > 0) {
             const name = [added[0].firstName, added[0].lastName].filter(Boolean).join(' ') || 'Individual'
-            // defer toast outside state updater
             setTimeout(() => showToast(`New individual: ${name}`, 'individual'), 0)
           }
           return newInds
@@ -1840,8 +1786,38 @@ export default function AdminDashboard() {
       }
     } catch {
       if (showSpinner) setLoadErr('Could not connect to the server. Is the backend running on port 5000?')
-    } finally { if (showSpinner) setLoading(false) }
+    } finally {
+      if (showSpinner) setLoading(false)
+    }
   }
+
+  useEffect(() => {
+    loadData()
+    const pollTimer = setInterval(() => loadData(false), 30000)
+    return () => clearInterval(pollTimer)
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'add-airline' && tab !== 'add-individual') {
+      if (prevTab.current === 'add-airline' || prevTab.current === 'add-individual') {
+        loadData(true)
+      }
+    }
+  }, [tab])
+
+  useEffect(() => {
+    if (!highlightId || loading || airlines.length === 0) return
+    const record = airlines.find(a => String(a._id) === String(highlightId))
+    if (record) {
+      setSearch('')
+      setFilterPlan('All')
+      setFilterPayment('All')
+      setFilterStatus('All')
+      setHighlightedAirlineId(highlightId)
+      navigate('/admin/airlines', { replace: true })
+      setTimeout(() => setHighlightedAirlineId(null), 8000)
+    }
+  }, [highlightId, airlines, loading])
 
   const handleSave = async (id, data, type) => {
     setSaving(true)
@@ -1868,31 +1844,33 @@ export default function AdminDashboard() {
     if (!window.confirm('Permanently delete this record?')) return
     setDeleting(id)
     try {
-      if (type === 'airline') { await deleteAirlinesSubscription(id); setAirlines(p => p.filter(x => x._id !== id)) }
-      else { await deleteIndividual(id); setIndividuals(p => p.filter(x => x._id !== id)) }
+      if (type === 'airline') {
+        await deleteAirlinesSubscription(id)
+        setAirlines(p => p.filter(x => x._id !== id))
+      } else {
+        await deleteIndividual(id)
+        setIndividuals(p => p.filter(x => x._id !== id))
+      }
       showToast('Record deleted')
-    } catch { showToast('Delete failed', 'error') }
-    finally { setDeleting(null) }
+    } catch {
+      showToast('Delete failed', 'error')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const handleSaveInvoice = async (id, type, payload) => {
     try {
-      // Only persist invoice-specific fields to the registration doc.
-      // Do NOT spread the full payload (which contains invoiceDraft etc.) into
-      // updateAirlinesSubscription / updateIndividual — that clobbers subscription
-      // fields and causes the returned record to lose invoiceDraft on re-open.
       const registrationUpdate = {
-        invoiceStatus:    payload.invoiceStatus,
+        invoiceStatus: payload.invoiceStatus,
         invoiceGenerated: payload.invoiceGenerated,
-        invoiceNumber:    payload.invoiceNumber,
-        invoiceDraft:     payload.invoiceDraft,
+        invoiceNumber: payload.invoiceNumber,
+        invoiceDraft: payload.invoiceDraft,
       }
 
       if (type === 'airline') {
         const res = await updateAirlinesSubscription(id, registrationUpdate)
         const saved = res.data?.data || {}
-        // Merge carefully: keep all existing record fields, only update invoice-related ones
-        // AND carry the invoiceDraft forward in memory (API may not return it)
         setAirlines(p => p.map(x => x._id === id
           ? { ...x, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber }
           : x
@@ -1914,7 +1892,6 @@ export default function AdminDashboard() {
         )
       }
 
-      // Sync to Payment.invoiceDraft (backward compat)
       try {
         const paymentsRes = await getPaymentsByRegistration(id)
         const payments = paymentsRes.data?.data || []
@@ -1926,8 +1903,6 @@ export default function AdminDashboard() {
         console.warn('[handleSaveInvoice] Payment doc sync failed:', paymentSyncErr.message)
       }
 
-      // Sync to canonical Invoice doc — this is the single source of truth
-      // that the user’s SubscriptionPage reads from.
       try {
         const invDocRes = await getInvoiceByRegistration(id)
         const invDoc = (invDocRes.data?.data || [])[0]
@@ -1938,7 +1913,7 @@ export default function AdminDashboard() {
         console.warn('[handleSaveInvoice] Invoice doc sync failed:', invSyncErr.message)
       }
 
-      showToast('Invoice saved — user will see updated invoice')
+      showToast('Invoice saved â€” user will see updated invoice')
     } catch (e) {
       showToast(e?.response?.data?.message || 'Could not save invoice changes', 'error')
       throw e
@@ -1957,17 +1932,14 @@ export default function AdminDashboard() {
     }, 50)
   }
 
-  // Open invoice modal at step 1 (generate new invoice)
   const openInvoiceGenerate = (record, type) => {
     setInvoiceModal({ record, type, initialStep: 'select', autoPreview: false, previewOnly: false })
   }
 
-  // Open invoice modal directly at edit form, no auto-preview (Edit Invoice button)
   const openInvoiceEdit = (record, type) => {
     setInvoiceModal({ record, type, initialStep: 'edit', autoPreview: false, previewOnly: false })
   }
 
-  // Preview existing invoice (Eye button) — shows preview only
   const openInvoicePreview = (record, type) => {
     setInvoiceModal({ record, type, initialStep: 'edit', autoPreview: false, previewOnly: true })
   }
@@ -2002,10 +1974,9 @@ export default function AdminDashboard() {
     return keys.size
   }, [filtered, tab])
 
-  const PLANS    = ['All', '1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
+  const PLANS = ['All', '1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
-
   const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All') }
   const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All'
 
@@ -2013,16 +1984,16 @@ export default function AdminDashboard() {
     <DashboardLayout>
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
-            className={`fixed top-6 right-6 z-[100] flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white ${
-              toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'
-            }`}>
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            className={`fixed top-6 right-6 z-[100] flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}
+          >
             {toast.type === 'error' && (
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
             )}
-            {toast.type === 'airline' && (
-              <Plane className="w-4 h-4 flex-shrink-0" />
-            )}
+            {toast.type === 'airline' && <Plane className="w-4 h-4 flex-shrink-0" />}
             {toast.type === 'individual' && (
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="3.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.582-6 8-6s8 2 8 6" /></svg>
             )}
@@ -2035,9 +2006,9 @@ export default function AdminDashboard() {
       </AnimatePresence>
 
       {viewRec && viewType === 'individual' && <IndividualViewModal record={viewRec} onClose={closeView} onEdit={openEditFromView} />}
-      {viewRec && viewType === 'airline'    && <AirlineViewModal    record={viewRec} onClose={closeView} onEdit={openEditFromView} />}
+      {viewRec && viewType === 'airline' && <AirlineViewModal record={viewRec} onClose={closeView} onEdit={openEditFromView} />}
       {editRec && editType === 'individual' && <IndividualEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'individual')} />}
-      {editRec && editType === 'airline'    && <AirlineEditModal    record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
+      {editRec && editType === 'airline' && <AirlineEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
 
       {invoiceModal && (
         <AdminInvoiceModal
@@ -2067,83 +2038,65 @@ export default function AdminDashboard() {
       )}
 
       {tab !== 'add-airline' && tab !== 'add-individual' && (
-      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
-            <>
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
-              <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-44 bg-white transition" />
-            </div>
-            <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
-              {PLANS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Plans' : p}</option>)}
-            </select>
-            <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
-              {PAYMENTS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Payments' : p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
-              {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
-            </select>
-            </>
-          )}
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {hasActiveFilters && tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
-              <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
-            )}
-
+        <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
             {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
-              <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
-                Export Excel
-              </a>
+              <>
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
+                  <input type="text" placeholder="Searchâ€¦" value={search} onChange={e => setSearch(e.target.value)} className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-44 bg-white transition" />
+                </div>
+                <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)} className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+                  {PLANS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Plans' : p}</option>)}
+                </select>
+                <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)} className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+                  {PAYMENTS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Payments' : p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                </select>
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+                  {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
+                </select>
+              </>
             )}
 
-            {tab === 'individuals' && (
-              <button
-                onClick={() => navigate('/admin/add-individual')}
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition"
-                style={{ background: '#000021' }}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {hasActiveFilters && tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
+                <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
+              )}
+
+              {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && (
+                <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
+                  Export Excel
+                </a>
+              )}
+
+              {tab === 'individuals' && (
+                <button onClick={() => navigate('/admin/add-individual')} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition" style={{ background: '#000021' }}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" /></svg>
+                  Add Individual
+                </button>
+              )}
+
+              {tab === 'airlines' && (
+                <button onClick={() => navigate('/admin/add-airline')} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition" style={{ background: '#000021' }}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" /></svg>
+                  Add Airline
+                </button>
+              )}
+
+              <button onClick={() => loadData(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+                <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
                 </svg>
-                Add Individual
+                Refresh
               </button>
-            )}
-
-            {tab === 'airlines' && (
-              <button
-                onClick={() => navigate('/admin/add-airline')}
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition"
-                style={{ background: '#000021' }}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
-                </svg>
-                Add Airline
-              </button>
-            )}
-
-            <button onClick={() => loadData(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
-              <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
-              </svg>
-              Refresh
-            </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {tab !== 'overview' && tab !== 'add-airline' && tab !== 'add-individual' && !loading && (
         <div className="flex items-center gap-3 mb-4 px-1">
-         
           <p className="text-sm text-slate-500">
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
             <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
@@ -2154,7 +2107,7 @@ export default function AdminDashboard() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-40 gap-4">
           <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-          <p className="text-sm font-semibold text-slate-500">Loading records…</p>
+          <p className="text-sm font-semibold text-slate-500">Loading recordsâ€¦</p>
         </div>
       ) : tab === 'overview' ? (
         <OverviewPanel individuals={individuals} airlines={airlines} />

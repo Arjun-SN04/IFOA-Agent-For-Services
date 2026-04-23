@@ -57,7 +57,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-white">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:py-10 bg-white">
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -68,15 +68,15 @@ export default function SignupPage() {
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
           {/* Simple white header */}
-          <div className="px-8 py-7 text-center border-b border-slate-100">
+          <div className="px-6 sm:px-8 py-6 sm:py-7 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
+              <img src={logo} alt="IFOA USA" className="h-10 sm:h-11 w-auto mx-auto" />
             </Link>
             <p className="text-slate-500 text-sm mt-2 font-medium">Create Your Free Account</p>
           </div>
 
           {/* Form */}
-          <div className="px-8 py-7">
+          <div className="px-6 sm:px-8 py-6 sm:py-7">
             <div className="mb-5">
               <h2 className="text-xl font-black mb-1" style={{ color: '#0f172a' }}>Create account</h2>
               <p className="text-xs" style={{ color: '#64748b' }}>Join thousands of pilots using IFOA USA.</p>
@@ -95,7 +95,7 @@ export default function SignupPage() {
               {/* Role selector */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>Account Type</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                   {roles.map(r => (
                     <button key={r.value} type="button" onClick={() => setRole(r.value)}
                       className="rounded-xl border p-3 text-left transition-all"
@@ -132,7 +132,7 @@ export default function SignupPage() {
               )}
 
               {/* Name */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>First Name</label>
                   <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John"
@@ -156,7 +156,7 @@ export default function SignupPage() {
               </div>
 
               {/* Password + Confirm */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>Password</label>
                   <div className="relative">
@@ -191,7 +191,7 @@ export default function SignupPage() {
               </button>
             </form>
 
-            <div className="mt-5 flex items-center justify-between">
+            <div className="mt-5 flex items-center justify-between flex-wrap gap-2">
               <p className="text-sm" style={{ color: '#64748b' }}>
                 Have an account?{' '}
                 <Link to="/login" className="font-semibold transition-colors" style={{ color: '#0000ff' }}>Sign in</Link>
@@ -202,7 +202,7 @@ export default function SignupPage() {
         </div>
 
         {/* Trust badges */}
-        <div className="mt-5 flex flex-wrap gap-3 justify-center">
+        <div className="mt-5 flex flex-wrap gap-2 sm:gap-3 justify-center">
           {[
             { icon: <Lock className="w-3.5 h-3.5" />, text: 'Secure & Encrypted' },
             { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: 'FAA Compliant' },
