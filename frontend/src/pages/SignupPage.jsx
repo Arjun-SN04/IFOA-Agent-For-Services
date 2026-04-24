@@ -57,7 +57,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-white">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:py-10 bg-white">
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -70,7 +70,7 @@ export default function SignupPage() {
           {/* Simple white header */}
           <div className="px-5 sm:px-8 py-6 sm:py-7 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
-              <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
+              <img src={logo} alt="IFOA USA" className="h-10 sm:h-11 w-auto mx-auto" />
             </Link>
             <p className="text-slate-500 text-sm mt-2 font-medium">Create Your Free Account</p>
           </div>
@@ -95,7 +95,7 @@ export default function SignupPage() {
               {/* Role selector */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>Account Type</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                   {roles.map(r => (
                     <button key={r.value} type="button" onClick={() => setRole(r.value)}
                       className="rounded-xl border p-3 text-left transition-all"
@@ -202,7 +202,7 @@ export default function SignupPage() {
         </div>
 
         {/* Trust badges */}
-        <div className="mt-5 flex flex-wrap gap-3 justify-center">
+        <div className="mt-5 flex flex-wrap gap-2 sm:gap-3 justify-center">
           {[
             { icon: <Lock className="w-3.5 h-3.5" />, text: 'Secure & Encrypted' },
             { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: 'FAA Compliant' },

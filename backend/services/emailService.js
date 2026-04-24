@@ -1,0 +1,229 @@
+'use strict';
+
+const nodemailer = require('nodemailer');
+const path       = require('path');
+
+// ── Transporter ───────────────────────────────────────────────────────────────
+function createTransporter() {
+  return nodemailer.createTransport({
+    host:   process.env.SMTP_HOST || 'smtp.gmail.com',
+    port:   Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'IFOA_USA_white.png');
+const FROM      = process.env.MAIL_FROM || '"IFOA USA" <noreply@theifoa.com>';
+
+// ── Shared layout shell ───────────────────────────────────────────────────────
+function wrap(bodyHtml) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IFOA USA</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:4px;overflow:hidden;">
+
+        <!-- Logo header -->
+        <tr>
+          <td align="center" style="background:#0f1631;padding:24px 40px;">
+            <img src="cid:ifoaLogo" alt="IFOA USA" style="height:60px;display:block;margin:0 auto;" />
+          </td>
+        </tr>
+        <tr><td style="height:1px;background:#e0e0e0;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 40px 28px;color:#222222;font-size:14px;line-height:1.75;">
+            ${bodyHtml}
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr><td style="height:1px;background:#e0e0e0;font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr>
+          <td align="center" style="padding:16px;font-size:12px;color:#999999;">
+            Sent from <a href="https://theifoa.com" style="color:#999999;">theifoa.com</a>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ── Payment confirmation — Individual ─────────────────────────────────────────
+function buildIndividualConfirmationHtml(doc) {
+  const name     = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member';
+  const plan     = doc.subscriptionPlan || '1 Year Subscription Plan';
+  const email    = doc.email || '';
+  const cert     = doc.primaryCertificate  || doc.primaryAirmanCertificate || '';
+  const certNum  = doc.faaCertificateNumber || '';
+  const ftn      = doc.iacraTrackingNumber  || '';
+  const expiry   = doc.expirationDate
+    ? new Date(doc.expirationDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+    : 'N/A (Unlimited)';
+
+  return wrap(`
+    <p style="margin:0 0 16px;">Dear ${escHtml(name)},</p>
+    <p style="margin:0 0 16px;">Thank you for signing up with IFOA USA, you are set now!</p>
+    <p style="margin:0 0 16px;">We are proud to serve as your designated U.S. Agent for Service, helping you stay compliant with FAA regulations as an individual with a foreign address as per your selected subscription plan (<strong>${escHtml(plan)}</strong>), starting today.</p>
+    <p style="margin:0 0 16px;">The FAA's U.S. Agent for Service (USAS) portal (<a href="https://usas.faa.gov/signin" style="color:#0000cc;">https://usas.faa.gov/signin</a>) has been live since April 2, 2025, so don't forget to officially register IFOA USA as your Agent for Service.</p>
+    <p style="margin:0 0 6px;"><strong>Your Email:</strong> ${escHtml(email)}</p>
+    <p style="margin:0 0 6px;"><strong>Your FAA Certificate:</strong> ${escHtml(cert)}</p>
+    <p style="margin:0 0 6px;"><strong>Your IACRA FTN:</strong> ${escHtml(ftn)}</p>
+    ${certNum ? `<p style="margin:0 0 6px;"><strong>Your FAA Certificate Number:</strong> ${escHtml(certNum)}</p>` : ''}
+    <p style="margin:0 0 6px;"><strong>Subscription Expires:</strong> ${expiry}</p>
+    <br>
+    <p style="margin:0 0 16px;">As your designated U.S. Agent for Service, we are here to ensure you remain compliant with FAA regulations and never miss an important update or document.</p>
+    <p style="margin:0 0 16px;">At this point, no further action is required on your part.</p>
+    <p style="margin:0 0 16px;">Whenever we receive FAA correspondence on your behalf, we will forward it to you digitally and notify you immediately.</p>
+    <p style="margin:0 0 16px;">You are in good hands, our team will keep you informed of any important changes or new requirements throughout your subscription period.</p>
+    <p style="margin:0 0 16px;">If you have any questions, feel free to contact us anytime at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
+    <p style="margin:0 0 16px;">Thank you once again for choosing IFOA USA.</p>
+    <p style="margin:0 0 16px;">We are committed to making your FAA compliance easy and worry-free.</p>
+    <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
+  `);
+}
+
+// ── Payment confirmation — Airline ────────────────────────────────────────────
+function buildAirlineConfirmationHtml(doc) {
+  const contact  = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner';
+  const airline  = doc.airlineName || '';
+  const plan     = doc.subscriptionPlan || '1 Year Subscription Plan';
+  const email    = doc.email || doc.paymentEmail || '';
+  const holders  = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+  const expiry   = doc.expirationDate
+    ? new Date(doc.expirationDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+    : 'N/A (Unlimited)';
+
+  return wrap(`
+    <p style="margin:0 0 16px;">Dear ${escHtml(contact)},</p>
+    <p style="margin:0 0 16px;">Thank you for registering <strong>${escHtml(airline)}</strong> with IFOA USA — you are all set!</p>
+    <p style="margin:0 0 16px;">We are proud to serve as your company's designated U.S. Agent for Service, helping ${escHtml(airline)} stay compliant with FAA regulations as per your selected subscription plan (<strong>${escHtml(plan)}</strong>), starting today.</p>
+    <p style="margin:0 0 16px;">The FAA's U.S. Agent for Service (USAS) portal (<a href="https://usas.faa.gov/signin" style="color:#0000cc;">https://usas.faa.gov/signin</a>) has been live since April 2, 2025, so don't forget to officially register IFOA USA as your Agent for Service for each certificate holder.</p>
+    <p style="margin:0 0 6px;"><strong>Company:</strong> ${escHtml(airline)}</p>
+    <p style="margin:0 0 6px;"><strong>Contact Email:</strong> ${escHtml(email)}</p>
+    <p style="margin:0 0 6px;"><strong>Certificate Holders:</strong> ${holders}</p>
+    <p style="margin:0 0 6px;"><strong>Subscription Expires:</strong> ${expiry}</p>
+    <br>
+    <p style="margin:0 0 16px;">As your designated U.S. Agent for Service, we are here to ensure your team remains compliant with FAA regulations and never misses an important update or document.</p>
+    <p style="margin:0 0 16px;">At this point, no further action is required on your part.</p>
+    <p style="margin:0 0 16px;">Whenever we receive FAA correspondence on behalf of your certificate holders, we will forward it to you digitally and notify you immediately.</p>
+    <p style="margin:0 0 16px;">You are in good hands, our team will keep you informed of any important changes or new requirements throughout your subscription period.</p>
+    <p style="margin:0 0 16px;">If you have any questions, feel free to contact us anytime at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
+    <p style="margin:0 0 16px;">Thank you once again for choosing IFOA USA.</p>
+    <p style="margin:0 0 16px;">We are committed to making your FAA compliance easy and worry-free.</p>
+    <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
+  `);
+}
+
+// ── Expiry reminder — shared ──────────────────────────────────────────────────
+function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
+  const name     = isAirline
+    ? ([doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner')
+    : ([doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member');
+  const plan     = doc.subscriptionPlan || '';
+  const email    = doc.email || doc.paymentEmail || '';
+  const expiry   = doc.expirationDate
+    ? new Date(doc.expirationDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+    : '';
+  const entity   = isAirline ? (doc.airlineName || 'your company') : 'your';
+
+  return wrap(`
+    <p style="margin:0 0 16px;">Dear ${escHtml(name)},</p>
+    <p style="margin:0 0 16px;">This is a friendly reminder that <strong>${entity}</strong> subscription with IFOA USA is expiring in <strong>${daysLeft} days</strong> on <strong>${expiry}</strong>.</p>
+    <p style="margin:0 0 6px;"><strong>Current Plan:</strong> ${escHtml(plan)}</p>
+    <p style="margin:0 0 6px;"><strong>Email:</strong> ${escHtml(email)}</p>
+    <p style="margin:0 0 6px;"><strong>Expiry Date:</strong> ${expiry}</p>
+    <br>
+    <p style="margin:0 0 16px;">To continue receiving U.S. Agent for Service coverage without interruption, please renew your subscription before the expiry date. You can renew directly from your dashboard — no need to fill in the registration form again.</p>
+    <p style="margin:0 0 16px;">
+      <a href="${process.env.FRONTEND_URL || 'https://theifoa.com'}/dashboard/subscription"
+         style="display:inline-block;background:#cc0000;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:bold;font-size:14px;">
+        Renew Subscription
+      </a>
+    </p>
+    <p style="margin:0 0 16px;">If you have any questions, feel free to contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
+    <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
+  `);
+}
+
+// ── HTML escape ───────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Core send helper ──────────────────────────────────────────────────────────
+async function sendMail({ to, subject, html }) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn('[email] SMTP_USER/SMTP_PASS not set — skipping email to', to);
+    return;
+  }
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: FROM,
+    to,
+    subject,
+    html,
+    attachments: [{
+      filename:    'ifoa-logo.png',
+      path:        LOGO_PATH,
+      cid:         'ifoaLogo',
+    }],
+  });
+  console.log('[email] Sent to', to, '|', subject);
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+async function sendIndividualPaymentConfirmation(doc) {
+  const to = doc.paymentEmail || doc.email;
+  if (!to) return;
+  await sendMail({
+    to,
+    subject: 'Welcome to IFOA USA — Your Subscription is Active',
+    html: buildIndividualConfirmationHtml(doc),
+  });
+}
+
+async function sendAirlinePaymentConfirmation(doc) {
+  const to = doc.paymentEmail || doc.email;
+  if (!to) return;
+  await sendMail({
+    to,
+    subject: `Welcome to IFOA USA — ${doc.airlineName || 'Your Company'} Subscription is Active`,
+    html: buildAirlineConfirmationHtml(doc),
+  });
+}
+
+async function sendExpiryReminder(doc, isAirline, daysLeft) {
+  const to = doc.paymentEmail || doc.email;
+  if (!to) return;
+  const entity = isAirline ? (doc.airlineName || 'Your Company') : 'Your';
+  await sendMail({
+    to,
+    subject: `IFOA USA — ${entity} Subscription Expires in ${daysLeft} Days`,
+    html: buildExpiryReminderHtml(doc, isAirline, daysLeft),
+  });
+}
+
+module.exports = {
+  sendIndividualPaymentConfirmation,
+  sendAirlinePaymentConfirmation,
+  sendExpiryReminder,
+};

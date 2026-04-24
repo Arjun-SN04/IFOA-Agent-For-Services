@@ -12,10 +12,13 @@ import Home from './pages/Home'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 
+// Admin pages — eagerly loaded to avoid React 19 lazyInitializer crash
+// with ES module namespace objects on Vite 8 dev server
+import AdminDashboard   from './pages/AdminDashboard'
+import AdminProfilePage from './pages/dashboard/AdminProfilePage'
+
 // Lazy-loaded pages — only downloaded when first visited
 const RegisterPage        = lazy(() => import('./pages/RegisterPage'))
-const AdminDashboard      = lazy(() => import('./pages/AdminDashboard'))
-const AdminProfilePage    = lazy(() => import('./pages/dashboard/AdminProfilePage'))
 const SeedAdminSignupPage = lazy(() => import('./pages/SeedAdminSignupPage'))
 const SeedAdminLoginPage  = lazy(() => import('./pages/SeedAdminLoginPage'))
 const UserDashboard       = lazy(() => import('./pages/dashboard/UserDashboard'))
@@ -61,7 +64,7 @@ function DashboardShell() {
   return (
     <div className="min-h-screen bg-slate-50">
       <HeaderNav />
-      <main className="mx-auto w-full max-w-7xl px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-10">
+      <main className="mx-auto w-full max-w-7xl px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:mb-14 lg:px-10">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
           <Outlet />
         </Suspense>

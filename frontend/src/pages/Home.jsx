@@ -254,7 +254,7 @@ function FAQSection() {
   const toggle = (i) => setOpenIndex(prev => prev === i ? null : i)
   return (
     <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
-      <div className="max-w-6xl mx-auto grid md:grid-cols-[1fr_1.6fr] gap-14 items-start">
+      <div className="max-w-6xl mx-auto grid md:grid-cols-[1fr_1.6fr] gap-8 md:gap-14 items-start">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
           <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Support</p>
           <h2 className="text-4xl font-black mb-4" style={{ color: C.dark }}>Frequently Asked<br />Questions</h2>
@@ -340,9 +340,9 @@ export default function Home() {
 
       {/* ── COMPLIANCE ALERT ── */}
       <section className="py-6 px-6" style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white text-base font-black" style={{ background: C.dark }}>!</div>
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-white text-base font-black" style={{ background: C.dark }}>!</div>
             <div>
               <p className="font-black text-sm" style={{ color: C.dark }}>FAA Agent for Service Rule Now in Effect</p>
               <p className="text-sm mt-0.5" style={{ color: C.gray600 }}>
@@ -352,7 +352,7 @@ export default function Home() {
             </div>
           </div>
           <Link to="/register"
-            className="shrink-0 font-bold text-sm px-6 py-3 rounded-xl text-white transition-all duration-200 whitespace-nowrap"
+            className="shrink-0 self-start sm:self-auto font-bold text-sm px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl text-white transition-all duration-200 whitespace-nowrap"
             style={{ background: C.blue }}
             onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
             onMouseLeave={e => e.currentTarget.style.background = C.blue}>

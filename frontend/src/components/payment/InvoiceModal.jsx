@@ -118,6 +118,7 @@ export async function downloadInvoicePDF(inv) {
 // ── Invoice Preview Modal ─────────────────────────────────────────────────────
 export default function InvoiceModal({ invoice, onClose }) {
   const [downloading, setDownloading] = useState(false)
+  const [previewing,  setPreviewing]  = useState(false)
 
   if (!invoice) return null
 
@@ -146,6 +147,20 @@ export default function InvoiceModal({ invoice, onClose }) {
       alert('Could not generate PDF. Please try again.')
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handlePreview = async () => {
+    setPreviewing(true)
+    try {
+      const payload = buildPDFPayload(invoice)
+      const { url } = await generateIFOAInvoicePDF(payload)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('PDF preview failed:', err)
+      alert('Could not generate PDF preview. Please try again.')
+    } finally {
+      setPreviewing(false)
     }
   }
 
@@ -210,31 +225,56 @@ export default function InvoiceModal({ invoice, onClose }) {
         </div>
 
         {/* Actions */}
-        <div className="px-6 pb-6 flex gap-3">
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="flex-1 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-red-200 disabled:opacity-60"
-          >
-            {downloading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-                  <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-                </svg>
-                Generating PDF…
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                </svg>
-                Download PDF Invoice
-              </>
-            )}
-          </button>
+        <div className="px-6 pb-6 space-y-3">
+          <div className="flex gap-3">
+            <button
+              onClick={handlePreview}
+              disabled={previewing || downloading}
+              className="flex-1 inline-flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
+            >
+              {previewing ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+                  </svg>
+                  Opening…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  Preview PDF
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={downloading || previewing}
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-red-200 disabled:opacity-60"
+            >
+              {downloading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+                  </svg>
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  </svg>
+                  Download PDF
+                </>
+              )}
+            </button>
+          </div>
           <button onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
             Close
           </button>
         </div>

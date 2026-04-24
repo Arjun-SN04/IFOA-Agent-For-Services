@@ -5,7 +5,11 @@ const IndividualSchema = new mongoose.Schema({
   status: { type: String, enum: ['Active', 'Inactive', 'Pending'], default: 'Pending' },
   subscriptionPlan: {
     type: String,
-    enum: ['1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan'],
+    enum: [
+      '1 Year Subscription Plan',
+      'Multiple Years Subscription Plan',
+      'Unlimited Plan',
+    ],
     required: true,
   },
   price: { type: Number, default: 69.00 },
@@ -75,3 +79,4 @@ const IndividualSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model('Individual', IndividualSchema);
+

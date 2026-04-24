@@ -180,7 +180,6 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
             {data.subscriptionPlan === 'Unlimited Plan' && (
               <p className="text-sm font-bold text-slate-800">Agent for Service - Individual - Unlimited</p>
             )}
-
             <div className="mt-5 flex items-end justify-between border-t border-blue-100 pt-4">
               <div>
                 <span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Total Price</span>
@@ -189,11 +188,13 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
                 )}
               </div>
               <span className="text-3xl font-black text-slate-900">
-                ${data.subscriptionPlan === 'Multiple Years Subscription Plan'
-                  ? (55 * (data.multiYearCount || 2)).toFixed(2)
+                {data.subscriptionPlan === 'Multiple Years Subscription Plan'
+                  ? `$${(55 * (data.multiYearCount || 2)).toFixed(2)}`
                   : data.subscriptionPlan === '1 Year Subscription Plan'
-                  ? '69.00'
-                  : '299.00'}
+                  ? '$69.00'
+                  : data.subscriptionPlan === 'Unlimited Plan'
+                  ? '$299.00'
+                  : '$0.00'}
               </span>
             </div>
           </div>
@@ -370,3 +371,4 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
     </div>
   )
 }
+

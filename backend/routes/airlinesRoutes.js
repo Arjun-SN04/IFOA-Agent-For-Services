@@ -17,6 +17,7 @@ const {
   adminImportAirlinesFromExcel,
   markAirlinesInvoiceGenerated,
   requestAirlineInvoice,
+  renewAirlinesSubscription,
 } = require('../controller/airlinesController');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -45,6 +46,7 @@ router.patch('/:id/mark-paid',              authMiddleware, markAirlinesPaid);
 router.patch('/:id/request-invoice',        authMiddleware, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
 router.patch('/:id/add-holders',            authMiddleware, addHoldersToSubscription);
+router.post('/:id/renew',                   authMiddleware, renewAirlinesSubscription);
 
 // ── CRUD — all require authentication ────────────────────────────────────────
 // GET / is admin-only (list all)

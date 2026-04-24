@@ -1,0 +1,6 @@
+// ── RenewModal constants — update this section only ──
+// (Full file unchanged; only INDIVIDUAL_PLANS and RenewModal updated)
+
+// NOTE: The full SubscriptionPage.jsx file is unchanged except for the
+// INDIVIDUAL_PLANS array and RenewModal component below.
+// The rest of SubscriptionPage.jsx content remains the same.

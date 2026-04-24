@@ -4,7 +4,8 @@ const User = require('../models/User');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
 const { generateInvoiceNumber } = require('../services/invoiceNumberService');
-const { createOrUpdateInvoice } = require('../services/invoiceService');
+const { createOrUpdateInvoice }  = require('../services/invoiceService');
+const { sendAirlinePaymentConfirmation } = require('../services/emailService');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -510,11 +511,26 @@ exports.getAirlinesSubscriptionById = async (req, res) => {
 // ── Update ────────────────────────────────────────────────────────────────────
 exports.updateAirlinesSubscription = async (req, res) => {
   try {
-    const allowedFields = [
+    const isAdmin = req.user?.role === 'admin';
+
+    // Fields only admins may change — users editing their own profile cannot
+    // elevate payment status, change pricing, or manipulate invoice records.
+    const adminOnlyFields = new Set([
       'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
+      'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
+      'wirePaymentRequested', 'wirePaymentRequestedAt',
+    ]);
+
+    const allowedFields = [
+      // Admin-only (filtered below for non-admins)
+      'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
+      'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
+      'wirePaymentRequested', 'wirePaymentRequestedAt',
+      // User-editable profile fields
       'subscriptionPlan', 'subscriptionDate', 'expirationDate',
       'holderCount', 'holderCountValue', 'committedCount',
-      'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
       'airlineName',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
       'email', 'phone',
@@ -522,13 +538,11 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
       'certificateHolders',
       'paymentEmail',
-      'wirePaymentRequested', 'wirePaymentRequestedAt',
-      // Admin invoice fields
-      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
     ];
 
     const payload = {};
     allowedFields.forEach((field) => {
+      if (!isAdmin && adminOnlyFields.has(field)) return; // non-admins cannot set these
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         payload[field] = req.body[field];
       }
@@ -543,6 +557,23 @@ exports.updateAirlinesSubscription = async (req, res) => {
     }
     if (payload.paymentStatus === 'failed' || payload.isPaid === false) {
       payload.isFormCompleted = false;
+    }
+
+    // Pre-payment: auto-recompute totalAmount when holderCountValue/committedCount
+    // changes (non-admin). totalAmount is admin-only to block manipulation, but
+    // before payment we allow it to update so PaymentModal shows the correct figure.
+    if (!isAdmin && (payload.holderCountValue !== undefined || payload.committedCount !== undefined)) {
+      const existingForPrice = await Airlines.findById(req.params.id).select('isPaid pricePerCertificate pricePerCert holderCountValue committedCount');
+      if (existingForPrice && !existingForPrice.isPaid) {
+        const pricePerCert = Number(existingForPrice.pricePerCertificate || existingForPrice.pricePerCert || 0);
+        const newCount = Number(payload.holderCountValue ?? payload.committedCount ?? existingForPrice.holderCountValue ?? existingForPrice.committedCount ?? 0);
+        if (pricePerCert > 0 && newCount > 0) {
+          const newTotal = pricePerCert * newCount;
+          payload.totalAmount = newTotal;
+          payload.totalServiceFees = newTotal;
+          payload.committedCount = newCount;
+        }
+      }
     }
 
     // Auto-compute expirationDate when marking as paid via wire transfer
@@ -700,6 +731,11 @@ exports.markAirlinesPaid = async (req, res) => {
     }
 
     res.json({ success: true, data: updated });
+
+    // Send payment confirmation email (non-blocking)
+    sendAirlinePaymentConfirmation(updated).catch((e) =>
+      console.warn('[markAirlinesPaid] Email failed:', e.message)
+    );
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1179,6 +1215,59 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Renew Subscription ────────────────────────────────────────────────────────
+// Extends an existing subscription without re-filling the form.
+// Body may include { subscriptionPlan } to change plan on renewal.
+// Unlimited plan subscriptions cannot be renewed (they never expire).
+exports.renewAirlinesSubscription = async (req, res) => {
+  try {
+    const doc = await Airlines.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+
+    if (doc.subscriptionPlan === 'Unlimited Plan') {
+      return res.status(400).json({ success: false, message: 'Unlimited plan does not require renewal.' });
+    }
+
+    const newPlan = req.body.subscriptionPlan || doc.subscriptionPlan;
+    if (newPlan === 'Unlimited Plan') {
+      return res.status(400).json({ success: false, message: 'Switching to Unlimited plan requires a new subscription.' });
+    }
+
+    // Extend from current expiry (or now if already expired)
+    const base = doc.expirationDate && new Date(doc.expirationDate) > new Date()
+      ? new Date(doc.expirationDate)
+      : new Date();
+
+    const newExpiry = computeAirlinesExpirationDate(newPlan, base);
+    if (!newExpiry) {
+      return res.status(400).json({ success: false, message: 'Cannot compute expiry for the selected plan.' });
+    }
+
+    const newPrice = resolvePricePerCertificate({ subscriptionPlan: newPlan, holderCount: doc.holderCount });
+
+    const updated = await Airlines.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          subscriptionPlan: newPlan,
+          expirationDate: newExpiry,
+          pricePerCertificate: newPrice,
+          totalAmount: newPrice * (doc.committedCount || 1),
+          status: 'Active',
+          // Reset reminder flags so renewed users get reminders again
+          expiryReminder60SentAt: null,
+          expiryReminder30SentAt: null,
+        },
+      },
+      { new: true },
+    );
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 

@@ -117,7 +117,7 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
 }
 
 // ── Inner checkout form ───────────────────────────────────────────────────────
-function CheckoutForm({ clientSecret, registrationId, registrationModel, amount, subscriptionData, onSuccess, onCancel }) {
+function CheckoutForm({ clientSecret, registrationId, registrationModel, amount, subscriptionData, purpose, onSuccess, onCancel }) {
   const stripe   = useStripe()
   const elements = useElements()
   const [cardholderName, setCardholderName] = useState('')
@@ -167,6 +167,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
               paymentIntentId:   paymentIntent.id,
               registrationId,
               registrationModel,
+              purpose:           purpose || 'payment',
               userAgent:         navigator.userAgent,
             }),
           })
@@ -307,11 +308,11 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
 
       <div className="flex gap-3">
         <button type="button" onClick={onCancel} disabled={loading}
-          className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
           Cancel
         </button>
-        <button type="submit" disabled={!stripe || !elements || loading}
-          className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 py-3 text-sm font-bold text-white transition disabled:opacity-50 shadow-md shadow-red-200">
+        <button type="submit" disabled={loading || !stripe}
+          className="flex-[2] rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-3 text-sm transition disabled:opacity-60 flex items-center justify-center gap-2">
           {loading ? (
             <>
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -323,8 +324,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
           ) : (
             <>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
               Pay ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </>
@@ -332,64 +332,36 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         </button>
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-0.5">
-        <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <rect x="3" y="11" width="18" height="11" rx="2" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4" />
+      <p className="text-center text-[10px] text-slate-400 font-semibold flex items-center justify-center gap-1.5">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
-        Your payment is secured by 256-bit SSL encryption
-      </div>
+        Secured by Stripe · 256-bit SSL encryption
+      </p>
     </form>
   )
 }
 
-// ── Convert a server Payment document to the invoice shape InvoiceModal expects ─
-export function serverPaymentToInvoice(payment) {
-  const snap = payment.invoiceSnapshot || {}
-  return {
-    invoiceNumber:    payment.invoiceNumber,
-    paidAt:           payment.paidAt || payment.createdAt,
-    subscriptionPlan: snap.subscriptionPlan || '—',
-    expirationDate:   snap.expirationDate   || null,
-    amount:           payment.amountDollars,
-    currency:         payment.currency || 'USD',
-    paymentId:        payment.stripePaymentIntentId || '—',
-    name:             snap.name    || '—',
-    email:            snap.email   || '—',
-    phone:            snap.phone   || '—',
-    address:          snap.address || '—',
-    isAirline:        snap.isAirline || false,
-    airlineName:      snap.airlineName || null,
-    pricePerCert:     snap.pricePerCert  || null,
-    holderCount:      snap.holderCount   || null,
-    primaryCertificate:   snap.primaryCertificate   || null,
-    faaCertificateNumber: snap.faaCertificateNumber || null,
-    iacraTrackingNumber:  snap.iacraTrackingNumber  || null,
-    last4:     payment.last4     || null,
-    cardBrand: payment.cardBrand || null,
-    paymentMethodType: payment.paymentMethodType || null,
-    _paymentDocId: payment._id,
-  }
-}
-
-// ── Build invoice object from subscription data (local fallback) ──────────────
-export function buildInvoice(sub, registrationModel, amountCents, paymentIntent, paidAt) {
-  const isAirline = registrationModel === 'Airlines' || registrationModel === 'AirlinesSubscription'
-  const now = paidAt || new Date()
-
-  let expirationDate = sub?.expirationDate || null
-  if (!expirationDate && sub?.subscriptionPlan) {
+// ── Utility: build a local invoice object from subscription + paymentIntent ───
+export function buildInvoice(sub, registrationModel, amountCents, paymentIntent, now) {
+  const isAirline = registrationModel !== 'Individual'
+  const expirationDate = (() => {
+    if (!sub?.subscriptionPlan) return null
+    const d = new Date(now)
     if (sub.subscriptionPlan === '1 Year Subscription Plan') {
-      const d = new Date(now); d.setFullYear(d.getFullYear() + 1)
-      expirationDate = d
-    } else if (sub.subscriptionPlan === 'Multiple Years Subscription Plan') {
-      const d = new Date(now); d.setFullYear(d.getFullYear() + 3)
-      expirationDate = d
+      d.setFullYear(d.getFullYear() + 1)
+      return d.toISOString()
     }
-  }
+    if (sub.subscriptionPlan === 'Multiple Years Subscription Plan') {
+      const years = sub.multiYearCount || 3
+      d.setFullYear(d.getFullYear() + years)
+      return d.toISOString()
+    }
+    return null // Unlimited
+  })()
 
   return {
-    invoiceNumber: sub?.invoiceNumber || `INV-${Date.now()}`,
+    invoiceNumber:    sub?.invoiceNumber || paymentIntent?.id?.slice(-8).toUpperCase() || '—',
     paidAt:        now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
     subscriptionPlan: sub?.subscriptionPlan || '—',
     expirationDate: expirationDate ? new Date(expirationDate).toISOString() : null,
@@ -413,8 +385,38 @@ export function buildInvoice(sub, registrationModel, amountCents, paymentIntent,
   }
 }
 
+// ── Utility: convert a server Payment document to invoice shape ───────────────
+export function serverPaymentToInvoice(paymentDoc) {
+  if (!paymentDoc) return null
+  const snap = paymentDoc.invoiceSnapshot || {}
+  const draft = paymentDoc.invoiceDraft || null
+  return {
+    invoiceNumber:    paymentDoc.invoiceNumber || snap.invoiceNumber || '—',
+    paidAt:           paymentDoc.paidAt || snap.subscriptionDate,
+    subscriptionPlan: snap.subscriptionPlan || '—',
+    expirationDate:   snap.expirationDate || null,
+    amount:           paymentDoc.amountDollars ?? snap.totalPaid ?? 0,
+    currency:         paymentDoc.currency || 'USD',
+    paymentId:        paymentDoc.stripePaymentIntentId || paymentDoc._id || '—',
+    name:             snap.name || '—',
+    email:            snap.email || '—',
+    phone:            snap.phone || '',
+    address:          snap.address || '',
+    isAirline:        snap.isAirline || false,
+    airlineName:      snap.airlineName || '',
+    pricePerCert:     snap.pricePerCert || null,
+    holderCount:      snap.holderCount || null,
+    primaryCertificate:   snap.primaryCertificate || null,
+    faaCertificateNumber: snap.faaCertificateNumber || null,
+    iacraTrackingNumber:  snap.iacraTrackingNumber  || null,
+    invoiceDraft: draft,
+    _paymentDocId: paymentDoc._id,
+  }
+}
+
 // ── Wrapper: fetches clientSecret then mounts Elements ────────────────────────
-export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, onClose, onSuccess }) {
+// newSubscriptionPlan: optional — pass when user changes plan at renewal time
+export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan }) {
   const [clientSecret, setClientSecret] = useState(null)
   const [fetchError,   setFetchError]   = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -422,13 +424,21 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   useEffect(() => {
     const create = async () => {
       try {
+        const body = {
+          registrationId,
+          registrationModel,
+          purpose: purpose || 'payment',
+        }
+        // Forward plan-change request so backend can compute the correct amount
+        if (newSubscriptionPlan) body.newSubscriptionPlan = newSubscriptionPlan
+
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
           method:  'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization:  `Bearer ${localStorage.getItem('ifoa_token') || ''}`,
           },
-          body: JSON.stringify({ registrationId, registrationModel }),
+          body: JSON.stringify(body),
         })
         const json = await res.json()
         if (!json.success) throw new Error(json.message || 'Could not create payment intent')
@@ -440,7 +450,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
       }
     }
     create()
-  }, [registrationId, registrationModel])
+  }, [registrationId, registrationModel, newSubscriptionPlan])
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -498,6 +508,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
                 registrationModel={registrationModel}
                 amount={amount}
                 subscriptionData={subscriptionData}
+                purpose={purpose || 'payment'}
                 onSuccess={onSuccess}
                 onCancel={onClose}
               />

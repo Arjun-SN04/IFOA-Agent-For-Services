@@ -19,14 +19,14 @@ function StatCard({ label, value, icon, accent = 'slate', sub }) {
   }
   const c = configs[accent] || configs.slate
   return (
-    <div className={`rounded-2xl border p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow duration-200 ${c.wrap}`}>
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+    <div className={`rounded-2xl border p-4 sm:p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow duration-200 ${c.wrap}`}>
+      <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${c.icon}`}>
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{label}</p>
-        <p className={`text-lg font-black ${c.badge}`}>{value}</p>
-        {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
+        <p className={`text-base sm:text-lg font-black truncate ${c.badge}`}>{value}</p>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</p>}
       </div>
     </div>
   )
@@ -63,8 +63,6 @@ export default function UserDashboard() {
     const isAirline = user.role === 'airline'
     const cacheKey = `sub_${user.id || user.email}`
 
-    // Invalidate on mount so the dashboard always shows the latest subscription
-    // state when the user navigates here from another page.
     invalidate(cacheKey)
 
     const load = async () => {
@@ -73,16 +71,13 @@ export default function UserDashboard() {
           const endpointById    = isAirline ? '/airlines'          : '/individuals'
           const endpointByEmail = isAirline ? '/airlines/by-email' : '/individuals/by-email'
 
-          // 1. Email lookup first — always canonical and avoids stale ID 404s.
           if (user.email) {
             try {
               const r = await API.get(`${endpointByEmail}?email=${encodeURIComponent(user.email)}`, { headers })
               if (r.data?.data) return r.data.data
-            } catch { /* fall through to ID lookup */ }
+            } catch { /* fall through */ }
           }
 
-          // 2. Fall back to registrationId only when email lookup returned nothing.
-          //    The backend now returns 200+null for missing IDs, so no 404 noise.
           if (user.registrationId) {
             try {
               const r = await API.get(`${endpointById}/${user.registrationId}`, { headers })
@@ -112,7 +107,7 @@ export default function UserDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
 
         {/* ── Welcome banner ── */}
         <div
@@ -127,13 +122,13 @@ export default function UserDashboard() {
             </div>
             {!subLoading && !sub && (
               <Link
-                to={user?.role === 'airline' ? '/register' : '/register'}
-                className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition-all"
+                to="/register"
+                className="inline-flex items-center gap-2 rounded-xl px-4 sm:px-5 py-2.5 text-sm font-bold text-white transition-all"
                 style={{ background: '#0000ff' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
                 onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}
               >
-                {user?.role === 'airline' ? <><Plane className="w-4 h-4" /> Airlines Registration</> : 'Complete Registration'}
+                {isAirline ? <><Plane className="w-4 h-4" /> Airlines Registration</> : 'Complete Registration'}
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
@@ -143,9 +138,7 @@ export default function UserDashboard() {
         </div>
 
         {/* ── Stat cards ── */}
-        <div
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-        >
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
           <StatCard
             label="Subscription Status"
             value={subStatus.label}
@@ -163,22 +156,18 @@ export default function UserDashboard() {
           <StatCard
             label="Plan"
             value={sub
-              ? sub.subscriptionPlan?.includes('Unlimited')
-                ? 'Unlimited'
-                : sub.subscriptionPlan?.includes('Multiple')
-                ? `Multi-Year (${sub.multiYearCount || 3}yr)`
+              ? sub.subscriptionPlan?.includes('Unlimited') ? 'Unlimited'
+                : sub.subscriptionPlan?.includes('Multiple') ? `Multi-Year`
                 : '1 Year'
               : 'None'}
             accent={sub ? 'sky' : 'blue'}
-            sub={sub ? `${isAirline ? getAirlineTotal(sub).toFixed(2) : (sub.price ?? sub.totalAmount ?? 0)}` : 'No plan selected'}
+            sub={sub ? `$${isAirline ? getAirlineTotal(sub).toFixed(2) : (sub.price ?? sub.totalAmount ?? 0)}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
         </div>
 
         {/* ── Info grid ── */}
-        <div
-          className="grid grid-cols-1 sm:grid-cols-2 gap-5"
-        >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
           {/* Account info */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
@@ -196,9 +185,9 @@ export default function UserDashboard() {
                 { label: 'Email', value: user?.email },
                 { label: 'Role', value: user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1) },
               ].map(r => (
-                <div key={r.label} className="flex justify-between items-center text-sm py-1 border-b border-slate-50 last:border-0">
-                  <span className="text-slate-400 font-medium">{r.label}</span>
-                  <span className="text-slate-800 font-semibold truncate max-w-[200px]">{r.value}</span>
+                <div key={r.label} className="flex justify-between items-center text-sm py-1 border-b border-slate-50 last:border-0 gap-2">
+                  <span className="text-slate-400 font-medium flex-shrink-0">{r.label}</span>
+                  <span className="text-slate-800 font-semibold truncate text-right">{r.value}</span>
                 </div>
               ))}
             </div>
@@ -213,35 +202,21 @@ export default function UserDashboard() {
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Quick Actions</p>
             </div>
             <div className="px-2 py-2 space-y-0.5">
-              <ActionRow
-                to="/dashboard/profile"
-                label="Edit Profile"
-                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>}
-              />
-              <ActionRow
-                to="/dashboard/subscription"
-                label="View Subscription"
-                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>}
-              />
-              <ActionRow
-                to="/dashboard/documents"
-                label="My Documents"
-                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" /></svg>}
-              />
-              <ActionRow
-                href="mailto:agent@theifoa.com"
-                label="Contact Support"
-                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>}
-              />
+              <ActionRow to="/dashboard/profile" label="Edit Profile"
+                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="4" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>} />
+              <ActionRow to="/dashboard/subscription" label="View Subscription"
+                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>} />
+              <ActionRow to="/dashboard/documents" label="My Documents"
+                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" /></svg>} />
+              <ActionRow href="mailto:agent@theifoa.com" label="Contact Support"
+                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>} />
             </div>
           </div>
         </div>
 
         {/* ── No subscription notice ── */}
         {!subLoading && !sub && (
-          <div
-            className="rounded-2xl border border-blue-100 bg-blue-50 p-5 flex items-start gap-4"
-          >
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-5 flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
@@ -258,13 +233,10 @@ export default function UserDashboard() {
 
         {/* ── Subscription summary ── */}
         {!subLoading && sub && (
-          <div
-            className={`rounded-2xl border p-5 flex items-start gap-4 ${
-              sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                ? 'border-emerald-100 bg-emerald-50'
-                : 'border-blue-100 bg-blue-50'
-            }`}
-          >
+          <div className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4 ${
+            sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+              ? 'border-emerald-100 bg-emerald-50' : 'border-blue-100 bg-blue-50'
+          }`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
               sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                 ? 'bg-emerald-100' : 'bg-blue-100'

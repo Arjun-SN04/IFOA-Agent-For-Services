@@ -4,6 +4,7 @@ const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
 const { generateInvoiceNumber } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
+const { sendIndividualPaymentConfirmation } = require('../services/emailService');
 
 function toBool(v, defaultValue = false) {
   if (v === undefined || v === null || v === '') return defaultValue;
@@ -385,10 +386,23 @@ exports.getIndividualById = async (req, res) => {
 // ── Update ────────────────────────────────────────────────────────────────────
 exports.updateIndividual = async (req, res) => {
   try {
-    const allowedFields = [
+    const isAdmin = req.user?.role === 'admin';
+
+    const adminOnlyFields = new Set([
       'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
-      'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',
       'price', 'totalServiceFees',
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
+      'wirePaymentRequested', 'wirePaymentRequestedAt',
+    ]);
+
+    const allowedFields = [
+      // Admin-only (filtered below for non-admins)
+      'status', 'paymentStatus', 'isPaid', 'isFormCompleted',
+      'price', 'totalServiceFees',
+      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
+      'wirePaymentRequested', 'wirePaymentRequestedAt',
+      // User-editable fields
+      'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
       'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
       'phone', 'email',
@@ -397,12 +411,11 @@ exports.updateIndividual = async (req, res) => {
       'faaCertificateNumber', 'iacraTrackingNumber',
       'hasSecondaryCertificate', 'secondaryCertificate',
       'secondaryFaaCertificateNumber', 'secondaryIacraTrackingNumber',
-      // Admin invoice fields
-      'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
     ];
 
     const payload = {};
     allowedFields.forEach((field) => {
+      if (!isAdmin && adminOnlyFields.has(field)) return;
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         payload[field] = req.body[field];
       }
@@ -416,6 +429,18 @@ exports.updateIndividual = async (req, res) => {
     }
     if (payload.paymentStatus === 'failed' || payload.isPaid === false) {
       payload.isFormCompleted = false;
+    }
+
+    // Pre-payment: auto-recompute price when plan/multiYearCount changes (non-admin).
+    // Price is admin-only to prevent arbitrary manipulation, but before payment we
+    // allow it to update automatically so the PaymentModal shows the correct amount.
+    if (!isAdmin && (payload.subscriptionPlan !== undefined || payload.multiYearCount !== undefined)) {
+      const existing = await Individual.findById(req.params.id).select('isPaid subscriptionPlan multiYearCount');
+      if (existing && !existing.isPaid) {
+        const plan = payload.subscriptionPlan || existing.subscriptionPlan;
+        const years = payload.multiYearCount || existing.multiYearCount;
+        payload.price = normalizePlanPrice(plan, years, null);
+      }
     }
 
     const individual = await Individual.findByIdAndUpdate(
@@ -535,6 +560,11 @@ exports.markIndividualPaid = async (req, res) => {
     }
 
     res.json({ success: true, data: updated });
+
+    // Send payment confirmation email (non-blocking)
+    sendIndividualPaymentConfirmation(updated).catch((e) =>
+      console.warn('[markIndividualPaid] Email failed:', e.message)
+    );
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -635,6 +665,61 @@ exports.exportToExcel = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=Export_Individuals_${Date.now()}.xlsx`);
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Renew Subscription ────────────────────────────────────────────────────────
+// Extends an existing subscription without re-filling the form.
+// Body may include { subscriptionPlan, multiYearCount } to change plan on renewal.
+// Unlimited plan subscriptions cannot be renewed (they never expire).
+exports.renewIndividual = async (req, res) => {
+  try {
+    const doc = await Individual.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+
+    if (doc.subscriptionPlan === 'Unlimited Plan') {
+      return res.status(400).json({ success: false, message: 'Unlimited plan does not require renewal.' });
+    }
+
+    const newPlan = req.body.subscriptionPlan || doc.subscriptionPlan;
+    if (newPlan === 'Unlimited Plan') {
+      return res.status(400).json({ success: false, message: 'Switching to Unlimited plan requires a new subscription.' });
+    }
+
+    const newMultiYearCount = req.body.multiYearCount || doc.multiYearCount || 3;
+
+    // Extend from current expiry (or now if already expired)
+    const base = doc.expirationDate && new Date(doc.expirationDate) > new Date()
+      ? new Date(doc.expirationDate)
+      : new Date();
+
+    const newExpiry = computeExpiration(newPlan, base, newMultiYearCount);
+    if (!newExpiry) {
+      return res.status(400).json({ success: false, message: 'Cannot compute expiry for the selected plan.' });
+    }
+
+    const newPrice = normalizePlanPrice(newPlan, newMultiYearCount, null);
+
+    const updated = await Individual.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          subscriptionPlan: newPlan,
+          multiYearCount: newMultiYearCount,
+          expirationDate: newExpiry,
+          price: newPrice,
+          status: 'Active',
+          // Reset reminder flags so renewed users get reminders again
+          expiryReminder60SentAt: null,
+          expiryReminder30SentAt: null,
+        },
+      },
+      { new: true },
+    );
+
+    res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -68,6 +68,8 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/agent-servi
 })
   .then(() => {
     console.log('MongoDB connected');
+    const { startSubscriptionReminderCron } = require('./cron/subscriptionReminder');
+    startSubscriptionReminderCron();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
   })

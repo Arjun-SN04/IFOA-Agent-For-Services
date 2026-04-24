@@ -14,6 +14,7 @@ const {
   markInvoiceGenerated,
   adminCreateIndividualForm,
   adminImportIndividualsFromExcel,
+  renewIndividual,
 } = require('../controller/individualController');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -39,6 +40,7 @@ router.get('/by-email',     authMiddleware, getIndividualByEmail);
 // ── Record-level actions ──────────────────────────────────────────────────────
 router.patch('/:id/mark-paid',              authMiddleware, markIndividualPaid);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
+router.post('/:id/renew',                   authMiddleware, renewIndividual);
 
 // ── CRUD — all require authentication ────────────────────────────────────────
 // GET / is admin-only (list all)

@@ -23,9 +23,9 @@ export default function Footer() {
           <div className="absolute inset-0" style={{ background: '#ffffff' }} />
         </div>
 
-        <div className="relative mx-auto grid max-w-6xl items-center gap-14 md:grid-cols-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 md:gap-14 md:grid-cols-2">
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <h2 className="mb-8 text-3xl font-black leading-tight sm:text-4xl" style={{ color: C.dark }}>
+            <h2 className="mb-6 sm:mb-8 text-2xl font-black leading-tight sm:text-4xl" style={{ color: C.dark }}>
               Are You Ready to Appoint<br />Your Agent for Service?
             </h2>
             <div className="inline-flex items-center rounded-xl px-4 py-2" style={{ background: 'rgba(255,255,255,0.9)' }}>
@@ -91,7 +91,7 @@ export default function Footer() {
       {/* ── FOOTER BAR ── */}
       <footer style={{ background: '#000015', color: '#6b7280' }} className="py-12 px-6">
         <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-10 mb-10">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-10 mb-10">
             {/* Brand */}
             <div>
               <img src={ifoaLogo} alt="IFOA USA" className="h-14 w-auto object-contain mb-4" />

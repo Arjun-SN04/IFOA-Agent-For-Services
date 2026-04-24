@@ -6,6 +6,7 @@
  *   POST /api/payments/confirm                — called by frontend after Stripe succeeds;
  *                                               creates Payment record, marks subscription active
  *   POST /api/payments/webhook                — Stripe webhook (backup/authoritative confirm)
+ *                                               Endpoint: https://ifoa-agent-for-services.onrender.com/api/payments/webhook
  *   PATCH /api/payments/:id/save-invoice-draft — admin saves invoice edits back to Payment doc
  *   GET  /api/payments/by-registration/:id    — fetch all Payment docs for a subscription
  *   GET  /api/payments/:id                    — fetch single Payment doc
@@ -32,6 +33,7 @@ const Airlines             = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
 const { generateInvoiceNumber } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
+const { sendIndividualPaymentConfirmation, sendAirlinePaymentConfirmation } = require('../services/emailService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,54 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
   };
 }
 
+/**
+ * applyRenewalToRegistration
+ *
+ * Called after a renewal payment succeeds. Extends the expiry date from the
+ * current expiry (or today if already expired). If the user changed plan during
+ * renewal (newSubscriptionPlan in metadata), the plan is updated on the
+ * registration document and the new plan's expiry logic is applied.
+ */
+async function applyRenewalToRegistration(registrationId, registrationModel, paymentDoc) {
+  const { doc, Model } = await findRegistration(registrationId, registrationModel);
+  if (!doc || !Model) return null;
+
+  // Allow plan change at renewal time (set via PaymentIntent metadata)
+  const newPlan = paymentDoc.newSubscriptionPlan || null;
+  const activePlan = newPlan || doc.subscriptionPlan;
+
+  const base = doc.expirationDate && new Date(doc.expirationDate) > new Date()
+    ? new Date(doc.expirationDate)
+    : new Date();
+  const newExpiry = computeExpiry(activePlan, base, doc.multiYearCount);
+
+  const update = {
+    invoiceNumber:          paymentDoc.invoiceNumber,
+    stripePaymentIntentId:  paymentDoc.stripePaymentIntentId,
+    expiryReminder60SentAt: null,
+    expiryReminder30SentAt: null,
+  };
+  if (newExpiry) update.expirationDate = newExpiry;
+  // Persist plan change if user switched during renewal
+  if (newPlan) {
+    update.subscriptionPlan = newPlan;
+    // Update price on Individual record to match the new plan
+    if (registrationModel === 'Individual') {
+      const PLAN_PRICES = {
+        '1 Year Subscription Plan': 69,
+        'Unlimited Plan': 299,
+      };
+      if (PLAN_PRICES[newPlan] !== undefined) update.price = PLAN_PRICES[newPlan];
+    }
+  }
+  if (registrationModel !== 'Individual') {
+    update.wirePaymentRequested    = false;
+    update.wirePaymentRequestedAt  = null;
+  }
+
+  return Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
+}
+
 async function applyPaymentToRegistration(registrationId, registrationModel, paymentDoc) {
   const { doc, Model } = await findRegistration(registrationId, registrationModel);
   if (!doc || !Model) return null;
@@ -158,7 +208,12 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
 // ─── POST /api/payments/create-intent ────────────────────────────────────────
 exports.createPaymentIntent = async (req, res) => {
   try {
-    const { registrationId, registrationModel } = req.body;
+    const {
+      registrationId,
+      registrationModel,
+      purpose = 'payment',
+      newSubscriptionPlan,   // optional: passed when user changes plan at renewal
+    } = req.body;
 
     if (!registrationId || !registrationModel)
       return res.status(400).json({
@@ -174,15 +229,18 @@ exports.createPaymentIntent = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
-    if (doc.isPaid || doc.paymentStatus === 'paid')
+    // Renewals are allowed even when already paid; block only for first-time payments
+    if (purpose !== 'renewal' && (doc.isPaid || doc.paymentStatus === 'paid'))
       return res.status(400).json({
         success: false,
         message: 'This subscription is already paid.',
       });
 
-    // For airlines always compute from pricePerCert × committedCount for ALL plans
+    // ── Determine amount ──────────────────────────────────────────────────────
     let amountDollars;
+
     if (registrationModel !== 'Individual') {
+      // Airlines: always compute from pricePerCert × committedCount for ALL plans
       const ppc   = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
       const count = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
       if (ppc > 0 && count > 0) {
@@ -191,22 +249,43 @@ exports.createPaymentIntent = async (req, res) => {
         amountDollars = Number(doc.totalAmount || doc.totalServiceFees || 0);
       }
     } else {
-      amountDollars = Number(doc.price || doc.totalAmount || 0);
+      // Individual: check if user is switching to a different plan at renewal
+      const activePlan = newSubscriptionPlan || doc.subscriptionPlan;
+      const INDIVIDUAL_PLAN_PRICES = {
+        '1 Year Subscription Plan':        69,
+        'Multiple Years Subscription Plan': 55 * (doc.multiYearCount || 3),
+        'Unlimited Plan':                  299,
+      };
+      if (INDIVIDUAL_PLAN_PRICES[activePlan] !== undefined) {
+        amountDollars = INDIVIDUAL_PLAN_PRICES[activePlan];
+      } else {
+        amountDollars = Number(doc.price || doc.totalAmount || 0);
+      }
     }
 
     const amountCents = Math.round(amountDollars * 100);
+    if (amountCents === 100)
+      return res.status(400).json({
+        success: false,
+        message: 'This payment option is no longer available.',
+      });
     if (amountCents <= 0)
       return res.status(400).json({ success: false, message: 'Invalid payment amount.' });
+
+    const metadata = {
+      registrationId:    String(registrationId),
+      registrationModel,
+      purpose,
+    };
+    // Store new plan in metadata so webhook/confirm can apply plan change
+    if (newSubscriptionPlan) metadata.newSubscriptionPlan = newSubscriptionPlan;
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount:   amountCents,
       currency: 'usd',
       payment_method_types: ['card'],
       description: `Subscription — ${registrationModel} ${registrationId}`,
-      metadata: {
-        registrationId:    String(registrationId),
-        registrationModel,
-      },
+      metadata,
     });
 
     res.json({
@@ -319,6 +398,8 @@ exports.confirmPayment = async (req, res) => {
       ipAddress:        ipAddress || req.ip || '',
       userAgent:        userAgent || req.headers['user-agent'] || '',
       confirmedVia:     'frontend',
+      // Carry plan-change metadata through so applyRenewalToRegistration can use it
+      newSubscriptionPlan: pi.metadata?.newSubscriptionPlan || null,
     };
 
     // Use findOneAndUpdate with upsert to prevent duplicate Payment docs under
@@ -349,7 +430,10 @@ exports.confirmPayment = async (req, res) => {
       paymentDoc = await paymentDoc.save();
     }
 
-    const updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+    const isPurposeRenewal = (pi.metadata?.purpose || 'payment') === 'renewal';
+    const updatedReg = isPurposeRenewal
+      ? await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc)
+      : await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
 
     // Create / update the canonical Invoice document (single source of truth).
     // This is what both the admin dashboard and the user SubscriptionPage read.
@@ -376,6 +460,16 @@ exports.confirmPayment = async (req, res) => {
       payment:      paymentDoc,
       registration: updatedReg,
     });
+
+    // Send payment confirmation email (non-blocking)
+    if (updatedReg) {
+      const sendFn = registrationModel === 'Individual'
+        ? sendIndividualPaymentConfirmation
+        : sendAirlinePaymentConfirmation;
+      sendFn(updatedReg).catch((e) =>
+        console.warn('[confirmPayment] Email failed:', e.message)
+      );
+    }
   } catch (err) {
     console.error('[confirmPayment]', err.message);
     res.status(500).json({ success: false, message: err.message });
@@ -464,6 +558,7 @@ exports.saveInvoiceDraft = async (req, res) => {
 
 
 // ─── POST /api/payments/webhook ───────────────────────────────────────────────
+// Endpoint: https://ifoa-agent-for-services.onrender.com/api/payments/webhook
 exports.stripeWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -481,7 +576,7 @@ exports.stripeWebhook = async (req, res) => {
 
   if (event.type === 'payment_intent.succeeded') {
     const pi = event.data.object;
-    const { registrationId, registrationModel } = pi.metadata || {};
+    const { registrationId, registrationModel, newSubscriptionPlan } = pi.metadata || {};
 
     if (!registrationId || !registrationModel) {
       console.warn('[stripeWebhook] Missing metadata on PaymentIntent:', pi.id);
@@ -548,6 +643,7 @@ exports.stripeWebhook = async (req, res) => {
         invoiceDraft:   null,
         description:    pi.description || '',
         confirmedVia:   'webhook',
+        newSubscriptionPlan: newSubscriptionPlan || null,
       };
 
       let paymentDoc;
@@ -558,7 +654,10 @@ exports.stripeWebhook = async (req, res) => {
         paymentDoc = await Payment.create(paymentData);
       }
 
-      await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+      const isPurposeRenewal = (pi.metadata?.purpose || 'payment') === 'renewal';
+      const updatedRegWebhook = isPurposeRenewal
+        ? await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc)
+        : await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
 
       // Create / update canonical Invoice document so admin and user see same invoice.
       try {
@@ -574,6 +673,16 @@ exports.stripeWebhook = async (req, res) => {
         });
       } catch (invoiceErr) {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
+      }
+
+      // Send payment confirmation email (non-blocking)
+      if (updatedRegWebhook) {
+        const sendFn = registrationModel === 'Individual'
+          ? sendIndividualPaymentConfirmation
+          : sendAirlinePaymentConfirmation;
+        sendFn(updatedRegWebhook).catch((e) =>
+          console.warn('[stripeWebhook] Email failed:', e.message)
+        );
       }
 
       console.log(`[stripeWebhook] Payment ${paymentDoc._id} recorded for ${registrationModel} ${registrationId}`);
@@ -703,3 +812,5 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+

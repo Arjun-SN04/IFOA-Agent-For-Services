@@ -50,7 +50,7 @@ const PaymentSchema = new mongoose.Schema({
   },
 
   // ── Invoice snapshot (immutable — captured at payment time) ───────────────
-  invoiceNumber:    { type: String, required: true, index: true },
+  invoiceNumber:    { type: String, required: true, unique: true, index: true },
   invoiceSnapshot: {
     name:             { type: String, default: '' },
     email:            { type: String, default: '' },

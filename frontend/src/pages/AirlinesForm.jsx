@@ -301,7 +301,10 @@ export default function AirlinesForm() {
           } else {
             await addSubscription(newId)
           }
-        } catch (_) {}
+        } catch (error) {
+          console.log(error);
+          
+        }
       }
       if (opts.returnId) return newId
       setSubmitted(true)
