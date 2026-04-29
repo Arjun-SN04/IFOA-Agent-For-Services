@@ -75,7 +75,8 @@ function computeExpiration(plan, subscriptionDate, multiYearCount) {
     return d;
   }
   if (plan === 'Multiple Years Subscription Plan') {
-    const years = Number(multiYearCount) > 1 ? Number(multiYearCount) : 3;
+    // Require an explicit year count; 2 is the minimum valid multi-year plan
+    const years = Number(multiYearCount) >= 2 ? Number(multiYearCount) : 2;
     d.setFullYear(d.getFullYear() + years);
     return d;
   }
@@ -431,6 +432,29 @@ exports.updateIndividual = async (req, res) => {
       payload.isFormCompleted = false;
     }
 
+    // Auto-compute subscriptionDate + expirationDate when admin marks as paid
+    // (Stripe sets these via applyPaymentToRegistration, but wire/manual marking does not).
+    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !payload.expirationDate) {
+      const existingForExpiry = await Individual.findById(req.params.id)
+        .select('subscriptionPlan multiYearCount subscriptionDate expirationDate price');
+      if (existingForExpiry && !existingForExpiry.expirationDate) {
+        const plan = payload.subscriptionPlan || existingForExpiry.subscriptionPlan;
+        // Derive year count: prefer explicit field, then derive from price ($55/yr)
+        let years = Number(payload.multiYearCount || existingForExpiry.multiYearCount || 0);
+        if (!years && plan === 'Multiple Years Subscription Plan') {
+          const recordPrice = Number(existingForExpiry.price || 0);
+          if (recordPrice > 0) years = Math.max(2, Math.round(recordPrice / 55));
+        }
+        // Seed subscriptionDate to now if the record never had one
+        if (!existingForExpiry.subscriptionDate && !payload.subscriptionDate) {
+          payload.subscriptionDate = new Date();
+        }
+        const fromDate = payload.subscriptionDate || existingForExpiry.subscriptionDate || new Date();
+        const computed = computeExpiration(plan, fromDate, years || null);
+        if (computed) payload.expirationDate = computed;
+      }
+    }
+
     // Pre-payment: auto-recompute price when plan/multiYearCount changes (non-admin).
     // Price is admin-only to prevent arbitrary manipulation, but before payment we
     // allow it to update automatically so the PaymentModal shows the correct amount.
@@ -443,6 +467,14 @@ exports.updateIndividual = async (req, res) => {
       }
     }
 
+    // Detect unpaid → paid transition so we know whether to send the confirmation email.
+    // Only check when admin is explicitly marking as paid (avoid the DB call otherwise).
+    let wasAlreadyPaid = false;
+    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid')) {
+      const prev = await Individual.findById(req.params.id).select('isPaid paymentStatus');
+      wasAlreadyPaid = !!(prev?.isPaid || prev?.paymentStatus === 'paid');
+    }
+
     const individual = await Individual.findByIdAndUpdate(
       req.params.id,
       payload,
@@ -451,6 +483,13 @@ exports.updateIndividual = async (req, res) => {
     if (!individual)
       return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: individual });
+
+    // Send confirmation email when admin activates a subscription for the first time.
+    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaid) {
+      sendIndividualPaymentConfirmation(individual).catch((e) =>
+        console.warn('[updateIndividual] Confirmation email failed:', e.message)
+      );
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }

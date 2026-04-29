@@ -461,12 +461,16 @@ exports.confirmPayment = async (req, res) => {
       registration: updatedReg,
     });
 
-    // Send payment confirmation email (non-blocking)
+    // Send payment confirmation email (non-blocking).
+    // Pass the logged-in user's account email so all addresses receive the confirmation:
+    //   1. doc.paymentEmail (billing address)
+    //   2. doc.email        (registration address)
+    //   3. req.user?.email  (account login email, in case it differs)
     if (updatedReg) {
       const sendFn = registrationModel === 'Individual'
         ? sendIndividualPaymentConfirmation
         : sendAirlinePaymentConfirmation;
-      sendFn(updatedReg).catch((e) =>
+      sendFn(updatedReg, req.user?.email).catch((e) =>
         console.warn('[confirmPayment] Email failed:', e.message)
       );
     }

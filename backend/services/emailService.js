@@ -5,19 +5,25 @@ const path       = require('path');
 
 // ── Transporter ───────────────────────────────────────────────────────────────
 function createTransporter() {
+  const port   = Number(process.env.SMTP_PORT) || 465;
+  const secure = port === 465; // SSL on 465, STARTTLS on 587
   return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST || 'smtp.gmail.com',
-    port:   Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
+    host:   process.env.SMTP_HOST || 'mail.theifoa.com',
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      // Allow self-signed certs on private mail servers
+      rejectUnauthorized: false,
     },
   });
 }
 
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'IFOA_USA_white.png');
-const FROM      = process.env.MAIL_FROM || '"IFOA USA" <noreply@theifoa.com>';
+const FROM      = process.env.MAIL_FROM || '"IFOA Agent Services" <agent@theifoa.com>';
 
 // ── Shared layout shell ───────────────────────────────────────────────────────
 function wrap(bodyHtml) {
@@ -31,15 +37,14 @@ function wrap(bodyHtml) {
 <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:4px;overflow:hidden;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:4px;overflow:hidden;border:1px solid #e0e0e0;">
 
-        <!-- Logo header -->
+        <!-- Logo header — white background so the logo is clearly visible -->
         <tr>
-          <td align="center" style="background:#0f1631;padding:24px 40px;">
-            <img src="cid:ifoaLogo" alt="IFOA USA" style="height:60px;display:block;margin:0 auto;" />
+          <td align="center" style="background:#ffffff;padding:28px 40px;border-bottom:2px solid #cc0000;">
+            <img src="cid:ifoaLogo" alt="IFOA USA" style="height:64px;display:block;margin:0 auto;" />
           </td>
         </tr>
-        <tr><td style="height:1px;background:#e0e0e0;font-size:0;line-height:0;">&nbsp;</td></tr>
 
         <!-- Body -->
         <tr>
@@ -169,6 +174,19 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Collect unique valid recipient addresses ───────────────────────────────────
+function collectRecipients(...addresses) {
+  const seen = new Set();
+  const valid = [];
+  for (const addr of addresses) {
+    if (!addr || typeof addr !== 'string') continue;
+    const clean = addr.toLowerCase().trim();
+    if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) continue;
+    if (!seen.has(clean)) { seen.add(clean); valid.push(clean); }
+  }
+  return valid; // array of unique lowercase email strings
+}
+
 // ── Core send helper ──────────────────────────────────────────────────────────
 async function sendMail({ to, subject, html }) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -178,36 +196,46 @@ async function sendMail({ to, subject, html }) {
   const transporter = createTransporter();
   await transporter.sendMail({
     from: FROM,
-    to,
+    to,   // may be a comma-joined string for multiple recipients
     subject,
     html,
     attachments: [{
-      filename:    'ifoa-logo.png',
-      path:        LOGO_PATH,
-      cid:         'ifoaLogo',
+      filename: 'ifoa-logo.png',
+      path:     LOGO_PATH,
+      cid:      'ifoaLogo',
     }],
   });
-  console.log('[email] Sent to', to, '|', subject);
+  console.log('[email] Sent to', Array.isArray(to) ? to.join(', ') : to, '|', subject);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
-async function sendIndividualPaymentConfirmation(doc) {
-  const to = doc.paymentEmail || doc.email;
-  if (!to) return;
+/**
+ * Send the Individual payment confirmation email.
+ * @param {object} doc          - Individual registration document
+ * @param {string} [userEmail]  - Logged-in user's account email (may differ from doc.email)
+ */
+async function sendIndividualPaymentConfirmation(doc, userEmail) {
+  const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
+  if (!recipients.length) return;
   await sendMail({
-    to,
+    to:      recipients.join(', '),
     subject: 'Welcome to IFOA USA — Your Subscription is Active',
-    html: buildIndividualConfirmationHtml(doc),
+    html:    buildIndividualConfirmationHtml(doc),
   });
 }
 
-async function sendAirlinePaymentConfirmation(doc) {
-  const to = doc.paymentEmail || doc.email;
-  if (!to) return;
+/**
+ * Send the Airline payment confirmation email.
+ * @param {object} doc          - Airlines registration document
+ * @param {string} [userEmail]  - Logged-in user's account email (may differ from doc.email)
+ */
+async function sendAirlinePaymentConfirmation(doc, userEmail) {
+  const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
+  if (!recipients.length) return;
   await sendMail({
-    to,
+    to:      recipients.join(', '),
     subject: `Welcome to IFOA USA — ${doc.airlineName || 'Your Company'} Subscription is Active`,
-    html: buildAirlineConfirmationHtml(doc),
+    html:    buildAirlineConfirmationHtml(doc),
   });
 }
 

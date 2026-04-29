@@ -5,6 +5,24 @@ import PaymentModal from '../payment/PaymentModal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
+// ─── Summary row ──────────────────────────────────────────────────────────────
+function SummaryItem({ label, value, mono = false }) {
+  if (value === null || value === undefined || value === '' || value === '—') {
+    return (
+      <div className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 flex-shrink-0">{label}</span>
+        <span className="text-sm sm:text-right text-slate-300 italic">—</span>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 flex-shrink-0">{label}</span>
+      <span className={`text-sm sm:text-right sm:max-w-[62%] break-all ${mono ? 'font-mono text-slate-700' : 'font-semibold text-slate-800'}`}>{value}</span>
+    </div>
+  )
+}
+
 // ─── Wire Transfer Request Success ────────────────────────────────────────────
 function WireTransferSuccess({ onClose }) {
   const [show, setShow] = useState(false)
@@ -57,7 +75,6 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const pricePerCert  = data.pricePerCertificate || data.pricePerCert || 0
   // Always multiply by count — Unlimited plan is $265/certificate too
   const total         = pricePerCert * selectedCount
-  const totalLabel    = `${total} USD`
   const amountCents   = Math.round(total * 100)
   const selectedPaymentMethod = data.paymentMethod || paymentMethod || 'card'
 
@@ -145,17 +162,6 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
     onMarkPaidAndFinish(registration?._id || registrationId || data._id)
   }
 
-  const lineItems = [
-    { label: 'Company',      value: data.airlineName },
-    { label: 'Contact',      value: [data.firstName, data.lastName].filter(Boolean).join(' ') },
-    { label: 'Email',        value: data.email },
-    { label: 'Phone',        value: data.phone ? ('+' + data.phone) : '' },
-    { label: 'Holder Range', value: data.holderCount },
-    { label: 'Team Members', value: String(selectedCount) + ' member' + (selectedCount !== 1 ? 's' : '') },
-    { label: 'Price per Certificate', value: `${pricePerCert} USD` },
-    { label: 'Total', value: totalLabel },
-  ]
-
   // ── Wire success screen ─────────────────────────────────────────────────────
   if (wireSuccess) {
     return (
@@ -191,30 +197,81 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
       )}
 
       {/* Order Summary */}
-      <div>
-        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-4">Order Summary</h3>
-        <div className="rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-gray-900 to-gray-800 px-5 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">
-                Airlines Plan · {(data.subscriptionPlan || '').replace(' Subscription Plan', '').replace(' Plan', '')}
-              </p>
-              <p className="text-white text-2xl font-black mt-0.5">
-                {`${total}`}<span className="text-base font-normal text-gray-400 ml-1">USD</span>
-              </p>
-            </div>
-            <div className="text-4xl opacity-80">✈️</div>
+      <section className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-5 sm:p-6">
+        {/* Header with total */}
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">Order Summary</p>
+            <h3 className="mt-2 text-xl font-bold tracking-[-0.03em] text-slate-950">Final registration amount</h3>
           </div>
-          <div className="divide-y divide-gray-100">
-            {lineItems.map(({ label, value }) => (
-              <div key={label} className="flex justify-between px-5 py-3 text-sm">
-                <span className="text-gray-400 font-medium">{label}</span>
-                <span className="font-semibold text-gray-900 text-right max-w-xs truncate">{value || '—'}</span>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-right flex-shrink-0">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Total</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-slate-950">${Number(total || 0).toFixed(2)}</p>
           </div>
         </div>
-      </div>
+
+        {/* Company & Plan */}
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">Company & Plan</p>
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100 mb-4">
+          <SummaryItem label="Airline / Company" value={data.airlineName} />
+          <SummaryItem label="Service Plan"       value={
+            data.subscriptionPlan === 'Multiple Years Subscription Plan'
+              ? `Multiple Years (${data.multiYearCount || 2} Years)`
+              : (data.subscriptionPlan || '1 Year Subscription Plan')
+          } />
+          <SummaryItem label="Price / Certificate" value={pricePerCert ? `$${Number(pricePerCert).toFixed(2)}` : ''} />
+          <SummaryItem label="Committed Slots"     value={selectedCount ? `${selectedCount} certificate holder${selectedCount !== 1 ? 's' : ''}` : ''} />
+          <SummaryItem label="Holder Range"        value={data.holderCount} />
+        </div>
+
+        {/* Contact Info */}
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">Contact Information</p>
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100 mb-4">
+          <SummaryItem label="Point of Contact"  value={[data.firstName, data.lastName].filter(Boolean).join(' ')} />
+          <SummaryItem label="Contact Email"     value={data.email} />
+          <SummaryItem label="Phone"             value={data.phone ? `+${data.phone}` : ''} />
+          {(data.addressLine1 || data.city) && (
+            <SummaryItem label="Address" value={[data.addressLine1, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(', ')} />
+          )}
+        </div>
+
+        {/* Certificate Holders */}
+        {holders.length > 0 && (
+          <>
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+              Certificate Holders ({holders.length})
+            </p>
+            <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100 mb-4">
+              {holders.map((h, i) => {
+                const holderName = [h.firstName, h.lastName].filter(Boolean).join(' ') || h.name || `Holder ${i + 1}`
+                const faaNum     = h.faaCertificateNumber || h.faaNumber || ''
+                const iacraFtn   = h.iacraTrackingNumber  || h.iacraFtn  || ''
+                const certType   = h.certificateType      || h.primaryCertificate || ''
+                return (
+                  <div key={i} className="px-4 py-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">#{i + 1}</span>
+                      <span className="text-sm font-semibold text-slate-800">{holderName}</span>
+                    </div>
+                    {certType  && <div className="flex justify-between text-xs text-slate-500 mt-0.5"><span className="uppercase tracking-wide text-slate-400">Cert Type</span><span className="font-medium">{certType}</span></div>}
+                    {faaNum    && <div className="flex justify-between text-xs text-slate-500 mt-0.5"><span className="uppercase tracking-wide text-slate-400">FAA Cert #</span><span className="font-mono">{faaNum}</span></div>}
+                    {iacraFtn  && <div className="flex justify-between text-xs text-slate-500 mt-0.5"><span className="uppercase tracking-wide text-slate-400">IACRA FTN</span><span className="font-mono">{iacraFtn}</span></div>}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Billing */}
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">Billing</p>
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100">
+          <SummaryItem label="Billing Email"   value={data.paymentEmail || 'Will be entered below'} />
+          <SummaryItem label="Payment Method"  value={
+            data.paymentMethod === 'wire' ? 'Wire Transfer' : data.paymentMethod === 'card' ? 'Credit / Debit Card' : ''
+          } />
+        </div>
+      </section>
 
       {isExistingSubmission && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">

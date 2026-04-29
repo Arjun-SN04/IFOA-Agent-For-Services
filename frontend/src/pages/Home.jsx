@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import Footer from '../components/layout/footer'
@@ -41,7 +41,7 @@ const PLANS = [
     features: ['Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'Yearly Payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
     to: '/register',
-    img: 'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=600&q=80&auto=format&fit=crop&crop=center',
+    img: 'https://theifoa.com/wp-content/uploads/2025/05/ATR-72-1.jpg',
   },
   {
     name: 'Jet Plan',
@@ -50,7 +50,7 @@ const PLANS = [
     features: ['20% Discount Yearly', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'One Payment for the Period', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
     to: '/register',
-    img: 'https://images.unsplash.com/photo-1436491865332-7a61a109db56?w=600&q=80&auto=format&fit=crop&crop=center',
+    img: 'https://theifoa.com/wp-content/uploads/2025/05/Airbus-A321-Neo-e1746283955634.jpg',
     imgFallback: 'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=600&q=80&auto=format&fit=crop&crop=center',
   },
   {
@@ -61,7 +61,7 @@ const PLANS = [
     features: ['The Most Economic Flat Rate', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'One Time Lifetime Payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
     to: '/register',
-    img: 'https://images.unsplash.com/photo-1529074963764-98f45c47344b?w=600&q=80&auto=format&fit=crop&crop=center',
+    img: 'https://theifoa.com/wp-content/uploads/2025/05/Global-8000-e1746283913613.jpg',
   },
   {
     name: 'Airlines Plan',
@@ -71,7 +71,7 @@ const PLANS = [
     features: ['Volume Discount', 'Dedicated U.S. Mailing Address', 'FAA Compliance Guaranteed', 'Real-Time Notification', 'Document Scanning & Forwarding', 'Credit Card or Wire payment', 'Unlimited Certificates'],
     cta: 'Subscribe Now',
     to: '/register',
-    img: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=600&q=80&auto=format&fit=crop&crop=center',
+    img: 'https://theifoa.com/wp-content/uploads/2025/05/Airlines-1980x1050-1.jpg',
   },
 ]
 
@@ -108,8 +108,6 @@ const WHY_CHOOSE = [
 ]
 
 function PlanCard({ plan, index }) {
-  const imgRef = useRef(null)
-
   const handleImgError = (e) => {
     const el = e.target
     if (plan.imgFallback && el.src !== plan.imgFallback) {
@@ -150,7 +148,7 @@ function PlanCard({ plan, index }) {
         <svg viewBox="0 0 240 140" className="absolute w-3/4 h-3/4 opacity-10" xmlns="http://www.w3.org/2000/svg">
           <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="80" fill="#0000ff">✈</text>
         </svg>
-        <img src={plan.img} alt={plan.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" onError={handleImgError} />
+        <img src={plan.img} alt={plan.name} className="absolute inset-0 w-full h-full object-contain p-2" loading="lazy" onError={handleImgError} />
       </div>
       <div className="flex flex-col flex-1 p-6">
         <h3 className="text-xl font-black mb-1" style={{ color: C.dark }}>{plan.name}</h3>

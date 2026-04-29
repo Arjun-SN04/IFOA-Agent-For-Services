@@ -23,3 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 STRIPE_SETUP.md
+.claude

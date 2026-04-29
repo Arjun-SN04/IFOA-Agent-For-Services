@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import PaymentModal from '../payment/PaymentModal'
 
+function SummaryItem({ label, value, mono = false }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 flex-shrink-0">{label}</span>
+      <span className={`text-sm sm:text-right sm:max-w-[62%] break-all ${mono ? 'font-mono text-slate-700' : 'font-semibold text-slate-800'}`}>{value}</span>
+    </div>
+  )
+}
+
 export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPaidAndFinish, submitting, error, isBlocked }) {
   const [errors, setErrors]                 = useState({})
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -59,33 +68,57 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
 
       {/* Order Summary */}
       <section className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
+        {/* Header with total */}
+        <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">Order Summary</p>
             <h3 className="mt-2 text-xl font-bold tracking-[-0.03em] text-slate-950">Final registration amount</h3>
           </div>
-          <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-right">
+          <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-right flex-shrink-0">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Total</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-slate-950">${data.price?.toFixed(2)}</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-[-0.04em] text-slate-950">${Number(data.price || 0).toFixed(2)}</p>
           </div>
         </div>
-        <div className="mt-5 space-y-3">
-          {[
-            { label: 'Registrant', value: `${data.firstName} ${data.lastName}`.trim() },
-            {
-              label: 'Service plan',
-              value: data.subscriptionPlan === 'Multiple Years Subscription Plan'
-                ? `Multiple Years Subscription Plan (${data.multiYearCount || 2} Years)`
-                : data.subscriptionPlan,
-            },
-            { label: 'Registration email', value: data.email },
-            { label: 'Billing email', value: data.paymentEmail || 'Will be entered below' },
-          ].map((item) => (
-            <div key={item.label} className="flex flex-col gap-1 rounded-2xl border border-white/70 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm font-semibold text-slate-500">{item.label}</span>
-              <span className="text-sm text-slate-900 sm:max-w-[60%] sm:text-right">{item.value}</span>
+
+        {/* Registrant & Plan */}
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100">
+          <SummaryItem label="Registrant"    value={`${data.firstName || ''} ${data.lastName || ''}`.trim() || '—'} />
+          <SummaryItem label="Service Plan"  value={
+            data.subscriptionPlan === 'Multiple Years Subscription Plan'
+              ? `Multiple Years (${data.multiYearCount || 2} Years)`
+              : (data.subscriptionPlan || '1 Year Subscription Plan')
+          } />
+          <SummaryItem label="Reg. Email"    value={data.email || '—'} />
+          <SummaryItem label="Phone"         value={data.phone || '—'} />
+          {data.dateOfBirth && <SummaryItem label="Date of Birth" value={new Date(data.dateOfBirth).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })} />}
+          {(data.addressLine1 || data.city) && <SummaryItem label="Address" value={[data.addressLine1, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(', ')} />}
+        </div>
+
+        {/* Primary Certificate */}
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-4 mb-2 px-1">Primary Certificate</p>
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100">
+          <SummaryItem label="Certificate Type"   value={data.primaryCertificate        || '—'} />
+          <SummaryItem label="Cert. Status"        value={data.primaryAirmanCertificate  || 'EXISTING'} />
+          <SummaryItem label="FAA Certificate #"   value={data.faaCertificateNumber      || '—'} mono />
+          <SummaryItem label="IACRA FTN #"         value={data.iacraTrackingNumber        || '—'} mono />
+        </div>
+
+        {/* Secondary Certificate (conditional) */}
+        {data.hasSecondaryCertificate && (
+          <>
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-4 mb-2 px-1">Secondary Certificate</p>
+            <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100">
+              <SummaryItem label="Sec. Cert. Type"   value={data.secondaryCertificate              || '—'} />
+              <SummaryItem label="Sec. FAA Cert #"   value={data.secondaryFaaCertificateNumber     || '—'} mono />
+              <SummaryItem label="Sec. IACRA FTN #"  value={data.secondaryIacraTrackingNumber      || '—'} mono />
             </div>
-          ))}
+          </>
+        )}
+
+        {/* Billing */}
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-4 mb-2 px-1">Billing</p>
+        <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden divide-y divide-slate-100">
+          <SummaryItem label="Billing Email" value={data.paymentEmail || 'Will be entered below'} />
         </div>
       </section>
 

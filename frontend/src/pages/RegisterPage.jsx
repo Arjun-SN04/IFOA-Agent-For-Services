@@ -370,31 +370,79 @@ function ExistingFormBanner({ regType, data }) {
   )
 }
 
+function SummaryRow({ label, value, mono = false, highlight = false }) {
+  if (!value && value !== 0) return null
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-0">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0 pt-0.5 min-w-[120px]">{label}</span>
+      <span className={`text-sm text-right break-all ${mono ? 'font-mono text-slate-700' : 'font-semibold text-slate-800'} ${highlight ? 'text-blue-700' : ''}`}>{value}</span>
+    </div>
+  )
+}
+
 function ExistingOrderSummary({ regType, data }) {
   const isIndividual = regType === 'individual'
   const money = (n) => {
     const value = Number(n || 0)
     return Number.isFinite(value) ? `$${value.toFixed(2)} USD` : '$0.00 USD'
   }
+  const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
 
   return (
-    <div className="rounded-3xl border px-6 py-5" style={{ background: '#ffffff', borderColor: '#e5e7eb' }}>
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-3" style={{ color: '#64748b' }}>Order Summary</p>
-      <div className="space-y-2 text-sm">
+    <div className="rounded-3xl border overflow-hidden" style={{ background: '#ffffff', borderColor: '#e5e7eb' }}>
+      <div className="px-5 py-3 border-b" style={{ borderColor: '#f3f4f6', background: '#f8fafc' }}>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: '#64748b' }}>Order Summary</p>
+      </div>
+      <div className="px-5 py-3">
         {isIndividual ? (
           <>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Plan</span><span className="font-semibold text-slate-800">{data.subscriptionPlan || '1 Year Subscription Plan'}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Primary Certificate</span><span className="font-semibold text-slate-800">{data.primaryCertificate || 'Not specified'}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Certificate Status</span><span className="font-semibold text-slate-800">{data.primaryAirmanCertificate || 'EXISTING'}</span></div>
-            <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2"><span className="text-slate-500">Total</span><span className="font-black text-slate-900">{money(data.price)}</span></div>
+            <SummaryRow label="Registrant"       value={[data.firstName, data.lastName].filter(Boolean).join(' ') || null} />
+            <SummaryRow label="Plan"              value={data.subscriptionPlan === 'Multiple Years Subscription Plan' ? `Multiple Years (${data.multiYearCount || 2} yrs)` : (data.subscriptionPlan || '1 Year Subscription Plan')} />
+            <SummaryRow label="Email"             value={data.email} />
+            <SummaryRow label="Phone"             value={data.phone} />
+            <SummaryRow label="Date of Birth"     value={fmt(data.dateOfBirth)} />
+            <SummaryRow label="Address"           value={[data.addressLine1, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(', ') || null} />
+            <div className="mt-2 mb-1"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Primary Certificate</p></div>
+            <SummaryRow label="Certificate Type"  value={data.primaryCertificate || null} />
+            <SummaryRow label="Cert. Status"      value={data.primaryAirmanCertificate || 'EXISTING'} />
+            <SummaryRow label="FAA Cert #"        value={data.faaCertificateNumber || null}        mono />
+            <SummaryRow label="IACRA FTN #"       value={data.iacraTrackingNumber  || null}        mono />
+            {data.hasSecondaryCertificate && (
+              <>
+                <div className="mt-2 mb-1"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Secondary Certificate</p></div>
+                <SummaryRow label="Sec. Cert Type"    value={data.secondaryCertificate              || null} />
+                <SummaryRow label="Sec. FAA Cert #"   value={data.secondaryFaaCertificateNumber     || null} mono />
+                <SummaryRow label="Sec. IACRA FTN #"  value={data.secondaryIacraTrackingNumber      || null} mono />
+              </>
+            )}
+            <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-200">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-500">Total</span>
+              <span className="text-base font-black text-slate-900">{money(data.price)}</span>
+            </div>
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Plan</span><span className="font-semibold text-slate-800">{data.subscriptionPlan || '1 Year Subscription Plan'}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Price / Certificate</span><span className="font-semibold text-slate-800">{money(data.pricePerCertificate)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Committed Holders</span><span className="font-semibold text-slate-800">{Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">Current Holders Added</span><span className="font-semibold text-slate-800">{data.certificateHolders?.length || 0}</span></div>
-            <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-2"><span className="text-slate-500">Total</span><span className="font-black text-slate-900">{money(data.totalAmount || (Number(data.pricePerCertificate || 0) * Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0)))}</span></div>
+            <SummaryRow label="Airline"           value={data.airlineName || null} />
+            <SummaryRow label="Plan"              value={data.subscriptionPlan || '1 Year Subscription Plan'} />
+            <SummaryRow label="Contact Email"     value={data.email} />
+            <SummaryRow label="Phone"             value={data.phone} />
+            <SummaryRow label="Point of Contact"  value={data.pointOfContact || null} />
+            <SummaryRow label="P.O.C. Email"      value={data.pointOfContactEmail || null} />
+            <SummaryRow label="Address"           value={[data.addressLine1, data.city, data.state, data.country].filter(Boolean).join(', ') || null} />
+            <div className="mt-2 mb-1"><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Certificate Holders</p></div>
+            <SummaryRow label="Price / Cert."     value={data.pricePerCertificate ? money(data.pricePerCertificate) : null} />
+            <SummaryRow label="Committed Slots"   value={Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0) || null} />
+            <SummaryRow label="Holders Added"     value={data.certificateHolders?.length || null} />
+            {(data.certificateHolders || []).slice(0, 3).map((h, i) => (
+              <SummaryRow key={i} label={`Holder ${i + 1}`} value={[h.fullName, h.faaCertificateNumber && `FAA: ${h.faaCertificateNumber}`].filter(Boolean).join(' · ') || null} />
+            ))}
+            {(data.certificateHolders?.length || 0) > 3 && (
+              <p className="text-[11px] text-slate-400 text-right pb-1">+{data.certificateHolders.length - 3} more holders</p>
+            )}
+            <div className="flex items-center justify-between pt-3 mt-1 border-t border-slate-200">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-500">Total</span>
+              <span className="text-base font-black text-slate-900">{money(data.totalAmount || (Number(data.pricePerCertificate || 0) * Number(data.holderCountValue || data.committedCount || data.certificateHolders?.length || 0)))}</span>
+            </div>
           </>
         )}
       </div>
@@ -421,6 +469,17 @@ export default function RegisterPage() {
   const [regType, setRegType] = useState('individual')
   const [switchDirection, setSwitchDirection] = useState(1)
   const [transitionMode, setTransitionMode] = useState('step')
+
+  // Auto-select the correct form type based on account role (runs once on first load).
+  // Does NOT override if the user manually switches the toggle.
+  const hasAutoSetType = useRef(false)
+  useEffect(() => {
+    if (user && !hasAutoSetType.current) {
+      hasAutoSetType.current = true
+      if (user.role === 'airline')     setRegType('airline')
+      else if (user.role === 'individual') setRegType('individual')
+    }
+  }, [user])
 
   const [indStep, setIndStep] = useState(1)
   const [indData, setIndData] = useState(INDIVIDUAL_INIT)

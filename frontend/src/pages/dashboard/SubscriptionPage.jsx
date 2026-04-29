@@ -411,7 +411,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Plan</label>
                     <select className={inp + ' cursor-pointer'} value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)}>
                       <option value="1 Year Subscription Plan">1 Year Subscription Plan — $69</option>
-                      <option value="Multiple Years Subscription Plan">Multiple Years Subscription Plan</option>
+                      <option value="Multiple Years Subscription Plan">Multiple Years Subscription Plan — $55/yr</option>
+                      <option value="Unlimited Plan">Unlimited Plan — $299</option>
                     </select>
                   </div>
                   {selectedPlan === 'Multiple Years Subscription Plan' && (
@@ -1050,8 +1051,9 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
 /*  RenewModal                                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const INDIVIDUAL_PLANS = [
-  { value: '1 Year Subscription Plan', label: '1 Year — $69', price: 69 },
-  { value: 'Multiple Years Subscription Plan', label: '3 Years — $165', price: 165 },
+  { value: '1 Year Subscription Plan',        label: '1 Year — $69',        price: 69  },
+  { value: 'Multiple Years Subscription Plan', label: 'Multiple Years — $55/yr', price: null },
+  { value: 'Unlimited Plan',                  label: 'Unlimited — $299',    price: 299 },
 ]
 const AIRLINE_PLANS = [
   { value: '1 Year Subscription Plan', label: '1 Year Subscription Plan' },
@@ -1059,37 +1061,66 @@ const AIRLINE_PLANS = [
 
 function RenewModal({ sub, role, onClose, onSaved }) {
   const isAirline = role === 'airline'
+  // Track the latest version of sub so edits in the review form are reflected here
+  const [currentSub, setCurrentSub] = useState(sub)
   const [plan, setPlan] = useState(sub.subscriptionPlan || '1 Year Subscription Plan')
+  const [multiYearRenewCount, setMultiYearRenewCount] = useState(Number(sub.multiYearCount) || 3)
   const [showPayment, setShowPayment] = useState(false)
+  const [showEditDetails, setShowEditDetails] = useState(false)
+  /* TEST MODE — remove this line before production */
+  const [testRenewMode, setTestRenewMode] = useState(false)
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  const selectedPlanInfo = INDIVIDUAL_PLANS.find(p => p.value === plan)
-  // For individuals use plan price; for airlines use current subscription total
-  const renewalAmountCents = isAirline
-    ? Math.round(getAirlineTotal(sub) * 100)
-    : (selectedPlanInfo?.price || 69) * 100
+  // Compute renewal price based on selected plan
+  const renewalPrice = (() => {
+    if (isAirline) return getAirlineTotal(currentSub)
+    if (plan === 'Unlimited Plan') return 299
+    if (plan === 'Multiple Years Subscription Plan') return 55 * Math.max(2, multiYearRenewCount)
+    return 69 // 1 Year
+  })()
+  const renewalAmountCents = Math.round(renewalPrice * 100)
+  /* TEST MODE — chargedCents is $1 when testRenewMode, real amount otherwise */
+  const chargedCents = testRenewMode ? 100 : renewalAmountCents
 
   const plans = isAirline ? AIRLINE_PLANS : INDIVIDUAL_PLANS
-  const currentExpiry = sub.expirationDate ? fmt(sub.expirationDate) : '—'
-  const daysLeft = sub.expirationDate
-    ? Math.ceil((new Date(sub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
+  const currentExpiry = currentSub.expirationDate ? fmt(currentSub.expirationDate) : '—'
+  const daysLeft = currentSub.expirationDate
+    ? Math.ceil((new Date(currentSub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
     : null
+
+  // Show the edit-details form on top of the renew modal
+  if (showEditDetails) {
+    return (
+      <EditSubscriptionFormModal
+        sub={currentSub}
+        role={role}
+        onClose={() => setShowEditDetails(false)}
+        onSaved={(updated) => {
+          setCurrentSub(updated)
+          // If the plan changed, mirror it in the plan selector
+          if (updated.subscriptionPlan) setPlan(updated.subscriptionPlan)
+          if (updated.multiYearCount)   setMultiYearRenewCount(Number(updated.multiYearCount))
+          setShowEditDetails(false)
+        }}
+      />
+    )
+  }
 
   if (showPayment) {
     return (
       <PaymentModal
-        registrationId={sub._id}
+        registrationId={currentSub._id}
         registrationModel={isAirline ? 'Airlines' : 'Individual'}
-        amount={renewalAmountCents}
-        subscriptionData={sub}
+        amount={chargedCents}  /* TEST MODE — swap chargedCents → renewalAmountCents when done */
+        subscriptionData={currentSub}
         purpose="renewal"
         onClose={() => setShowPayment(false)}
         onSuccess={(inv, updatedReg) => {
-          onSaved(updatedReg || sub)
+          onSaved(updatedReg || currentSub)
           onClose()
         }}
       />
@@ -1109,6 +1140,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Expiry status */}
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
             <p className="font-bold text-amber-800">
               {daysLeft !== null && daysLeft <= 0
@@ -1120,8 +1152,26 @@ function RenewModal({ sub, role, onClose, onSaved }) {
             <p className="text-amber-700 text-xs mt-0.5">Renewing will extend from your current expiry date.</p>
           </div>
 
+          {/* Review credentials prompt */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-slate-700">Review your registered details</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Verify your credentials before renewing.</p>
+            </div>
+            <button
+              onClick={() => setShowEditDetails(true)}
+              className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
+              </svg>
+              Edit Details
+            </button>
+          </div>
+
+          {/* Plan selector */}
           <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Plan</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Renewal Plan</p>
             {plans.map((p) => (
               <label key={p.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                 plan === p.value ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
@@ -1132,30 +1182,67 @@ function RenewModal({ sub, role, onClose, onSaved }) {
                   {plan === p.value && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                 </div>
                 <input type="radio" className="sr-only" value={p.value} checked={plan === p.value} onChange={() => setPlan(p.value)} />
-                <span className="text-sm font-semibold text-slate-800">{p.label}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-semibold text-slate-800">{p.label}</span>
+                  {p.value === 'Unlimited Plan' && (
+                    <span className="ml-2 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">No expiry</span>
+                  )}
+                </div>
               </label>
             ))}
           </div>
 
-          {renewalAmountCents > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-              <span className="text-slate-500">Renewal total: </span>
-              <span className="font-bold text-slate-900">${(renewalAmountCents / 100).toFixed(2)}</span>
+          {/* Multi-year count input */}
+          {!isAirline && plan === 'Multiple Years Subscription Plan' && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Number of Years</label>
+              <input
+                type="number"
+                min="2"
+                max="10"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                value={multiYearRenewCount}
+                onChange={(e) => setMultiYearRenewCount(Math.max(2, Number(e.target.value) || 2))}
+              />
+              <p className="text-xs text-slate-500">$55 × {multiYearRenewCount} years</p>
             </div>
           )}
+
+          {/* Renewal total */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
+            <span className="text-slate-500">Renewal total:</span>
+            <span className="font-bold text-slate-900">
+              {plan === 'Unlimited Plan'
+                ? <span className="text-emerald-700">$299.00 — Lifetime</span>
+                : testRenewMode
+                ? <><span className="line-through text-slate-400 mr-2">${(renewalAmountCents / 100).toFixed(2)}</span><span className="text-amber-600">$1.00 (test)</span></>
+                : `$${(renewalAmountCents / 100).toFixed(2)}`}
+            </span>
+          </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3 rounded-b-2xl">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Cancel
-          </button>
-          <button
-            onClick={() => setShowPayment(true)}
-            disabled={renewalAmountCents <= 0}
-            className="rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white"
-          >
-            Proceed to Payment
-          </button>
+        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl space-y-3">
+          {/* ── TEST MODE TOGGLE — remove this block before production ──── */}
+          <label className="flex items-center gap-2 cursor-pointer select-none justify-end">
+            <div className={`w-8 h-4 rounded-full relative transition-colors ${testRenewMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testRenewMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            <input type="checkbox" className="sr-only" checked={testRenewMode} onChange={() => setTestRenewMode(v => !v)} />
+            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 Test: charge $1 only</span>
+          </label>
+          {/* ── END TEST MODE TOGGLE ──────────────────────────────────── */}
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button
+              onClick={() => setShowPayment(true)}
+              disabled={chargedCents <= 0}
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white"
+            >
+              {testRenewMode ? 'Proceed — Pay $1.00 (Test)' : 'Proceed to Payment'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1178,6 +1265,9 @@ export default function SubscriptionPage() {
   const [viewInvoice,   setViewInvoice]   = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [renewTarget, setRenewTarget] = useState(null)
+  /* ── TEST MODE — remove this block before production ──────────────────── */
+  const [testPayMode, setTestPayMode] = useState(false)
+  /* ── END TEST MODE ────────────────────────────────────────────────────── */
 
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
@@ -1333,6 +1423,7 @@ export default function SubscriptionPage() {
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onEditForm={() => setEditTarget(s)}
                 onRenew={() => setRenewTarget(s)}
+                /* TEST MODE */ testPayMode={testPayMode} onToggleTestPay={() => setTestPayMode(v => !v)}
               />
             ))}
           </div>
@@ -1344,7 +1435,9 @@ export default function SubscriptionPage() {
           <PaymentModal
             registrationId={sub?._id}
             registrationModel={user?.role === 'airline' ? 'Airlines' : 'Individual'}
-            amount={Math.round((sub?._computedTotal ?? getAirlineTotal(sub) ?? sub?.price ?? sub?.totalAmount ?? sub?.totalServiceFees ?? 0) * 100)}
+            /* TEST MODE — replace the next line with the one below when done testing */
+            amount={testPayMode ? 100 : Math.round((sub?._computedTotal ?? getAirlineTotal(sub) ?? sub?.price ?? sub?.totalAmount ?? sub?.totalServiceFees ?? 0) * 100)}
+            /* amount={Math.round((sub?._computedTotal ?? getAirlineTotal(sub) ?? sub?.price ?? sub?.totalAmount ?? sub?.totalServiceFees ?? 0) * 100)} */
             subscriptionData={sub}
             onClose={() => { setShowPayModal(false); setPayTarget(null); setPayingId(null) }}
             onSuccess={async (inv) => {
@@ -1424,7 +1517,7 @@ export default function SubscriptionPage() {
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm, onRenew }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm, onRenew, /* TEST MODE */ testPayMode, onToggleTestPay }) {
   const isAirline = user?.role === 'airline'
   const isPaid   = s.isPaid === true || s.paymentStatus === 'paid'
   const pending  = !isPaid
@@ -1435,7 +1528,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
   const daysToExpiry = s.expirationDate
     ? Math.ceil((new Date(s.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
     : null
-  const showRenew = active && !isUnlimited && (daysToExpiry === null || daysToExpiry <= 60)
+  /* TEST MODE — remove `|| testPayMode` from the next line before production */
+  const showRenew = active && !isUnlimited && ((daysToExpiry === null || daysToExpiry <= 60) || testPayMode)
 
   const handleInvoiceClick = async () => {
     try {
@@ -1534,27 +1628,29 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
       )}
 
       {pending && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-blue-900">Payment pending</p>
+                <p className="text-xs text-blue-700 leading-relaxed">Complete your payment to activate this subscription.</p>
+              </div>
+            </div>
+            <button
+              onClick={onPay}
+              className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 w-full sm:w-auto"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
               </svg>
-            </div>
-            <div>
-              <p className="text-sm font-bold text-blue-900">Payment pending</p>
-              <p className="text-xs text-blue-700 leading-relaxed">Complete your payment to activate this subscription.</p>
-            </div>
+              {testPayMode ? 'Pay $1.00 (Test)' : 'Pay Now'}
+            </button>
           </div>
-          <button
-            onClick={onPay}
-            className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 w-full sm:w-auto"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
-            </svg>
-            Pay Now
-          </button>
         </div>
       )}
 
@@ -1610,6 +1706,15 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
                 Invoice
               </button>
             )}
+            {/* ── TEST MODE TOGGLE — remove this block before production ── */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none ml-1">
+              <div className={`w-7 h-3.5 rounded-full relative transition-colors flex-shrink-0 ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
+                <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </div>
+              <input type="checkbox" className="sr-only" checked={!!testPayMode} onChange={onToggleTestPay} />
+              <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider whitespace-nowrap">🧪 $1 Test</span>
+            </label>
+            {/* ── END TEST MODE TOGGLE ──────────────────────────────────── */}
             <PayBadge status={s.paymentStatus || s.status} />
           </div>
         </div>

@@ -580,23 +580,42 @@ exports.updateAirlinesSubscription = async (req, res) => {
     // (Stripe flow sets it in applyPaymentToRegistration, but wire/manual does not).
     // Only compute if not explicitly provided and the record is being marked paid.
     if ((payload.isPaid === true || payload.paymentStatus === 'paid') && !payload.expirationDate) {
-      // Fetch the existing doc to get the subscriptionPlan
-      const existingForExpiry = await Airlines.findById(req.params.id).select('subscriptionPlan subscriptionDate expirationDate multiYearCount');
+      const existingForExpiry = await Airlines.findById(req.params.id)
+        .select('subscriptionPlan subscriptionDate expirationDate multiYearCount totalAmount pricePerCertificate committedCount holderCountValue');
       if (existingForExpiry && !existingForExpiry.expirationDate) {
         const plan = payload.subscriptionPlan || existingForExpiry.subscriptionPlan;
         const fromDate = payload.subscriptionDate || existingForExpiry.subscriptionDate || new Date();
+        if (!existingForExpiry.subscriptionDate && !payload.subscriptionDate) {
+          payload.subscriptionDate = new Date();
+        }
         if (plan === '1 Year Subscription Plan') {
           const d = new Date(fromDate);
           d.setFullYear(d.getFullYear() + 1);
           payload.expirationDate = d;
         } else if (plan === 'Multiple Years Subscription Plan') {
-          const years = existingForExpiry.multiYearCount || 3;
+          // Derive year count from multiYearCount field, or from totalAmount / pricePerCert
+          let years = Number(existingForExpiry.multiYearCount || 0);
+          if (!years) {
+            const total     = Number(existingForExpiry.totalAmount || 0);
+            const ppc       = Number(existingForExpiry.pricePerCertificate || 0);
+            const holders   = Number(existingForExpiry.committedCount || existingForExpiry.holderCountValue || 1);
+            const pricePerHolder = ppc > 0 && holders > 0 ? ppc : (total / Math.max(holders, 1));
+            if (pricePerHolder > 0) years = Math.max(2, Math.round(pricePerHolder / 55));
+          }
           const d = new Date(fromDate);
-          d.setFullYear(d.getFullYear() + years);
+          d.setFullYear(d.getFullYear() + Math.max(2, years));
           payload.expirationDate = d;
         }
         // Unlimited Plan → no expiry (leave undefined)
       }
+    }
+
+    // Detect unpaid → paid transition so we know whether to send the confirmation email.
+    let wasAlreadyPaidAir = false;
+    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid')) {
+      const prevAir = await Airlines.findById(req.params.id).select('isPaid paymentStatus')
+        || await AirlinesSubscription.findById(req.params.id).select('isPaid paymentStatus');
+      wasAlreadyPaidAir = !!(prevAir?.isPaid || prevAir?.paymentStatus === 'paid');
     }
 
     let doc = await Airlines.findByIdAndUpdate(
@@ -610,6 +629,13 @@ exports.updateAirlinesSubscription = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: doc });
+
+    // Send confirmation email when admin activates a subscription for the first time.
+    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaidAir) {
+      sendAirlinePaymentConfirmation(doc).catch((e) =>
+        console.warn('[updateAirlines] Confirmation email failed:', e.message)
+      );
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
