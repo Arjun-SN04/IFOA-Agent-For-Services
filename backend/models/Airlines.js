@@ -95,6 +95,34 @@ const AirlinesSchema = new mongoose.Schema({
   // Invoice generation tracking — set to true by admin after first PDF download
   invoiceGenerated: { type: Boolean, default: false, index: true },
 
+  // Last renewal snapshot — populated by paymentController after each renewal payment
+  lastRenewal: {
+    plan:           { type: String },
+    multiYearCount: { type: Number },
+    paidAt:         { type: Date },
+    activationDate: { type: Date },   // start of the renewed period (= old expirationDate)
+    expiresAt:      { type: Date },   // new expiration date after renewal
+    price:          { type: Number },
+    invoiceNumber:  { type: String },
+  },
+
+  // Reference to the active Renewal doc (set when user pays for renewal).
+  // Cleared when the renewal is activated or superseded.
+  nextRenewalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Renewal', default: null },
+
+  // Next / queued renewal — set when user pays for renewal BEFORE current plan expires.
+  // The plan is NOT yet active; it activates automatically when activationDate is reached.
+  // Cleared once activated (or admin can clear manually).
+  nextRenewal: {
+    plan:           { type: String },
+    multiYearCount: { type: Number },
+    paidAt:         { type: Date },   // when payment was made
+    activationDate: { type: Date },   // = current expirationDate at time of payment
+    expiresAt:      { type: Date },   // activationDate + plan years
+    price:          { type: Number },
+    invoiceNumber:  { type: String },
+  },
+
   // Invoice request tracking — set to true when airline user requests an invoice
   invoiceRequested:    { type: Boolean, default: false, index: true },
   invoiceRequestedAt:  { type: Date, default: null },

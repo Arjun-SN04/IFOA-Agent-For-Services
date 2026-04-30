@@ -85,6 +85,16 @@ const PaymentSchema = new mongoose.Schema({
     default: null,
   },
 
+  // ── Renewal metadata — persisted so applyRenewalToRegistration can read them ─
+  purpose: {
+    type: String,
+    enum: ['payment', 'renewal'],
+    default: 'payment',
+    index: true,
+  },
+  newSubscriptionPlan:   { type: String, default: null },  // plan user chose at renewal time
+  renewalMultiYearCount: { type: Number, default: null },  // years for multi-year renewal
+
   // ── Metadata / misc ────────────────────────────────────────────────────────
   description:  { type: String, default: '' },
   notes:        { type: String, default: '' },

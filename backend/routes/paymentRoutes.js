@@ -8,6 +8,7 @@ const {
   getPaymentsByRegistration,
   getPaymentById,
   getAllPayments,
+  activateQueuedRenewal,
 } = require('../controller/paymentController');
 
 const auth = require('../middleware/auth');
@@ -34,6 +35,9 @@ router.patch('/:id/save-invoice-draft', auth, adminOnly, saveInvoiceDraft);
 
 // ── Fetch all Payment docs for a registration (user dashboard / admin) ───────
 router.get('/by-registration/:id', auth, getPaymentsByRegistration);
+
+// ── Admin: immediately activate a queued nextRenewal on a registration ───────
+router.post('/admin/activate-renewal', auth, adminOnly, activateQueuedRenewal);
 
 // ── Admin: list all payments (paginated) ─────────────────────────────────────
 router.get('/', auth, adminOnly, getAllPayments);

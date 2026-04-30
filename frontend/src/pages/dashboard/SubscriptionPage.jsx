@@ -45,26 +45,30 @@ async function fetchPaymentRecord(registrationId, token) {
 }
 
 function PlanBadge({ plan }) {
-  const map = {
-    '1 Year Subscription Plan': 'bg-blue-50 border-blue-200 text-blue-700',
-    'Multiple Years Subscription Plan': 'bg-slate-100 border-slate-300 text-slate-700',
-    'Unlimited Plan': 'bg-emerald-50 border-emerald-200 text-emerald-700',
-  }
-  return <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[plan] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>{plan || 'Unknown Plan'}</span>
+  // Normalize: match by substring so minor backend variations still resolve
+  const p = (plan || '').toLowerCase()
+  const cls = p.includes('unlimited')
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+    : p.includes('multiple') || p.includes('multi')
+    ? 'bg-slate-100 border-slate-300 text-slate-700'
+    : p.includes('1 year') || p.includes('one year') || p.length > 0
+    ? 'bg-blue-50 border-blue-200 text-blue-700'
+    : 'bg-slate-50 border-slate-200 text-slate-600'
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${cls}`}>{plan || 'Unknown Plan'}</span>
 }
 
 function PayBadge({ status }) {
-  const map = {
-    paid: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    pending: 'bg-blue-50 border-blue-200 text-blue-700',
-    failed: 'bg-red-50 border-red-200 text-red-700',
-    Active: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-    Pending: 'bg-blue-50 border-blue-200 text-blue-700',
-    Inactive: 'bg-slate-100 border-slate-200 text-slate-500'
-  }
+  // Normalize to lowercase so 'Paid', 'PAID', 'paid' all map correctly
+  const s = (status || '').toLowerCase()
+  const cls = (s === 'paid' || s === 'active')
+    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+    : (s === 'failed' || s === 'inactive')
+    ? 'bg-red-50 border-red-200 text-red-700'
+    : 'bg-blue-50 border-blue-200 text-blue-700' // pending / unknown = blue
+  const label = (s === 'paid' || s === 'active') ? 'Paid' : (s === 'failed' || s === 'inactive') ? status : 'Pending'
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-      {status || 'Pending'}
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${cls}`}>
+      {label}
     </span>
   )
 }
@@ -1118,6 +1122,8 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         amount={chargedCents}  /* TEST MODE — swap chargedCents → renewalAmountCents when done */
         subscriptionData={currentSub}
         purpose="renewal"
+        newSubscriptionPlan={plan}
+        renewalMultiYearCount={plan === 'Multiple Years Subscription Plan' ? multiYearRenewCount : undefined}
         onClose={() => setShowPayment(false)}
         onSuccess={(inv, updatedReg) => {
           onSaved(updatedReg || currentSub)
@@ -1441,27 +1447,37 @@ export default function SubscriptionPage() {
             subscriptionData={sub}
             onClose={() => { setShowPayModal(false); setPayTarget(null); setPayingId(null) }}
             onSuccess={async (inv) => {
-              invalidate(`subs_${user?.id || user?.email}`)
+              // 1. Optimistically mark as paid immediately so UI updates at once
               const updated = { ...sub, paymentStatus: 'paid', status: 'Active', isPaid: true }
               setSubs(prev => prev.map(s => s._id === updated._id ? updated : s))
               setSub(updated)
+              // 2. Seed the cache with the paid record so the next getOrFetch
+              //    doesn't overwrite with a stale 'pending' response from the backend
+              //    before the Stripe webhook has had a chance to fire.
+              cacheSet(`subs_${user?.id || user?.email}`, [updated])
               setShowPayModal(false)
               setPayTarget(null)
               setPayingId(null)
               if (inv) setViewInvoice(inv)
+              // 3. Fetch the truly-fresh record from the backend (non-blocking)
+              //    and update the cache + state once it confirms the paid status.
               try {
                 const headers = { Authorization: `Bearer ${token}` }
-                const isAirline = user?.role === 'airline'
-                const endpoint = isAirline
+                const isAirlineUser = user?.role === 'airline'
+                const endpoint = isAirlineUser
                   ? `${BASE_URL}/airlines/${updated._id}`
                   : `${BASE_URL}/individuals/${updated._id}`
                 const r = await API.get(endpoint, { headers })
                 const fresh = r.data.data
                 if (fresh) {
-                  setSubs(prev => prev.map(s => s._id === fresh._id ? fresh : s))
-                  setSub(fresh)
+                  // Only accept the fresh record if it confirms paid; otherwise keep optimistic
+                  const freshIsPaid = fresh.isPaid === true || fresh.paymentStatus === 'paid' || fresh.status === 'Active'
+                  const merged = freshIsPaid ? fresh : { ...fresh, paymentStatus: 'paid', status: 'Active', isPaid: true }
+                  setSubs(prev => prev.map(s => s._id === merged._id ? merged : s))
+                  setSub(merged)
+                  cacheSet(`subs_${user?.id || user?.email}`, [merged])
                 }
-              } catch (_) { /* non-critical */ }
+              } catch (_) { /* non-critical — optimistic update already applied */ }
             }}
           />
         )}
@@ -1797,6 +1813,88 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
           )}
         </div>
       </div>
+
+      {/* ── Upcoming / Queued Next Plan Card ───────────────────────────── */}
+      {s.nextRenewal?.paidAt && (() => {
+        const nr          = s.nextRenewal
+        const pricePerUnit = isAirline ? (s.pricePerCertificate || 55) : 55
+        const nrPlanLabel = nr.plan === 'Multiple Years Subscription Plan'
+          ? `Multiple Years (${
+              Number(nr.multiYearCount) > 1
+                ? Number(nr.multiYearCount)
+                : Math.max(2, Math.round((nr.price || 0) / pricePerUnit))
+            } yrs)`
+          : nr.plan === 'Unlimited Plan'
+            ? 'Unlimited Plan (Lifetime)'
+            : (nr.plan || '—')
+
+        const activationDate = nr.activationDate ? new Date(nr.activationDate) : null
+
+        // Only show for genuinely queued renewals (activation date is in the future).
+        // If the plan was already expired and renewed immediately, the main subscription
+        // card already shows the correct dates — no duplicate card needed.
+        if (!activationDate || activationDate <= new Date()) return null
+
+        return (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-emerald-100 bg-emerald-100/60">
+              <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-emerald-800">Next Subscription Plan</p>
+                <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                  Activates on {fmt(activationDate)} — when your current plan expires
+                </p>
+              </div>
+              <span className="ml-auto text-[10px] font-semibold text-emerald-600">
+                Paid {fmt(nr.paidAt)}
+              </span>
+            </div>
+
+            {/* Plan details grid */}
+            <div className="px-4 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Plan</span>
+                <span className="text-sm font-bold text-slate-800">{nrPlanLabel}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Starts On</span>
+                <span className="text-sm font-semibold text-slate-800">{fmt(activationDate)}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">
+                  {nr.plan === 'Unlimited Plan' ? 'Duration' : 'Expires On'}
+                </span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {nr.plan === 'Unlimited Plan' ? 'Lifetime (No Expiry)' : fmt(nr.expiresAt)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Amount Paid</span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {nr.price != null ? `$${Number(nr.price).toFixed(2)}` : '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer note */}
+            <div className="px-4 sm:px-6 pb-4">
+              <div className="rounded-xl bg-emerald-100/70 border border-emerald-200 px-4 py-3">
+                <p className="text-xs text-emerald-700 leading-relaxed">
+                  ✓ Your renewal is confirmed and queued. Your current plan remains fully active until <strong>{fmt(s.expirationDate)}</strong>. This new plan starts automatically on <strong>{fmt(activationDate)}</strong> — no action needed.
+                </p>
+                {nr.invoiceNumber && (
+                  <p className="text-[10px] text-emerald-500 mt-1.5 font-mono">Invoice: {nr.invoiceNumber}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

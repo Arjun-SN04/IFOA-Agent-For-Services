@@ -416,7 +416,7 @@ export function serverPaymentToInvoice(paymentDoc) {
 
 // ── Wrapper: fetches clientSecret then mounts Elements ────────────────────────
 // newSubscriptionPlan: optional — pass when user changes plan at renewal time
-export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan }) {
+export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount }) {
   const [clientSecret, setClientSecret] = useState(null)
   const [fetchError,   setFetchError]   = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -431,6 +431,8 @@ export default function PaymentModal({ registrationId, registrationModel, amount
         }
         // Forward plan-change request so backend can compute the correct amount
         if (newSubscriptionPlan) body.newSubscriptionPlan = newSubscriptionPlan
+        // Forward user-selected year count for Multi-Year renewals
+        if (renewalMultiYearCount) body.renewalMultiYearCount = renewalMultiYearCount
 
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
           method:  'POST',
@@ -450,7 +452,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
       }
     }
     create()
-  }, [registrationId, registrationModel, newSubscriptionPlan])
+  }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount])
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

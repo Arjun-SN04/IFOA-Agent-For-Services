@@ -134,6 +134,82 @@ function buildAirlineConfirmationHtml(doc) {
   `);
 }
 
+// ── Renewal confirmation — Individual ────────────────────────────────────────
+function buildIndividualRenewalHtml(doc) {
+  const name    = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member';
+  const renewal = doc.lastRenewal || {};
+  const plan    = renewal.plan || doc.subscriptionPlan || '';
+  const email   = doc.email || doc.paymentEmail || '';
+  const cert    = doc.primaryCertificate || '';
+  const faaNum  = doc.faaCertificateNumber || '';
+  const ftn     = doc.iacraTrackingNumber  || '';
+  const fmtD    = (d) => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
+  const activationDate = fmtD(renewal.activationDate);
+  const expiresAt      = renewal.expiresAt ? fmtD(renewal.expiresAt) : (doc.expirationDate ? fmtD(doc.expirationDate) : 'N/A (Unlimited)');
+  const paidAt         = fmtD(renewal.paidAt || new Date());
+
+  return wrap(`
+    <p style="margin:0 0 16px;">Dear ${escHtml(name)},</p>
+    <p style="margin:0 0 16px;">Great news — your IFOA USA subscription has been successfully renewed!</p>
+    <p style="margin:0 0 16px;">Your U.S. Agent for Service coverage continues uninterrupted as per your renewed plan (<strong>${escHtml(plan)}</strong>).</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">
+      <tr><td style="background:#f7f7f7;padding:10px 16px;font-size:12px;font-weight:bold;color:#555555;border-bottom:1px solid #e0e0e0;">RENEWAL SUMMARY</td></tr>
+      <tr><td style="padding:12px 16px;font-size:13px;line-height:2.2;">
+        <strong>Plan:</strong> ${escHtml(plan)}<br>
+        <strong>Renewed On:</strong> ${escHtml(paidAt)}<br>
+        <strong>New Period Starts:</strong> ${escHtml(activationDate)}<br>
+        <strong>New Expiry Date:</strong> ${escHtml(expiresAt)}<br>
+        ${faaNum ? `<strong>FAA Certificate #:</strong> ${escHtml(faaNum)}<br>` : ''}
+        ${ftn    ? `<strong>IACRA FTN #:</strong> ${escHtml(ftn)}<br>` : ''}
+        ${cert   ? `<strong>Certificate Type:</strong> ${escHtml(cert)}<br>` : ''}
+        <strong>Email:</strong> ${escHtml(email)}
+      </td></tr>
+    </table>
+    <p style="margin:0 0 16px;">Your renewed subscription will become active on <strong>${escHtml(activationDate)}</strong> and will be valid until <strong>${escHtml(expiresAt)}</strong>.</p>
+    <p style="margin:0 0 16px;">No further action is required. We will continue forwarding FAA correspondence to you immediately throughout your renewed period.</p>
+    <p style="margin:0 0 16px;">If you have any questions, feel free to contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
+    <p style="margin:0 0 16px;">Thank you for renewing with IFOA USA!</p>
+    <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
+  `);
+}
+
+// ── Renewal confirmation — Airline ────────────────────────────────────────────
+function buildAirlineRenewalHtml(doc) {
+  const contact = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner';
+  const airline = doc.airlineName || '';
+  const renewal = doc.lastRenewal || {};
+  const plan    = renewal.plan || doc.subscriptionPlan || '';
+  const email   = doc.email || doc.paymentEmail || '';
+  const holders = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+  const fmtD    = (d) => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
+  const activationDate = fmtD(renewal.activationDate);
+  const expiresAt      = renewal.expiresAt ? fmtD(renewal.expiresAt) : (doc.expirationDate ? fmtD(doc.expirationDate) : 'N/A (Unlimited)');
+  const paidAt         = fmtD(renewal.paidAt || new Date());
+
+  return wrap(`
+    <p style="margin:0 0 16px;">Dear ${escHtml(contact)},</p>
+    <p style="margin:0 0 16px;">Great news — <strong>${escHtml(airline)}</strong>'s IFOA USA subscription has been successfully renewed!</p>
+    <p style="margin:0 0 16px;">Your company's U.S. Agent for Service coverage continues uninterrupted as per the renewed plan (<strong>${escHtml(plan)}</strong>).</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">
+      <tr><td style="background:#f7f7f7;padding:10px 16px;font-size:12px;font-weight:bold;color:#555555;border-bottom:1px solid #e0e0e0;">RENEWAL SUMMARY</td></tr>
+      <tr><td style="padding:12px 16px;font-size:13px;line-height:2.2;">
+        <strong>Company:</strong> ${escHtml(airline)}<br>
+        <strong>Plan:</strong> ${escHtml(plan)}<br>
+        <strong>Renewed On:</strong> ${escHtml(paidAt)}<br>
+        <strong>New Period Starts:</strong> ${escHtml(activationDate)}<br>
+        <strong>New Expiry Date:</strong> ${escHtml(expiresAt)}<br>
+        <strong>Certificate Holders:</strong> ${holders}<br>
+        <strong>Contact Email:</strong> ${escHtml(email)}
+      </td></tr>
+    </table>
+    <p style="margin:0 0 16px;">The renewed subscription will be active from <strong>${escHtml(activationDate)}</strong> until <strong>${escHtml(expiresAt)}</strong>.</p>
+    <p style="margin:0 0 16px;">No further action is required. We will continue forwarding FAA correspondence for all certificate holders throughout the renewed period.</p>
+    <p style="margin:0 0 16px;">If you have any questions, please contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
+    <p style="margin:0 0 16px;">Thank you for renewing with IFOA USA!</p>
+    <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
+  `);
+}
+
 // ── Expiry reminder — shared ──────────────────────────────────────────────────
 function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
   const name     = isAirline
@@ -239,6 +315,32 @@ async function sendAirlinePaymentConfirmation(doc, userEmail) {
   });
 }
 
+/**
+ * Send the Individual renewal confirmation email.
+ */
+async function sendIndividualRenewalConfirmation(doc, userEmail) {
+  const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
+  if (!recipients.length) return;
+  await sendMail({
+    to:      recipients.join(', '),
+    subject: 'IFOA USA — Your Subscription Has Been Renewed',
+    html:    buildIndividualRenewalHtml(doc),
+  });
+}
+
+/**
+ * Send the Airline renewal confirmation email.
+ */
+async function sendAirlineRenewalConfirmation(doc, userEmail) {
+  const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
+  if (!recipients.length) return;
+  await sendMail({
+    to:      recipients.join(', '),
+    subject: `IFOA USA — ${doc.airlineName || 'Your Company'} Subscription Renewed`,
+    html:    buildAirlineRenewalHtml(doc),
+  });
+}
+
 async function sendExpiryReminder(doc, isAirline, daysLeft) {
   const to = doc.paymentEmail || doc.email;
   if (!to) return;
@@ -253,5 +355,7 @@ async function sendExpiryReminder(doc, isAirline, daysLeft) {
 module.exports = {
   sendIndividualPaymentConfirmation,
   sendAirlinePaymentConfirmation,
+  sendIndividualRenewalConfirmation,
+  sendAirlineRenewalConfirmation,
   sendExpiryReminder,
 };

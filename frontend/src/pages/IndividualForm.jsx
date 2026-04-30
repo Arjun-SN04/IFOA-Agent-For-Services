@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from '../components/Navbar'
@@ -48,6 +48,7 @@ const SERVICE_CONTACT = [
 const INIT = {
   subscriptionPlan: '1 Year Subscription Plan',
   price: 69.0,
+  multiYearCount: 2,
   firstName: '', lastName: '', middleName: '', dateOfBirth: '',
   addressLine1: '', city: '', state: '', postalCode: '', country: '',
   phone: '', email: '',
@@ -56,6 +57,109 @@ const INIT = {
   hasSecondaryCertificate: false,
   secondaryCertificate: '', secondaryFaaCertificateNumber: '', secondaryIacraTrackingNumber: '',
   paymentEmail: '', agreedToTerms: false,
+}
+
+// ── resolvePaymentStatus ──────────────────────────────────────────────────────
+// Given a raw Individual DB record, return 'paid' or 'pending'.
+function resolvePaymentStatus(reg) {
+  if (!reg) return null
+  const paymentStatus = String(reg.paymentStatus || '').toLowerCase()
+  const invoiceStatus = String(reg.invoiceStatus || '').toLowerCase()
+  const accountStatus = String(reg.status || '').toLowerCase()
+  const paid =
+    reg.isPaid === true ||
+    paymentStatus === 'paid' ||
+    invoiceStatus === 'paid' ||
+    accountStatus === 'active' ||
+    reg.isFormCompleted === true
+  return paid ? 'paid' : 'pending'
+}
+
+// ── fetchLiveRegistration ────────────────────────────────────────────────────
+// Fetches the LIVE registration record directly from MongoDB.
+// Returns: { status: 'paid'|'pending'|null, record: <DB doc>|null }
+//
+// Strategy (in order):
+//   1. GET /individuals/:id for each subscriptionId / registrationId
+//   2. GET /individuals/by-email as fallback
+async function fetchLiveRegistration(user, token) {
+  if (!user || !token) return { status: null, record: null }
+
+  const headers = { Authorization: `Bearer ${token}` }
+  let bestPending = null
+
+  // Strategy 1: by subscription IDs
+  const subIds = Array.isArray(user.subscriptionIds)
+    ? user.subscriptionIds.filter(Boolean)
+    : []
+  const regId = user.registrationId
+  if (regId && !subIds.includes(regId)) subIds.unshift(regId)
+
+  for (const id of subIds) {
+    if (!id || !/^[a-f\d]{24}$/i.test(String(id))) continue
+    try {
+      const res = await axios.get(`${BASE_URL}/individuals/${id}`, { headers })
+      const reg = res?.data?.data
+      if (!reg) continue
+      const status = resolvePaymentStatus(reg)
+      if (status === 'paid') return { status: 'paid', record: reg }
+      if (status === 'pending' && !bestPending) bestPending = reg
+    } catch { /* ignore */ }
+  }
+
+  // Strategy 2: by email
+  if (user.email) {
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/individuals/by-email?email=${encodeURIComponent(user.email)}`,
+        { headers }
+      )
+      const regs = Array.isArray(res?.data?.all)
+        ? res.data.all
+        : [res?.data?.data].filter(Boolean)
+      for (const reg of regs) {
+        const status = resolvePaymentStatus(reg)
+        if (status === 'paid') return { status: 'paid', record: reg }
+        if (status === 'pending' && !bestPending) bestPending = reg
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (bestPending) return { status: 'pending', record: bestPending }
+  return { status: null, record: null }
+}
+
+// Thin wrapper kept for backward compat with the polling useEffect
+async function fetchLivePaymentStatus(user, token) {
+  const { status } = await fetchLiveRegistration(user, token)
+  return status
+}
+
+// ── mergeDbRecord ────────────────────────────────────────────────────────────
+// Merges a live DB Individual record into the current formData state.
+// For multi-year plans, year count is ALWAYS derived from price ($55/yr)
+// because the DB's multiYearCount field defaults to 3 regardless of the
+// actual plan the user chose — only price is always saved correctly.
+function mergeDbRecord(rec, prev) {
+  const priceNum = Number(rec.price || 0)
+  const dbYears = rec.subscriptionPlan === 'Multiple Years Subscription Plan' && priceNum >= 110
+    ? Math.round(priceNum / 55)
+    : (rec.multiYearCount || 2)
+  return {
+    ...prev,
+    subscriptionPlan: rec.subscriptionPlan || prev.subscriptionPlan,
+    price:            rec.price            ?? prev.price,
+    multiYearCount:   dbYears,
+    firstName:        rec.firstName        || prev.firstName,
+    lastName:         rec.lastName         || prev.lastName,
+    email:            rec.email            || prev.email,
+    phone:            rec.phone            || prev.phone,
+    dateOfBirth:      rec.dateOfBirth      || prev.dateOfBirth,
+    primaryCertificate:       rec.primaryCertificate       || prev.primaryCertificate,
+    primaryAirmanCertificate: rec.primaryAirmanCertificate || prev.primaryAirmanCertificate,
+    faaCertificateNumber:     rec.faaCertificateNumber     || prev.faaCertificateNumber,
+    iacraTrackingNumber:      rec.iacraTrackingNumber      || prev.iacraTrackingNumber,
+  }
 }
 
 // ── WrongRoleBanner ───────────────────────────────────────────────────────────
@@ -79,7 +183,7 @@ function WrongRoleBanner() {
             Create Individual Account
           </Link>
           <Link to="/airlines/register" className="inline-flex items-center gap-1.5 font-semibold px-4 py-2 rounded-lg text-xs hover:bg-white transition-all whitespace-nowrap" style={{ border: `1px solid ${C.blueLight}`, color: C.blue }}>
-          <Plane className="w-3.5 h-3.5" /> Airlines Form
+            <Plane className="w-3.5 h-3.5" /> Airlines Form
           </Link>
         </div>
       </div>
@@ -89,8 +193,8 @@ function WrongRoleBanner() {
 
 // ── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ onClose }) {
-  const navigate  = useNavigate()
-  const location  = useLocation()
+  const navigate = useNavigate()
+  const location = useLocation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -99,7 +203,6 @@ function AuthModal({ onClose }) {
         transition={{ duration: 0.22, ease: 'easeOut' }}
         className="relative w-full max-w-sm rounded-3xl overflow-hidden bg-white shadow-2xl"
         style={{ border: `1px solid ${C.gray200}` }} onClick={e => e.stopPropagation()}>
-        {/* Top accent */}
         <div className="h-1 w-full" style={{ background: C.blue }} />
         <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-gray-100" style={{ color: C.gray400 }}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -138,7 +241,7 @@ function AuthModal({ onClose }) {
   )
 }
 
-// ── ActiveSubGuard ───────────────────────────────────────────────────────────
+// ── ActiveSubGuard ────────────────────────────────────────────────────────────
 function ActiveSubGuard() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: C.gray50 }}>
@@ -172,19 +275,90 @@ export default function IndividualForm() {
   const { user, linkRegistration, addSubscription } = useAuth()
   const isBlocked = user?.role === 'airline'
 
-  // Block if user already has an active (paid) individual subscription
-  const hasActiveSub = user?.role === 'individual' &&
-    (user?.paymentStatus === 'paid' || user?.status === 'Active' || user?.isPaid === true)
-  const [step, setStep]           = useState(1)
-  const [formData, setFormData]   = useState(INIT)
-  const [submitted, setSubmitted] = useState(false)
+  const [step, setStep]             = useState(1)
+  const [formData, setFormData]     = useState(INIT)
+  const [submitted, setSubmitted]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError]         = useState('')
+  const [error, setError]           = useState('')
   const [showAuthModal, setShowAuthModal] = useState(false)
+
+  // ── existingPaymentStatus ─────────────────────────────────────────────────
+  // null      = no existing registration on file
+  // 'pending' = registered but not yet paid → RED banner in Step 4
+  // 'paid'    = payment confirmed            → BLUE banner in Step 4
+  //
+  // Always fetched LIVE from the DB via registrationId/subscriptionIds first,
+  // then by email as a fallback — never relies on the stale JWT.
+  const [existingPaymentStatus, setExistingPaymentStatus] = useState(null)
+  // The actual saved registration record from DB — used to show real plan/price in the summary
+  const [existingRecord, setExistingRecord] = useState(null)
+
+  // Block if user already has an active (paid) individual subscription.
+  // We only hard-redirect to ActiveSubGuard when the stale JWT indicates paid
+  // AND there is no live existingPaymentStatus yet (cold visit with a paid account).
+  // When existingPaymentStatus === 'paid' we instead let Step 4 show the blue
+  // "Already Paid" banner so the user can see their details and navigate to subscription.
+  const jwtSaysPaid = user?.role === 'individual' &&
+    (
+      user?.paymentStatus === 'paid' ||
+      user?.status === 'Active' ||
+      user?.isPaid === true
+    )
+  // Only show the hard gate when JWT says paid AND we've confirmed via live fetch
+  // (existingPaymentStatus === 'paid'), but NOT when existingPaymentStatus was set
+  // because the user just completed payment in the same session (in which case the
+  // SuccessPage shows instead via `submitted`).
+  // We no longer hard-gate paid users out of the form entirely.
+  // Instead, Step 4 shows a blue "Already Paid" banner when existingPaymentStatus === 'paid'.
+  // ActiveSubGuard is kept as a fallback only for cases where the form is somehow
+  // re-submitted (the backend will block it anyway).
+  const hasActiveSub = false
   const formRef = useRef(null)
 
-  const update = (fields) => setFormData((prev) => ({ ...prev, ...fields }))
+  // ── Live DB lookup on mount & whenever user changes ───────────────────────
+  // Uses fetchLiveRegistration so we get the real DB record and can populate
+  // the Order Summary with accurate plan/name/price data.
+  useEffect(() => {
+    if (!user || user.role === 'airline') return
+    const token = localStorage.getItem('ifoa_token') || ''
+    fetchLiveRegistration(user, token).then(({ status, record }) => {
+      if (status !== null) setExistingPaymentStatus(status)
+      if (record) {
+        setExistingRecord(record)
+        setFormData(prev => mergeDbRecord(record, prev))
+      }
+    })
+  }, [user])
 
+  // ── Poll every 8 s while payment is pending so blue banner appears
+  //    automatically after the user completes payment on the Subscription page
+  useEffect(() => {
+    if (existingPaymentStatus !== 'pending') return
+    if (!user || user.role === 'airline') return
+    const token = localStorage.getItem('ifoa_token') || ''
+    const id = setInterval(() => {
+      fetchLiveRegistration(user, token).then(({ status, record }) => {
+        if (status === 'paid') {
+          setExistingPaymentStatus('paid')
+          if (record) {
+            setExistingRecord(record)
+            setFormData(prev => mergeDbRecord(record, prev))
+          }
+        }
+      })
+    }, 8000)
+    return () => clearInterval(id)
+  }, [existingPaymentStatus, user])
+
+  // ── Auto-jump to Step 4 when we detect a paid/pending existing registration ──
+  useEffect(() => {
+    if (existingPaymentStatus && step < 4) {
+      goToStep(4)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingPaymentStatus])
+
+  const update = (fields) => setFormData((prev) => ({ ...prev, ...fields }))
   const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const goToStep = (n) => {
@@ -208,14 +382,28 @@ export default function IndividualForm() {
         try {
           if (!user.registrationId) await linkRegistration(newId, 'Individual')
           else await addSubscription(newId)
-        } catch {
-          void 0
-        }
+        } catch { void 0 }
       }
       if (opts.returnId) return newId
       setSubmitted(true); return null
     } catch (e) {
-      setError(e?.response?.data?.message || 'Submission failed. Please try again.')
+      const msg = e?.response?.data?.message || ''
+      if (
+        msg.toLowerCase().includes('already submitted') ||
+        msg.toLowerCase().includes('already registered')
+      ) {
+        // Re-fetch LIVE record — do NOT assume 'pending', user may have already paid
+        const token = localStorage.getItem('ifoa_token') || ''
+        const { status: liveStatus, record: liveRecord } = await fetchLiveRegistration(user, token)
+        setExistingPaymentStatus(liveStatus ?? 'pending')
+        if (liveRecord) {
+          setExistingRecord(liveRecord)
+          setFormData(prev => mergeDbRecord(liveRecord, prev))
+        }
+        setError('')
+      } else {
+        setError(msg || 'Submission failed. Please try again.')
+      }
       return null
     } finally { setSubmitting(false) }
   }
@@ -224,14 +412,13 @@ export default function IndividualForm() {
     try {
       await axios.patch(`${BASE_URL}/individuals/${registrationId}/mark-paid`, {},
         { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch {
-      void 0
-    }
+    } catch { void 0 }
+    setExistingPaymentStatus('paid')
     setSubmitted(true)
   }
 
   if (hasActiveSub) return <><Navbar /><ActiveSubGuard /></>
-  if (submitted) return <><Navbar /><SuccessPage name={formData.firstName} /></>
+  if (submitted)    return <><Navbar /><SuccessPage name={formData.firstName} /></>
 
   const handleNextToStep2 = () => { if (isBlocked) return; goToStep(2) }
   const handleNextToStep3 = () => { if (!requireAuth()) return; goToStep(3) }
@@ -248,7 +435,7 @@ export default function IndividualForm() {
       </AnimatePresence>
 
       {/* ═══════════════════════════════════════════════════════════
-          HERO — clean, minimal, light background
+          HERO
       ═══════════════════════════════════════════════════════════ */}
       <section style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
         <div className="max-w-6xl mx-auto px-6 py-16 lg:py-20 grid lg:grid-cols-[1fr_1.2fr] gap-10 items-center">
@@ -265,7 +452,8 @@ export default function IndividualForm() {
                 { icon: <MapPin className="w-3.5 h-3.5" />, text: 'U.S. Based Office' },
                 { icon: <Zap className="w-3.5 h-3.5" />, text: 'Fast Processing' },
               ].map(b => (
-                <div key={b.text} className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold" style={{ border: `1px solid ${C.gray200}`, background: C.white, color: C.gray600 }}>
+                <div key={b.text} className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                  style={{ border: `1px solid ${C.gray200}`, background: C.white, color: C.gray600 }}>
                   {b.icon}{b.text}
                 </div>
               ))}
@@ -433,9 +621,9 @@ export default function IndividualForm() {
                     <div key={item.label}
                       className="min-w-[7rem] flex-1 rounded-2xl px-4 py-3 border transition-all duration-200 relative"
                       style={{
-                        background: current ? C.blue : done ? C.blueMuted : C.gray50,
-                        borderColor: current ? C.blue : done ? C.blueLight : C.gray200,
-                        color: current ? C.white : done ? C.blue : locked ? C.gray400 : C.gray500,
+                        background:   current ? C.blue : done ? C.blueMuted : C.gray50,
+                        borderColor:  current ? C.blue : done ? C.blueLight : C.gray200,
+                        color:        current ? C.white : done ? C.blue : locked ? C.gray400 : C.gray500,
                       }}>
                       <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Step {num}</p>
                       <p className="mt-0.5 text-sm font-bold truncate">{item.label}</p>
@@ -465,17 +653,26 @@ export default function IndividualForm() {
                   {step === 2 && <Step2Certificates data={formData} update={update} onNext={handleNextToStep3} onBack={() => goToStep(1)} />}
                   {step === 3 && <Step3Preview data={formData} onNext={handleNextToStep4} onBack={() => goToStep(2)} />}
                   {step === 4 && (
-                    <Step4Payment data={formData} update={update} onBack={() => goToStep(3)}
-                      onSubmit={handleSubmit} onMarkPaidAndFinish={handleMarkPaidAndFinish}
-                      submitting={submitting} error={error} isBlocked={isBlocked} />
+                    <Step4Payment
+                      data={formData}
+                      update={update}
+                      onBack={() => goToStep(3)}
+                      onSubmit={handleSubmit}
+                      onMarkPaidAndFinish={handleMarkPaidAndFinish}
+                      submitting={submitting}
+                      error={error}
+                      isBlocked={isBlocked}
+                      existingPaymentStatus={existingPaymentStatus}
+                    />
                   )}
                 </motion.div>
               </AnimatePresence>
             </div>
           </motion.div>
 
-          {/* Airlines CTA below form */}
-          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.2 }} className="mt-6 rounded-2xl p-5 flex items-center justify-between gap-4"
+          {/* Airlines CTA */}
+          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.2 }}
+            className="mt-6 rounded-2xl p-5 flex items-center justify-between gap-4"
             style={{ border: `1px solid ${C.gray200}`, background: C.white }}>
             <div>
               <p className="text-sm font-bold" style={{ color: C.dark }}>Managing 3+ Certificate Holders?</p>

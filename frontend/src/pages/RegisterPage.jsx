@@ -104,6 +104,9 @@ function hydrateAirlineFormFromExisting(existing) {
     paymentMethod: existing.paymentMethod || 'card',
     agreedToTerms: true,
     _id: existing._id,
+    // Payment status fields — needed by ExistingFormBanner
+    isPaid: existing.isPaid,
+    status: existing.status,
   }
 }
 
@@ -112,6 +115,7 @@ function hydrateIndividualFormFromExisting(existing) {
   return {
     subscriptionPlan: existing.subscriptionPlan || INDIVIDUAL_INIT.subscriptionPlan,
     price: Number(existing.price ?? existing.totalAmount ?? existing.totalServiceFees ?? INDIVIDUAL_INIT.price),
+    multiYearCount: existing.multiYearCount || null,
     firstName: existing.firstName || '',
     lastName: existing.lastName || '',
     middleName: existing.middleName || '',
@@ -125,6 +129,7 @@ function hydrateIndividualFormFromExisting(existing) {
     email: existing.email || '',
     primaryAirmanCertificate: existing.primaryAirmanCertificate || 'EXISTING',
     primaryCertificate: existing.primaryCertificate || '',
+    faaCertificateNumber: existing.faaCertificateNumber || '',
     iacraTrackingNumber: existing.iacraTrackingNumber || '',
     hasSecondaryCertificate: !!existing.hasSecondaryCertificate,
     secondaryCertificate: existing.secondaryCertificate || '',
@@ -133,6 +138,10 @@ function hydrateIndividualFormFromExisting(existing) {
     paymentEmail: existing.paymentEmail || existing.email || '',
     agreedToTerms: true,
     _id: existing._id,
+    // Payment status fields — needed by ExistingFormBanner
+    isPaid: existing.isPaid,
+    paymentStatus: existing.paymentStatus,
+    status: existing.status,
   }
 }
 
@@ -325,40 +334,47 @@ function ExistingFormBanner({ regType, data }) {
   const isIndividual = regType === 'individual'
   const isPaid = data?.isPaid === true || data?.paymentStatus === 'paid' || data?.status === 'Active'
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: `1.5px solid ${RX}`, background: RM }}>
-      {/* Alert header */}
-      <div className="flex items-start gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${RX}` }}>
-        <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5" style={{ background: RX }}>
-          <svg className="w-4 h-4" style={{ color: R }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
+    <div className="rounded-2xl overflow-hidden" style={{ border: `1.5px solid ${BXL}`, background: BM }}>
+      {/* Header */}
+      <div className="flex items-start gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${BXL}` }}>
+        <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center mt-0.5" style={{ background: BXL }}>
+          {isPaid ? (
+            <svg className="w-4 h-4" style={{ color: B }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" style={{ color: B }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          )}
         </div>
         <div className="flex-1">
-          <p className="text-sm font-black mb-0.5" style={{ color: RD }}>
+          <p className="text-sm font-black mb-0.5" style={{ color: BD }}>
             {isIndividual ? 'Individual registration already submitted' : 'Company registration already submitted'}
           </p>
-          <p className="text-xs leading-relaxed" style={{ color: '#991b1b' }}>
-            Only one subscription is allowed per account. Your form is already on file.
-            {!isPaid && ' Complete your pending payment from the Subscription page.'}
+          <p className="text-xs leading-relaxed" style={{ color: '#1e40af' }}>
+            {isPaid
+              ? 'Your subscription is active. Manage your plan and details from the Subscription page.'
+              : 'Only one subscription is allowed per account. Your form is already on file. Complete your pending payment from the Subscription page.'}
           </p>
         </div>
       </div>
 
       {/* CTA row */}
-      <div className="flex items-center gap-3 px-5 py-3.5" style={{ background: '#fff1f2' }}>
+      <div className="flex items-center gap-3 px-5 py-3.5" style={{ background: '#eff6ff' }}>
         <div className="flex-1">
-          <p className="text-[11px] font-semibold" style={{ color: RD }}>
+          <p className="text-[11px] font-semibold" style={{ color: BD }}>
             {isPaid
-              ? 'Your subscription is active. Manage it from your dashboard.'
+              ? '✓ Payment confirmed — subscription is active.'
               : 'Payment is pending — go to Subscription to complete it.'}
           </p>
         </div>
         <Link
           to="/dashboard/subscription"
           className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl text-white transition-all"
-          style={{ background: R }}
-          onMouseEnter={e => e.currentTarget.style.background = RD}
-          onMouseLeave={e => e.currentTarget.style.background = R}
+          style={{ background: B }}
+          onMouseEnter={e => e.currentTarget.style.background = BD}
+          onMouseLeave={e => e.currentTarget.style.background = B}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
@@ -397,7 +413,14 @@ function ExistingOrderSummary({ regType, data }) {
         {isIndividual ? (
           <>
             <SummaryRow label="Registrant"       value={[data.firstName, data.lastName].filter(Boolean).join(' ') || null} />
-            <SummaryRow label="Plan"              value={data.subscriptionPlan === 'Multiple Years Subscription Plan' ? `Multiple Years (${data.multiYearCount || 2} yrs)` : (data.subscriptionPlan || '1 Year Subscription Plan')} />
+            <SummaryRow label="Plan"              value={data.subscriptionPlan === 'Multiple Years Subscription Plan'
+              ? (() => {
+                  const yrs = Number(data.multiYearCount) > 1
+                    ? Number(data.multiYearCount)
+                    : Math.max(2, Math.round(Number(data.price || 0) / 55))
+                  return `Multiple Years (${yrs} yrs)`
+                })()
+              : (data.subscriptionPlan || '1 Year Subscription Plan')} />
             <SummaryRow label="Email"             value={data.email} />
             <SummaryRow label="Phone"             value={data.phone} />
             <SummaryRow label="Date of Birth"     value={fmt(data.dateOfBirth)} />

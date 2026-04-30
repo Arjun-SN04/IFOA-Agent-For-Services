@@ -75,6 +75,10 @@ export const getAllPayments = (params) => API.get('/payments', { params })
 export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) =>
   API.patch(`/payments/${paymentId}/save-invoice-draft`, { invoiceDraft, invoiceNumber })
 
+// Admin: immediately activate the queued nextRenewal on a registration
+export const activateQueuedRenewal = (registrationId, registrationModel) =>
+  API.post('/payments/admin/activate-renewal', { registrationId, registrationModel })
+
 // ── Invoices (canonical Invoice model) ─────────────────────────────────────────────
 // Fetches a fresh DB-backed unique invoice number (format: Invoice US-350-26)
 export const generateInvoiceNumber     = ()           => API.get('/invoices/generate-number')

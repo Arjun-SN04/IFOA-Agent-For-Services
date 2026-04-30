@@ -21,6 +21,7 @@ import {
   generateInvoiceNumber,
   getInvoiceByRegistration,
   saveInvoiceDraftToDoc,
+  activateQueuedRenewal,
 } from '../services/api'
 
 const fmtDate = (v) =>
@@ -91,8 +92,84 @@ function SectionHead({ label }) {
   return <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3 pt-1">{label}</p>
 }
 
+// ─── NextRenewalSection — shared between Individual & Airline view modals ──────
+function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
+  const nr = record.nextRenewal
+  if (!nr?.paidAt) return null
+
+  const activationDate = nr.activationDate ? new Date(nr.activationDate) : null
+  // Only show for genuinely queued renewals (activation is in the future).
+  if (!activationDate || activationDate <= new Date()) return null
+
+  const ppu = record.pricePerCertificate || 55
+  const nrPlanLabel = nr.plan === 'Multiple Years Subscription Plan'
+    ? `Multiple Years (${Number(nr.multiYearCount) > 1 ? Number(nr.multiYearCount) : Math.max(2, Math.round(Number(nr.price || 0) / ppu))} yrs)`
+    : nr.plan === 'Unlimited Plan'
+      ? 'Unlimited Plan'
+      : (nr.plan || '—')
+
+  const [activating, setActivating] = React.useState(false)
+  const [activateErr, setActivateErr] = React.useState('')
+
+  const handleActivate = async () => {
+    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n• Switch plan to: ${nrPlanLabel}\n• Set expiry to: ${fmtDate(nr.expiresAt)}\n• Use invoice: ${nr.invoiceNumber || '—'}\n\nThis cannot be undone automatically.`)) return
+    setActivating(true)
+    setActivateErr('')
+    try {
+      const res = await activateQueuedRenewal(record._id, registrationModel)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      setActivateErr(e?.response?.data?.message || 'Activation failed.')
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  return (
+    <div className="border-t border-emerald-100 pt-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 pt-1">Next / Upcoming Plan</p>
+          <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border bg-emerald-50 border-emerald-200 text-emerald-600">
+            Queued
+          </span>
+        </div>
+        {/* Admin: force-activate the queued plan immediately */}
+        <button
+          onClick={handleActivate}
+          disabled={activating}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white transition"
+        >
+          {activating ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20"/><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z"/></svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          )}
+          {activating ? 'Activating…' : 'Activate Now'}
+        </button>
+      </div>
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <ViewField label="Next Plan" value={nrPlanLabel} />
+          <ViewField label="Paid On" value={fmtDate(nr.paidAt)} />
+          <ViewField label="Activates On" value={fmtDate(nr.activationDate)} />
+          <ViewField label={nr.plan === 'Unlimited Plan' ? 'Duration' : 'Expires On'} value={nr.plan === 'Unlimited Plan' ? 'Never (Unlimited)' : fmtDate(nr.expiresAt)} />
+          <ViewField label="Amount Paid" value={fmtMoney(nr.price)} />
+          <ViewField label="Invoice #" value={nr.invoiceNumber} />
+        </div>
+        <p className="mt-3 text-[10px] text-emerald-600 leading-relaxed">
+          Current plan remains active until {fmtDate(record.expirationDate)}. Queued plan activates automatically on {fmtDate(nr.activationDate)}.
+        </p>
+        {activateErr && (
+          <p className="mt-2 text-[11px] text-red-600 font-semibold">{activateErr}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Individual View Modal ─────────────────────────────────────────────────────
-function IndividualViewModal({ record, onClose, onEdit }) {
+function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
   const fullName = [record.firstName, record.middleName, record.lastName].filter(Boolean).join(' ') || 'Individual'
   return (
     <AnimatePresence>
@@ -179,6 +256,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
             </div>
+            <NextRenewalSection record={record} registrationModel="Individual" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
       </div>
@@ -187,7 +265,7 @@ function IndividualViewModal({ record, onClose, onEdit }) {
 }
 
 // ─── Airline View Modal ────────────────────────────────────────────────────────
-function AirlineViewModal({ record, onClose, onEdit }) {
+function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -277,6 +355,7 @@ function AirlineViewModal({ record, onClose, onEdit }) {
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
             </div>
+            <NextRenewalSection record={record} registrationModel="Airlines" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
       </div>
@@ -2071,8 +2150,30 @@ export default function AdminDashboard() {
         )}
       </AnimatePresence>
 
-      {viewRec && viewType === 'individual' && <IndividualViewModal record={viewRec} onClose={closeView} onEdit={openEditFromView} />}
-      {viewRec && viewType === 'airline' && <AirlineViewModal record={viewRec} onClose={closeView} onEdit={openEditFromView} />}
+      {viewRec && viewType === 'individual' && (
+        <IndividualViewModal
+          record={viewRec}
+          onClose={closeView}
+          onEdit={openEditFromView}
+          onRecordUpdated={(updated) => {
+            if (!updated) return
+            setIndividuals(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))
+            setViewRec(updated)
+          }}
+        />
+      )}
+      {viewRec && viewType === 'airline' && (
+        <AirlineViewModal
+          record={viewRec}
+          onClose={closeView}
+          onEdit={openEditFromView}
+          onRecordUpdated={(updated) => {
+            if (!updated) return
+            setAirlines(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))
+            setViewRec(updated)
+          }}
+        />
+      )}
       {editRec && editType === 'individual' && <IndividualEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'individual')} />}
       {editRec && editType === 'airline' && <AirlineEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'airline')} />}
 
