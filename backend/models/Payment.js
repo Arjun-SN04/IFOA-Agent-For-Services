@@ -94,6 +94,7 @@ const PaymentSchema = new mongoose.Schema({
   },
   newSubscriptionPlan:   { type: String, default: null },  // plan user chose at renewal time
   renewalMultiYearCount: { type: Number, default: null },  // years for multi-year renewal
+  renewalExactCount:     { type: Number, default: null },  // holder count for airline renewal
 
   // ── Metadata / misc ────────────────────────────────────────────────────────
   description:  { type: String, default: '' },

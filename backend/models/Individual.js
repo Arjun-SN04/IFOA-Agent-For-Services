@@ -78,6 +78,7 @@ const IndividualSchema = new mongoose.Schema({
   lastRenewal: {
     plan:           { type: String },
     multiYearCount: { type: Number },
+    committedCount: { type: Number, default: null }, // (airline) holder count at renewal time
     paidAt:         { type: Date },
     activationDate: { type: Date },   // start of the renewed period (= old expirationDate)
     expiresAt:      { type: Date },   // new expiration date after renewal
@@ -95,6 +96,7 @@ const IndividualSchema = new mongoose.Schema({
   nextRenewal: {
     plan:           { type: String },
     multiYearCount: { type: Number },
+    committedCount: { type: Number, default: null }, // (airline) holder count at renewal time
     paidAt:         { type: Date },   // when payment was made
     activationDate: { type: Date },   // = current expirationDate at time of payment
     expiresAt:      { type: Date },   // activationDate + plan years

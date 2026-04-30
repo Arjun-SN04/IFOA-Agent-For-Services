@@ -96,10 +96,13 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
 
   let correctTotal = amountDollars;
   if (isAirline) {
-    // Unlimited Plan is still billed per-certificate × committedCount.
-    // Always recompute from price × count to avoid legacy flat-rate bug.
+    // Airline total: recompute from pricePerCert × committedCount (× years for multi-year).
     if (pricePerCert > 0 && holderCount > 0) {
-      correctTotal = pricePerCert * holderCount;
+      if (rec.subscriptionPlan === 'Multiple Years Subscription Plan' && rec.multiYearCount > 1) {
+        correctTotal = pricePerCert * holderCount * Number(rec.multiYearCount);
+      } else {
+        correctTotal = pricePerCert * holderCount;
+      }
     }
   }
 
@@ -163,10 +166,18 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
   const base    = currentExpiry && currentExpiry > now ? currentExpiry : now;
   const isQueued = currentExpiry && currentExpiry > now;
 
+  // Holder count: from Payment doc (user-adjusted at renewal) > original doc
+  const renewalExactCount = paymentDoc.renewalExactCount
+    ? Number(paymentDoc.renewalExactCount)
+    : null;
+  const effectiveCount = renewalExactCount ||
+    Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1);
+
   // Year count: from Payment doc (user-selected at renewal) > original doc > derive from amount
+  const ppc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
   const pricePerYear = registrationModel === 'Individual'
     ? 55
-    : (Number(doc.pricePerCertificate || 0) * Number(doc.committedCount || doc.holderCountValue || 1)) || 55;
+    : (ppc * effectiveCount) || 55;
   const derivedYears = paymentDoc.amountDollars && pricePerYear > 0
     ? Math.max(2, Math.round(paymentDoc.amountDollars / pricePerYear))
     : null;
@@ -200,6 +211,7 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
   const renewalSnapshot = {
     plan:           activePlan,
     multiYearCount: renewalMultiYearCount || null,
+    committedCount: renewalExactCount || null,  // airline: user-selected count
     paidAt:         paymentDoc.paidAt || now,
     activationDate: base,
     expiresAt:      newExpiry || null,
@@ -220,20 +232,28 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.nextRenewal   = renewalSnapshot;
   } else {
     // IMMEDIATE — plan was expired; activate the renewal right away.
+    update.subscriptionPlan        = activePlan;
+    update.subscriptionDate        = now;
     if (newExpiry)  update.expirationDate        = newExpiry;
-    update.invoiceNumber         = paymentDoc.invoiceNumber;
-    update.stripePaymentIntentId = paymentDoc.stripePaymentIntentId;
-    update.nextRenewalId         = null;
-    update.nextRenewal           = null;
-    if (renewalMultiYearCount)   update.multiYearCount = renewalMultiYearCount;
-    if (newPlan) {
-      update.subscriptionPlan = newPlan;
-      if (registrationModel === 'Individual') {
-        const PLAN_PRICES = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299 };
-        if (PLAN_PRICES[newPlan] !== undefined) update.price = PLAN_PRICES[newPlan];
-        else if (newPlan === 'Multiple Years Subscription Plan' && renewalMultiYearCount) {
-          update.price = 55 * renewalMultiYearCount;
-        }
+    update.invoiceNumber           = paymentDoc.invoiceNumber;
+    update.stripePaymentIntentId   = paymentDoc.stripePaymentIntentId;
+    update.paymentStatus           = 'paid';
+    update.isPaid                  = true;
+    update.status                  = 'Active';
+    update.isFormCompleted         = true;
+    update.nextRenewalId           = null;
+    update.nextRenewal             = null;
+    if (renewalMultiYearCount)     update.multiYearCount = renewalMultiYearCount;
+    // Airline: update committed holder count if user changed it at renewal time
+    if (renewalExactCount && registrationModel !== 'Individual') {
+      update.committedCount    = renewalExactCount;
+      update.holderCountValue  = String(renewalExactCount);
+    }
+    if (registrationModel === 'Individual') {
+      const PLAN_PRICES = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299 };
+      if (PLAN_PRICES[activePlan] !== undefined) update.price = PLAN_PRICES[activePlan];
+      else if (activePlan === 'Multiple Years Subscription Plan' && renewalMultiYearCount) {
+        update.price = 55 * renewalMultiYearCount;
       }
     }
   }
@@ -284,6 +304,7 @@ exports.createPaymentIntent = async (req, res) => {
       purpose = 'payment',
       newSubscriptionPlan,        // optional: plan user selected at renewal time
       renewalMultiYearCount: bodyRenewalYears,  // optional: years user selected (Multi-Year renewal)
+      renewalExactCount: bodyRenewalCount,       // optional: holder count user selected (airline renewal)
     } = req.body;
 
     if (!registrationId || !registrationModel)
@@ -311,11 +332,20 @@ exports.createPaymentIntent = async (req, res) => {
     let amountDollars;
 
     if (registrationModel !== 'Individual') {
-      // Airlines: always compute from pricePerCert × committedCount for ALL plans
-      const ppc   = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
-      const count = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      // Airlines: compute from pricePerCert × holder count (use renewal count if provided)
+      const ppc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+      // For renewals the user may have adjusted the holder count — use that if supplied.
+      const renewalCount = bodyRenewalCount ? Number(bodyRenewalCount) : null;
+      const count = renewalCount ||
+        Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
       if (ppc > 0 && count > 0) {
-        amountDollars = ppc * count;
+        const activePlanForAirline = newSubscriptionPlan || doc.subscriptionPlan;
+        if (activePlanForAirline === 'Multiple Years Subscription Plan') {
+          const renewalYears = bodyRenewalYears ? Number(bodyRenewalYears) : (doc.multiYearCount || 3);
+          amountDollars = ppc * count * Math.max(2, renewalYears);
+        } else {
+          amountDollars = ppc * count;  // 1 Year or Unlimited
+        }
       } else {
         amountDollars = Number(doc.totalAmount || doc.totalServiceFees || 0);
       }
@@ -357,6 +387,8 @@ exports.createPaymentIntent = async (req, res) => {
     // Store the RENEWAL-selected year count (NOT the original doc's count)
     const metaRenewalYears = bodyRenewalYears ? Number(bodyRenewalYears) : (doc.multiYearCount || null);
     if (metaRenewalYears) metadata.renewalMultiYearCount = String(metaRenewalYears);
+    // Store the RENEWAL-selected holder count for airline renewals
+    if (bodyRenewalCount) metadata.renewalExactCount = String(Number(bodyRenewalCount));
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount:   amountCents,
@@ -458,24 +490,31 @@ exports.confirmPayment = async (req, res) => {
     // ── Build invoice snapshot ────────────────────────────────────────────────
     // For renewals: snapshot must show the RENEWED period (activationDate→newExpiry),
     // not today→today+plan (which is what a plain buildInvoiceSnapshot would produce).
-    let invoiceSnapshot;
-    if (isPurposeRenewal) {
-      const renewalPlan      = pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
-      const renewalYears     = pi.metadata?.renewalMultiYearCount
-        ? Number(pi.metadata.renewalMultiYearCount)
-        : (doc.multiYearCount || null);
-      const currentExpiry    = doc.expirationDate ? new Date(doc.expirationDate) : null;
-      const renewalBase      = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
-      // Build snapshot as if subscription starts on renewalBase (not paidAt=now)
-      const renewalDocObj    = { ...doc.toObject(), subscriptionPlan: renewalPlan, multiYearCount: renewalYears };
-      invoiceSnapshot        = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
-    } else {
-      invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
-    }
-
     const renewalMultiYearCount = pi.metadata?.renewalMultiYearCount
       ? Number(pi.metadata.renewalMultiYearCount)
       : null;
+    const renewalExactCount = pi.metadata?.renewalExactCount
+      ? Number(pi.metadata.renewalExactCount)
+      : null;
+
+    let invoiceSnapshot;
+    if (isPurposeRenewal) {
+      const renewalPlan      = pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
+      const renewalYears     = renewalMultiYearCount || doc.multiYearCount || null;
+      const currentExpiry    = doc.expirationDate ? new Date(doc.expirationDate) : null;
+      const renewalBase      = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+      // Build snapshot as if subscription starts on renewalBase (not paidAt=now).
+      // Override committedCount with the user-adjusted holder count for airlines.
+      const renewalDocObj = {
+        ...doc.toObject(),
+        subscriptionPlan: renewalPlan,
+        multiYearCount:   renewalYears,
+        ...(renewalExactCount ? { committedCount: renewalExactCount, holderCountValue: renewalExactCount } : {}),
+      };
+      invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
+    } else {
+      invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
+    }
 
     const paymentData = {
       stripePaymentIntentId: paymentIntentId,
@@ -506,6 +545,7 @@ exports.confirmPayment = async (req, res) => {
       purpose:                isPurposeRenewal ? 'renewal' : 'payment',
       newSubscriptionPlan:    pi.metadata?.newSubscriptionPlan || null,
       renewalMultiYearCount,
+      renewalExactCount,
     };
 
     // Use findOneAndUpdate with upsert to prevent duplicate Payment docs under
@@ -732,21 +772,27 @@ exports.stripeWebhook = async (req, res) => {
       }
 
       // Build invoice snapshot — for renewals use activationDate as period start
+      const webhookRenewalYears = pi.metadata?.renewalMultiYearCount
+        ? Number(pi.metadata.renewalMultiYearCount) : null;
+      const webhookRenewalCount = pi.metadata?.renewalExactCount
+        ? Number(pi.metadata.renewalExactCount) : null;
+
       let invoiceSnapshot;
       if (isPurposeRenewal) {
         const renewalPlan   = pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
-        const renewalYears  = pi.metadata?.renewalMultiYearCount
-          ? Number(pi.metadata.renewalMultiYearCount) : (doc.multiYearCount || null);
+        const renewalYears  = webhookRenewalYears || doc.multiYearCount || null;
         const currentExpiry = doc.expirationDate ? new Date(doc.expirationDate) : null;
         const renewalBase   = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
-        const renewalDocObj = { ...doc.toObject(), subscriptionPlan: renewalPlan, multiYearCount: renewalYears };
-        invoiceSnapshot     = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
+        const renewalDocObj = {
+          ...doc.toObject(),
+          subscriptionPlan: renewalPlan,
+          multiYearCount:   renewalYears,
+          ...(webhookRenewalCount ? { committedCount: webhookRenewalCount, holderCountValue: webhookRenewalCount } : {}),
+        };
+        invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
       } else {
         invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
       }
-
-      const webhookRenewalYears = pi.metadata?.renewalMultiYearCount
-        ? Number(pi.metadata.renewalMultiYearCount) : null;
 
       const paymentData = {
         stripePaymentIntentId: pi.id,
@@ -771,6 +817,7 @@ exports.stripeWebhook = async (req, res) => {
         purpose:              isPurposeRenewal ? 'renewal' : 'payment',
         newSubscriptionPlan:  newSubscriptionPlan || null,
         renewalMultiYearCount: webhookRenewalYears,
+        renewalExactCount:     webhookRenewalCount,
       };
 
       let paymentDoc;
@@ -936,19 +983,35 @@ exports.activateQueuedRenewal = async (req, res) => {
     }
 
     // ── Apply the queued renewal as the new active subscription ───────────────
+    const now = new Date();
     const update = {
       subscriptionPlan:      nr.plan || doc.subscriptionPlan,
-      subscriptionDate:      nr.activationDate || new Date(),
+      // Use today (admin is activating NOW), NOT the future queued activation date.
+      // The expiry date (nr.expiresAt) stays as originally paid for — the admin is
+      // simply starting the period early; the end date does not change.
+      subscriptionDate:      now,
       expirationDate:        nr.expiresAt || null,
       invoiceNumber:         nr.invoiceNumber,
       invoiceStatus:         'Paid',
-      ...(nr.multiYearCount ? { multiYearCount: nr.multiYearCount } : {}),
-      ...(registrationModel === 'Individual' && nr.price ? { price: nr.price } : {}),
-      // Clear both embedded snapshot and ID reference
-      nextRenewal:            null,
-      nextRenewalId:          null,
+      paymentStatus:         'paid',
+      isPaid:                true,
+      status:                'Active',
+      isFormCompleted:       true,
+      // Clear reminder flags so user gets fresh expiry reminders for the new period
       expiryReminder60SentAt: null,
       expiryReminder30SentAt: null,
+      // Clear the queued renewal
+      nextRenewal:            null,
+      nextRenewalId:          null,
+      ...(nr.multiYearCount ? { multiYearCount: nr.multiYearCount } : {}),
+      ...(registrationModel === 'Individual' && nr.price ? { price: nr.price } : {}),
+      // Airline-only fields
+      ...(registrationModel !== 'Individual' ? {
+        // Restore committed holder count from the renewal snapshot
+        ...(nr.committedCount ? { committedCount: nr.committedCount, holderCountValue: String(nr.committedCount) } : {}),
+        // Record what was paid for this renewal
+        ...(nr.price ? { amountPaid: nr.price } : {}),
+      } : {}),
     };
 
     const updated = await Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });

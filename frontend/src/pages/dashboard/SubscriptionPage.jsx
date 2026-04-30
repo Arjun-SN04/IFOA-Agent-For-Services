@@ -1060,7 +1060,9 @@ const INDIVIDUAL_PLANS = [
   { value: 'Unlimited Plan',                  label: 'Unlimited — $299',    price: 299 },
 ]
 const AIRLINE_PLANS = [
-  { value: '1 Year Subscription Plan', label: '1 Year Subscription Plan' },
+  { value: '1 Year Subscription Plan',        label: '1 Year Plan'         },
+  { value: 'Multiple Years Subscription Plan', label: 'Multiple Years Plan' },
+  { value: 'Unlimited Plan',                  label: 'Unlimited Plan'      },
 ]
 
 function RenewModal({ sub, role, onClose, onSaved }) {
@@ -1069,6 +1071,10 @@ function RenewModal({ sub, role, onClose, onSaved }) {
   const [currentSub, setCurrentSub] = useState(sub)
   const [plan, setPlan] = useState(sub.subscriptionPlan || '1 Year Subscription Plan')
   const [multiYearRenewCount, setMultiYearRenewCount] = useState(Number(sub.multiYearCount) || 3)
+  // Airline: committed holder count — user can adjust at renewal time
+  const [exactCount, setExactCount] = useState(
+    Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 1)
+  )
   const [showPayment, setShowPayment] = useState(false)
   const [showEditDetails, setShowEditDetails] = useState(false)
   /* TEST MODE — remove this line before production */
@@ -1079,9 +1085,14 @@ function RenewModal({ sub, role, onClose, onSaved }) {
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  // Compute renewal price based on selected plan
+  // Compute renewal price based on selected plan + count
   const renewalPrice = (() => {
-    if (isAirline) return getAirlineTotal(currentSub)
+    if (isAirline) {
+      const ppc   = Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0)
+      const count = Math.max(1, exactCount)
+      if (plan === 'Multiple Years Subscription Plan') return ppc * count * Math.max(2, multiYearRenewCount)
+      return ppc * count // 1 Year or Unlimited
+    }
     if (plan === 'Unlimited Plan') return 299
     if (plan === 'Multiple Years Subscription Plan') return 55 * Math.max(2, multiYearRenewCount)
     return 69 // 1 Year
@@ -1095,6 +1106,15 @@ function RenewModal({ sub, role, onClose, onSaved }) {
   const daysLeft = currentSub.expirationDate
     ? Math.ceil((new Date(currentSub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
     : null
+  // Price breakdown label shown under the total for airlines
+  const pricingLabel = (() => {
+    if (!isAirline) return null
+    const ppc = Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0)
+    if (!ppc) return null
+    if (plan === 'Multiple Years Subscription Plan')
+      return `$${ppc}/cert × ${exactCount} holder${exactCount !== 1 ? 's' : ''} × ${multiYearRenewCount} yrs`
+    return `$${ppc}/cert × ${exactCount} holder${exactCount !== 1 ? 's' : ''}`
+  })()
 
   // Show the edit-details form on top of the renew modal
   if (showEditDetails) {
@@ -1124,6 +1144,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         purpose="renewal"
         newSubscriptionPlan={plan}
         renewalMultiYearCount={plan === 'Multiple Years Subscription Plan' ? multiYearRenewCount : undefined}
+        renewalExactCount={isAirline ? exactCount : undefined}
         onClose={() => setShowPayment(false)}
         onSuccess={(inv, updatedReg) => {
           onSaved(updatedReg || currentSub)
@@ -1198,8 +1219,32 @@ function RenewModal({ sub, role, onClose, onSaved }) {
             ))}
           </div>
 
-          {/* Multi-year count input */}
-          {!isAirline && plan === 'Multiple Years Subscription Plan' && (
+          {/* Airline: holder count adjustment */}
+          {isAirline && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Holders</label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExactCount(c => Math.max(1, c - 1))}
+                  className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+                >−</button>
+                <span className="text-lg font-black text-slate-900 w-10 text-center">{exactCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setExactCount(c => c + 1)}
+                  className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+                >+</button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Current committed: {Number(currentSub.committedCount || currentSub.holderCountValue || 0)} holders.{' '}
+                Adjust if your team size changed.
+              </p>
+            </div>
+          )}
+
+          {/* Multi-year count input — for BOTH individual and airline */}
+          {plan === 'Multiple Years Subscription Plan' && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Number of Years</label>
               <input
@@ -1210,15 +1255,22 @@ function RenewModal({ sub, role, onClose, onSaved }) {
                 value={multiYearRenewCount}
                 onChange={(e) => setMultiYearRenewCount(Math.max(2, Number(e.target.value) || 2))}
               />
-              <p className="text-xs text-slate-500">$55 × {multiYearRenewCount} years</p>
+              <p className="text-xs text-slate-500">
+                {isAirline
+                  ? `$${Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0).toFixed(0)}/cert × ${exactCount} × ${multiYearRenewCount} years`
+                  : `$55 × ${multiYearRenewCount} years`}
+              </p>
             </div>
           )}
 
           {/* Renewal total */}
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm flex items-center justify-between">
-            <span className="text-slate-500">Renewal total:</span>
+            <div>
+              <span className="text-slate-500">Renewal total:</span>
+              {pricingLabel && <p className="text-[10px] text-slate-400 mt-0.5">{pricingLabel}</p>}
+            </div>
             <span className="font-bold text-slate-900">
-              {plan === 'Unlimited Plan'
+              {plan === 'Unlimited Plan' && !isAirline
                 ? <span className="text-emerald-700">$299.00 — Lifetime</span>
                 : testRenewMode
                 ? <><span className="line-through text-slate-400 mr-2">${(renewalAmountCents / 100).toFixed(2)}</span><span className="text-amber-600">$1.00 (test)</span></>

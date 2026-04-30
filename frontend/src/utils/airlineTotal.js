@@ -41,9 +41,14 @@ export function getAirlineTotal(record) {
     0
   )
 
-  // If we have both a price and a count, always recompute.
+  // If we have both a price and a count, recompute.
   if (price > 0 && count > 0) {
-    return price * count
+    // Multiple Years plans multiply by the year count (full contract value).
+    const isMultiYear =
+      (record.subscriptionPlan || '').includes('Multiple Year') &&
+      Number(record.multiYearCount) > 1
+    const years = isMultiYear ? Number(record.multiYearCount) : 1
+    return price * count * years
   }
 
   // Fallback to whatever the DB stored (legacy / partial records).

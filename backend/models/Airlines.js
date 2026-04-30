@@ -39,6 +39,8 @@ const AirlinesSchema = new mongoose.Schema({
   subscriptionDate:    { type: Date },
   expirationDate:      { type: Date },
   totalServiceFees:    { type: Number },
+  // Number of years for Multiple Years plan (min 2) — mirrors Individual.multiYearCount
+  multiYearCount:      { type: Number, default: null },
 
   // Airline / Operator info
   airlineName: { type: String, required: true, trim: true },
@@ -99,6 +101,7 @@ const AirlinesSchema = new mongoose.Schema({
   lastRenewal: {
     plan:           { type: String },
     multiYearCount: { type: Number },
+    committedCount: { type: Number, default: null }, // holder count at renewal time
     paidAt:         { type: Date },
     activationDate: { type: Date },   // start of the renewed period (= old expirationDate)
     expiresAt:      { type: Date },   // new expiration date after renewal
@@ -116,6 +119,7 @@ const AirlinesSchema = new mongoose.Schema({
   nextRenewal: {
     plan:           { type: String },
     multiYearCount: { type: Number },
+    committedCount: { type: Number, default: null }, // holder count user selected at renewal time
     paidAt:         { type: Date },   // when payment was made
     activationDate: { type: Date },   // = current expirationDate at time of payment
     expiresAt:      { type: Date },   // activationDate + plan years
@@ -132,12 +136,18 @@ const AirlinesSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Auto-compute totalAmount before save.
-// Uses committedCount × pricePerCertificate for ALL plans including Unlimited.
-// Unlimited Plan is NOT a flat fee — it's pricePerCert × committed seats.
+// For Multiple Years plans: pricePerCert × count × years.
+// For all other plans (1 Year, Unlimited): pricePerCert × count.
 AirlinesSchema.pre('save', function (next) {
-  // committedCount set by controller on create; fall back to actual holders
   const count = this.committedCount || this.certificateHolders?.length || 1;
-  this.totalAmount = this.pricePerCertificate * count;
+  if (
+    this.subscriptionPlan === 'Multiple Years Subscription Plan' &&
+    this.multiYearCount > 1
+  ) {
+    this.totalAmount = this.pricePerCertificate * count * Number(this.multiYearCount);
+  } else {
+    this.totalAmount = this.pricePerCertificate * count;
+  }
   next();
 });
 
