@@ -8,8 +8,22 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required — set it in .env');
 const JWT_EXPIRES = '7d';
 
+// Dummy hash used to equalise timing when user is not found (prevents enumeration)
+const DUMMY_HASH = '$2a$12$invalidhashfortimingnormalization0000000000000000000000';
+
+// mustChangePassword is embedded in the token so the middleware can enforce it
+// without a DB lookup on every request.
 const signToken = (user) =>
-  jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  jwt.sign(
+    {
+      id:                 user._id,
+      email:              user.email,
+      role:               user.role,
+      mustChangePassword: user.mustChangePassword || false,
+    },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES, algorithm: 'HS256' },
+  );
 
 // Helper: build the public user object returned in every auth response
 function publicUser(user) {
@@ -58,9 +72,12 @@ exports.login = async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required.' });
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) return res.status(401).json({ message: 'Invalid email or password.' });
-    const valid = await user.comparePassword(password);
-    if (!valid) return res.status(401).json({ message: 'Invalid email or password.' });
+    // Always run bcrypt regardless of whether the user exists — prevents
+    // timing-based user enumeration attacks.
+    const valid = user
+      ? await user.comparePassword(password)
+      : await bcrypt.compare(password, DUMMY_HASH);
+    if (!user || !valid) return res.status(401).json({ message: 'Invalid email or password.' });
     const token = signToken(user);
     res.json({ token, user: publicUser(user) });
   } catch (err) {
@@ -166,24 +183,31 @@ exports.updateCredentials = async (req, res) => {
     if (!newEmail && !newPassword)
       return res.status(400).json({ message: 'Provide a new email or new password to update.' });
 
+    const updateFields = {};
+
     if (newEmail && newEmail.toLowerCase() !== user.email) {
       const exists = await User.findOne({ email: newEmail.toLowerCase() });
       if (exists) return res.status(409).json({ message: 'This email is already in use.' });
-      user.email = newEmail.toLowerCase();
+      updateFields.email = newEmail.toLowerCase();
     }
 
     if (newPassword) {
       if (newPassword.length < 8)
         return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-      user.password = newPassword;
-      // Clear the first-login flag once they set their own password
-      user.mustChangePassword = false;
+      updateFields.password = await bcrypt.hash(newPassword, 12);
+      updateFields.mustChangePassword = false;
     }
 
-    await user.save();
+    // Use findByIdAndUpdate so only the changed fields are validated —
+    // avoids triggering enum errors on unrelated null fields (e.g. registrationModel).
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: updateFields },
+      { new: true, runValidators: false },
+    );
 
-    const token = signToken(user);
-    res.json({ message: 'Credentials updated successfully.', token, user: publicUser(user) });
+    const token = signToken(updatedUser);
+    res.json({ message: 'Credentials updated successfully.', token, user: publicUser(updatedUser) });
   } catch (err) {
     console.error('Update credentials error:', err);
     res.status(500).json({ message: 'Server error.' });
@@ -201,13 +225,18 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    if (firstName !== undefined) user.firstName = firstName.trim();
-    if (lastName !== undefined) user.lastName = lastName.trim();
+    const profileFields = {};
+    if (firstName !== undefined) profileFields.firstName = firstName.trim();
+    if (lastName  !== undefined) profileFields.lastName  = lastName.trim();
 
-    await user.save();
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: profileFields },
+      { new: true, runValidators: false },
+    );
 
-    const token = signToken(user);
-    res.json({ message: 'Profile updated successfully.', token, user: publicUser(user) });
+    const token = signToken(updatedUser);
+    res.json({ message: 'Profile updated successfully.', token, user: publicUser(updatedUser) });
   } catch (err) {
     console.error('Update profile error:', err);
     res.status(500).json({ message: 'Server error.' });
@@ -226,11 +255,14 @@ exports.updateAirlineName = async (req, res) => {
     if (user.role !== 'airline')
       return res.status(403).json({ message: 'Only airline accounts can update the airline name.' });
 
-    user.airlineName = airlineName.trim();
-    await user.save();
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: { airlineName: airlineName.trim() } },
+      { new: true, runValidators: false },
+    );
 
-    const token = signToken(user);
-    res.json({ message: 'Airline name updated successfully.', token, user: publicUser(user) });
+    const token = signToken(updatedUser);
+    res.json({ message: 'Airline name updated successfully.', token, user: publicUser(updatedUser) });
   } catch (err) {
     console.error('Update airline name error:', err);
     res.status(500).json({ message: 'Server error.' });
@@ -243,6 +275,24 @@ exports.linkRegistration = async (req, res) => {
     const { registrationId, registrationModel } = req.body;
     if (!registrationId || !registrationModel)
       return res.status(400).json({ message: 'registrationId and registrationModel are required.' });
+
+    const VALID_MODELS = ['Individual', 'Airlines', 'AirlinesSubscription'];
+    if (!VALID_MODELS.includes(registrationModel))
+      return res.status(400).json({ message: 'Invalid registrationModel.' });
+
+    // Verify the registration record's email matches the calling user's email
+    // so a user cannot link someone else's record to their account.
+    if (req.user.role !== 'admin') {
+      const Individual = require('../models/Individual');
+      const Airlines   = require('../models/Airlines');
+      const Model = registrationModel === 'Individual' ? Individual : Airlines;
+      const doc = await Model.findById(registrationId).lean();
+      if (!doc) return res.status(404).json({ message: 'Registration record not found.' });
+      const docEmail  = (doc.email || doc.pointOfContactEmail || '').toLowerCase();
+      const userEmail = (req.user.email || '').toLowerCase();
+      if (!docEmail || docEmail !== userEmail)
+        return res.status(403).json({ message: 'This registration does not belong to your account.' });
+    }
 
     const oid = new mongoose.Types.ObjectId(registrationId);
 

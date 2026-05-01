@@ -416,7 +416,7 @@ export function serverPaymentToInvoice(paymentDoc) {
 
 // ── Wrapper: fetches clientSecret then mounts Elements ────────────────────────
 // newSubscriptionPlan: optional — pass when user changes plan at renewal time
-export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount }) {
+export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount }) {
   const [clientSecret, setClientSecret] = useState(null)
   const [fetchError,   setFetchError]   = useState(null)
   const [loading,      setLoading]      = useState(true)
@@ -435,6 +435,8 @@ export default function PaymentModal({ registrationId, registrationModel, amount
         if (renewalMultiYearCount) body.renewalMultiYearCount = renewalMultiYearCount
         // Forward user-adjusted holder count for airline renewals
         if (renewalExactCount) body.renewalExactCount = renewalExactCount
+        // Forward additional holder count for holder-upgrade purchases
+        if (additionalHolderCount) body.additionalHolderCount = additionalHolderCount
 
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
           method:  'POST',
@@ -454,7 +456,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
       }
     }
     create()
-  }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount])
+  }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount])
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

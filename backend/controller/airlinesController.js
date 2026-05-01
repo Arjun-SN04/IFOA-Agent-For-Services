@@ -194,6 +194,11 @@ function buildAirlinePayload(raw) {
   payload.totalAmount = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.committedCount;
   payload.amountPaid = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.certificateHolders.length;
   payload.subscriptionDate = paid ? (toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date()) : toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date']));
+  // Compute expirationDate — use value from sheet if present, otherwise derive from plan + subscriptionDate
+  payload.expirationDate = toDateOrNull(pick(src, ['expirationDate', 'Expiration Date']));
+  if (paid && !payload.expirationDate && payload.subscriptionDate) {
+    payload.expirationDate = computeAirlinesExpirationDate(payload.subscriptionPlan, payload.subscriptionDate);
+  }
   payload.invoiceStatus = pick(src, ['invoiceStatus', 'Invoice ', 'Invoice'], paid ? 'Paid' : 'Pending');
   payload.invoiceNumber = pick(src, ['invoiceNumber', 'Invoice Number'], '');
   const totalServiceFees = toNumberOrUndefined(pick(src, ['totalServiceFees', 'Total Service Fees', 'TOTAL'], ''));
@@ -450,6 +455,10 @@ exports.getAirlinesSubscriptionByEmail = async (req, res) => {
     if (!email)
       return res.status(400).json({ success: false, message: 'Email is required' });
 
+    // Non-admins may only query their own email
+    if (req.user?.role !== 'admin' && email.toLowerCase() !== (req.user?.email || '').toLowerCase())
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+
     const safeEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const emailRegex = new RegExp('^' + safeEmail + '$', 'i');
 
@@ -559,19 +568,34 @@ exports.updateAirlinesSubscription = async (req, res) => {
       payload.isFormCompleted = false;
     }
 
-    // Pre-payment: auto-recompute totalAmount when holderCountValue/committedCount
-    // changes (non-admin). totalAmount is admin-only to block manipulation, but
-    // before payment we allow it to update so PaymentModal shows the correct figure.
-    if (!isAdmin && (payload.holderCountValue !== undefined || payload.committedCount !== undefined)) {
-      const existingForPrice = await Airlines.findById(req.params.id).select('isPaid pricePerCertificate pricePerCert holderCountValue committedCount');
-      if (existingForPrice && !existingForPrice.isPaid) {
-        const pricePerCert = Number(existingForPrice.pricePerCertificate || existingForPrice.pricePerCert || 0);
+    // Recompute holderCount range, pricePerCertificate, and totalAmount whenever
+    // committedCount / holderCountValue changes — for both pre-payment (non-admin)
+    // AND admin edits on already-paid records.
+    if (payload.holderCountValue !== undefined || payload.committedCount !== undefined) {
+      const existingForPrice = await Airlines.findById(req.params.id)
+        .select('isPaid pricePerCertificate pricePerCert holderCountValue committedCount subscriptionPlan');
+      if (existingForPrice) {
         const newCount = Number(payload.holderCountValue ?? payload.committedCount ?? existingForPrice.holderCountValue ?? existingForPrice.committedCount ?? 0);
-        if (pricePerCert > 0 && newCount > 0) {
-          const newTotal = pricePerCert * newCount;
-          payload.totalAmount = newTotal;
-          payload.totalServiceFees = newTotal;
-          payload.committedCount = newCount;
+        const newRange = holderRangeFromCount(newCount);
+        // Always sync the holderCount range string
+        payload.holderCount = newRange;
+        // Recompute price per cert from server-side table (keeps price authoritative)
+        const plan = payload.subscriptionPlan || existingForPrice.subscriptionPlan || '1 Year Subscription Plan';
+        const recomputedPpc = resolvePricePerCertificate({ subscriptionPlan: plan, holderCount: newRange });
+        if (newCount > 0) {
+          if (isAdmin) {
+            // Admin: always update price and total
+            payload.pricePerCertificate = recomputedPpc;
+            payload.totalAmount = recomputedPpc * newCount;
+            payload.totalServiceFees = recomputedPpc * newCount;
+            payload.committedCount = newCount;
+          } else if (!existingForPrice.isPaid) {
+            // Non-admin, pre-payment: allow recompute so PaymentModal shows correct figure
+            const pricePerCert = Number(existingForPrice.pricePerCertificate || existingForPrice.pricePerCert || recomputedPpc);
+            payload.totalAmount = pricePerCert * newCount;
+            payload.totalServiceFees = pricePerCert * newCount;
+            payload.committedCount = newCount;
+          }
         }
       }
     }
@@ -772,7 +796,7 @@ exports.markAirlinesPaid = async (req, res) => {
 exports.requestAirlineInvoice = async (req, res) => {
   try {
     const id = req.params.id;
-    const now = req.body?.requestedAt ? new Date(req.body.requestedAt) : new Date();
+    const now = new Date(); // always use server time — never trust client-supplied timestamps
 
     if (!id) {
       return res.status(400).json({ success: false, message: 'Airline ID is required.' });
@@ -1274,6 +1298,9 @@ exports.renewAirlinesSubscription = async (req, res) => {
 
     const newPrice = resolvePricePerCertificate({ subscriptionPlan: newPlan, holderCount: doc.holderCount });
 
+    const renewedCount = doc.committedCount || Number(doc.holderCountValue) || doc.certificateHolders?.length || 1;
+    const renewedRange = holderRangeFromCount(renewedCount);
+
     const updated = await Airlines.findByIdAndUpdate(
       req.params.id,
       {
@@ -1281,7 +1308,10 @@ exports.renewAirlinesSubscription = async (req, res) => {
           subscriptionPlan: newPlan,
           expirationDate: newExpiry,
           pricePerCertificate: newPrice,
-          totalAmount: newPrice * (doc.committedCount || 1),
+          holderCount: renewedRange,
+          holderCountValue: String(renewedCount),
+          committedCount: renewedCount,
+          totalAmount: newPrice * renewedCount,
           status: 'Active',
           // Reset reminder flags so renewed users get reminders again
           expiryReminder60SentAt: null,

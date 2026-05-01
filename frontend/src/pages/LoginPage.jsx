@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -13,14 +13,16 @@ function MustChangePasswordModal({ onChanged }) {
   const [currentPwd, setCurrentPwd] = useState('')
   const [newPwd, setNewPwd]         = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
-  const [showNew, setShowNew]       = useState(false)
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew, setShowNew]         = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError]           = useState('')
   const [saving, setSaving]         = useState(false)
 
   const isAirline = user?.role === 'airline'
   const defaultPwdHint = isAirline
     ? `Your temporary password is your airline name in lowercase with no spaces (e.g. "Air India" → airindia).`
-    : `Your temporary password is your first + last name in lowercase with no spaces (e.g. "John Doe" → johndoe).`
+    : `Your temporary password is your first name in lowercase (e.g. "John" → john).`
 
   const handle = async () => {
     setError('')
@@ -51,7 +53,7 @@ function MustChangePasswordModal({ onChanged }) {
         className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-5 flex items-center gap-4">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-5 flex items-center gap-4">
           <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
@@ -65,9 +67,9 @@ function MustChangePasswordModal({ onChanged }) {
 
         {/* Body */}
         <div className="px-6 py-6 space-y-4">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-sm font-semibold text-amber-800 mb-1">Your account was created by an administrator.</p>
-            <p className="text-xs text-amber-700 leading-relaxed">{defaultPwdHint}</p>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+            <p className="text-sm font-semibold text-blue-800 mb-1">Your account was created by an administrator.</p>
+            <p className="text-xs text-blue-700 leading-relaxed">{defaultPwdHint}</p>
           </div>
 
           {error && (
@@ -82,8 +84,17 @@ function MustChangePasswordModal({ onChanged }) {
           <div className="space-y-3">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5">Current (Temporary) Password</label>
-              <input type="password" placeholder="Enter temporary password" value={currentPwd}
-                onChange={e => setCurrentPwd(e.target.value)} className={inp} />
+              <div className="relative">
+                <input type={showCurrent ? 'text' : 'password'} placeholder="Enter temporary password" value={currentPwd}
+                  onChange={e => setCurrentPwd(e.target.value)} className={inp + ' pr-11'} />
+                <button type="button" onClick={() => setShowCurrent(v => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showCurrent
+                    ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                    : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  }
+                </button>
+              </div>
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5">New Password <span className="text-slate-300">(min 8 chars)</span></label>
@@ -101,8 +112,17 @@ function MustChangePasswordModal({ onChanged }) {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5">Confirm New Password</label>
-              <input type="password" placeholder="Repeat new password" value={confirmPwd}
-                onChange={e => setConfirmPwd(e.target.value)} className={inp} />
+              <div className="relative">
+                <input type={showConfirm ? 'text' : 'password'} placeholder="Repeat new password" value={confirmPwd}
+                  onChange={e => setConfirmPwd(e.target.value)} className={inp + ' pr-11'} />
+                <button type="button" onClick={() => setShowConfirm(v => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showConfirm
+                    ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                    : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  }
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -134,15 +154,23 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  // Show forced change modal if redirected here from RequireAuth while already logged in,
-  // OR if we just completed a login and mustChangePassword is true.
-  const redirectedForPwChange = location.state?.mustChangePassword === true
+
+  // Show the modal when:
+  // 1. Redirected here from MustChangePasswordGate / RequireAuth (any page → /login)
+  // 2. Just completed login and mustChangePassword is true
+  // 3. Page reloaded / restored token still has mustChangePassword: true
   const [awaitingPasswordChange, setAwaitingPasswordChange] = useState(
-    () => redirectedForPwChange && mustChangePassword
+    () => mustChangePassword
   )
   const [pendingNavigate, setPendingNavigate] = useState(
-    () => (redirectedForPwChange && from) ? from : null
+    () => (from && from !== '/login') ? from : '/dashboard'
   )
+
+  // Sync: if mustChangePassword becomes true after initial render (async token verify),
+  // immediately show the modal.
+  useEffect(() => {
+    if (mustChangePassword) setAwaitingPasswordChange(true)
+  }, [mustChangePassword])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -196,7 +224,7 @@ export default function LoginPage() {
             <Link to="/" className="inline-block">
               <img src={logo} alt="IFOA USA" className="h-11 w-auto mx-auto" />
             </Link>
-            <p className="text-slate-500 text-sm mt-3 font-medium">FAA U.S. Agent for Service Platform</p>
+            <p className="text-slate-500 text-sm mt-3 font-medium">FAA U.S. Agent for Service Portal</p>
           </div>
 
           {/* Form area */}

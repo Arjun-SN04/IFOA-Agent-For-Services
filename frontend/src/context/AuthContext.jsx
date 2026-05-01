@@ -5,6 +5,21 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 const API = axios.create({ baseURL: BASE_URL })
 
+// Global response interceptor — if the server rejects with mustChangePassword:true
+// it means the user somehow has a stale token or bypassed the modal.
+// Force them back to the login page so the modal shows again.
+API.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 403 && err.response?.data?.mustChangePassword) {
+      // Token is valid but the user hasn't changed their password yet.
+      // Don't clear the token — just redirect so the modal shows.
+      window.location.replace('/login')
+    }
+    return Promise.reject(err)
+  }
+)
+
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {

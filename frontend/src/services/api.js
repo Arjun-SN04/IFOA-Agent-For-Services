@@ -79,6 +79,11 @@ export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) 
 export const activateQueuedRenewal = (registrationId, registrationModel) =>
   API.post('/payments/admin/activate-renewal', { registrationId, registrationModel })
 
+// User: auto-activate a queued renewal whose activationDate has already passed.
+// Backend enforces ownership + date guard — safe for non-admin users.
+export const autoActivateRenewal = (registrationId, registrationModel) =>
+  API.post('/payments/auto-activate-renewal', { registrationId, registrationModel })
+
 // ── Invoices (canonical Invoice model) ─────────────────────────────────────────────
 // Fetches a fresh DB-backed unique invoice number (format: Invoice US-350-26)
 export const generateInvoiceNumber     = ()           => API.get('/invoices/generate-number')

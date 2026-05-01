@@ -65,6 +65,21 @@ async function findRegistration(registrationId, registrationModel) {
   }
 }
 
+// ─── Airline pricing tiers (mirrors airlinesController.js constants) ─────────
+const ONE_YEAR_PRICES  = { '3 to 5': 60, '5 to 10': 55, 'More than 10': 49 };
+const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
+
+function holderRangeFromCount(count) {
+  if (count <= 5)  return '3 to 5';
+  if (count <= 10) return '5 to 10';
+  return 'More than 10';
+}
+
+function tierPpcForPlan(plan, count) {
+  const range = holderRangeFromCount(count);
+  return plan === 'Unlimited Plan' ? UNLIMITED_PRICES[range] : ONE_YEAR_PRICES[range];
+}
+
 function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
   const d = new Date(fromDate);
   if (subscriptionPlan === '1 Year Subscription Plan') {
@@ -200,6 +215,7 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     invoiceNumber:  paymentDoc.invoiceNumber || '',
     plan:           activePlan,
     multiYearCount: renewalMultiYearCount || null,
+    committedCount: renewalExactCount || null,  // airline: holder count at renewal time
     price:          paymentDoc.amountDollars || 0,
     paidAt:         paymentDoc.paidAt || now,
     activationDate: base,
@@ -232,8 +248,10 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.nextRenewal   = renewalSnapshot;
   } else {
     // IMMEDIATE — plan was expired; activate the renewal right away.
+    // subscriptionDate = base (= now for expired plans) so the date shown
+    // to the user is when coverage actually resumed, not a future queued date.
     update.subscriptionPlan        = activePlan;
-    update.subscriptionDate        = now;
+    update.subscriptionDate        = base;
     if (newExpiry)  update.expirationDate        = newExpiry;
     update.invoiceNumber           = paymentDoc.invoiceNumber;
     update.stripePaymentIntentId   = paymentDoc.stripePaymentIntentId;
@@ -241,13 +259,13 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.isPaid                  = true;
     update.status                  = 'Active';
     update.isFormCompleted         = true;
-    update.nextRenewalId           = null;
-    update.nextRenewal             = null;
+    // nextRenewal/nextRenewalId cleared via $unset below — do NOT put them in $set
     if (renewalMultiYearCount)     update.multiYearCount = renewalMultiYearCount;
     // Airline: update committed holder count if user changed it at renewal time
     if (renewalExactCount && registrationModel !== 'Individual') {
       update.committedCount    = renewalExactCount;
       update.holderCountValue  = String(renewalExactCount);
+      update.holderCount       = holderRangeFromCount(renewalExactCount);
     }
     if (registrationModel === 'Individual') {
       const PLAN_PRICES = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299 };
@@ -263,7 +281,25 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.wirePaymentRequestedAt = null;
   }
 
-  return Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
+  // For IMMEDIATE activations: null out nextRenewal fields explicitly.
+  // $unset on a typed subdocument leaves an empty shell — nulling each field
+  // ensures frontend checks like nextRenewal.paidAt correctly return falsy.
+  const mongoOp = isQueued
+    ? { $set: update }
+    : {
+        $set: {
+          ...update,
+          'nextRenewal.paidAt':         null,
+          'nextRenewal.plan':           null,
+          'nextRenewal.activationDate': null,
+          'nextRenewal.expiresAt':      null,
+          'nextRenewal.invoiceNumber':  null,
+          'nextRenewal.price':          null,
+        },
+        $unset: { nextRenewalId: 1 },
+      };
+
+  return Model.findByIdAndUpdate(registrationId, mongoOp, { new: true });
 }
 
 async function applyPaymentToRegistration(registrationId, registrationModel, paymentDoc) {
@@ -305,6 +341,7 @@ exports.createPaymentIntent = async (req, res) => {
       newSubscriptionPlan,        // optional: plan user selected at renewal time
       renewalMultiYearCount: bodyRenewalYears,  // optional: years user selected (Multi-Year renewal)
       renewalExactCount: bodyRenewalCount,       // optional: holder count user selected (airline renewal)
+      additionalHolderCount: bodyAdditionalCount, // optional: extra holders being added (holder-upgrade)
     } = req.body;
 
     if (!registrationId || !registrationModel)
@@ -317,21 +354,68 @@ exports.createPaymentIntent = async (req, res) => {
     if (!VALID_MODELS.includes(registrationModel))
       return res.status(400).json({ success: false, message: 'Invalid registrationModel.' });
 
+    const VALID_PURPOSES = ['payment', 'renewal', 'holder-upgrade'];
+    if (!VALID_PURPOSES.includes(purpose))
+      return res.status(400).json({ success: false, message: 'Invalid purpose.' });
+
     const { doc } = await findRegistration(registrationId, registrationModel);
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
 
-    // Renewals are allowed even when already paid; block only for first-time payments
-    if (purpose !== 'renewal' && (doc.isPaid || doc.paymentStatus === 'paid'))
+    // ── Ownership check ───────────────────────────────────────────────────────
+    // Non-admins can only create intents for registrations they own.
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const userEmail  = (req.user.email || '').toLowerCase();
+      const docEmail   = (doc.email || doc.pointOfContactEmail || '').toLowerCase();
+      const owns = userRegId === String(registrationId)
+        || userSubIds.includes(String(registrationId))
+        || (userEmail && docEmail && userEmail === docEmail);
+      if (!owns)
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    // Renewals and holder-upgrades are allowed even when already paid; block only for first-time payments
+    if (purpose !== 'renewal' && purpose !== 'holder-upgrade' && (doc.isPaid || doc.paymentStatus === 'paid'))
       return res.status(400).json({
         success: false,
         message: 'This subscription is already paid.',
       });
 
+    // Guard: cannot renew an Unlimited Plan (it never expires)
+    if (purpose === 'renewal' && doc.subscriptionPlan === 'Unlimited Plan' && !newSubscriptionPlan) {
+      return res.status(400).json({
+        success: false,
+        message: 'Unlimited Plan subscriptions do not require renewal.',
+      });
+    }
+
+    // Guard: holder-upgrade only applies to airlines
+    if (purpose === 'holder-upgrade' && registrationModel === 'Individual') {
+      return res.status(400).json({
+        success: false,
+        message: 'Holder upgrades are only available for airline accounts.',
+      });
+    }
+
     // ── Determine amount ──────────────────────────────────────────────────────
     let amountDollars;
 
-    if (registrationModel !== 'Individual') {
+    // ── Holder upgrade: count-based charge for additional slots ─────────────────
+    if (purpose === 'holder-upgrade') {
+      const additional = Number(bodyAdditionalCount || 0);
+      if (!additional || additional < 1)
+        return res.status(400).json({ success: false, message: 'additionalHolderCount must be at least 1 for airline accounts.' });
+
+      // Determine new total count and look up tier-based ppc
+      const currentCommitted = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      const newTotal = Math.max(3, currentCommitted + additional);
+      const newPpc   = tierPpcForPlan(doc.subscriptionPlan, newTotal);
+
+      // Count-based holder-upgrade amount: tier price x added holders.
+      amountDollars = newPpc * additional;
+    } else if (registrationModel !== 'Individual') {
       // Airlines: compute from pricePerCert × holder count (use renewal count if provided)
       const ppc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
       // For renewals the user may have adjusted the holder count — use that if supplied.
@@ -369,13 +453,12 @@ exports.createPaymentIntent = async (req, res) => {
     }
 
     const amountCents = Math.round(amountDollars * 100);
-    if (amountCents === 100)
-      return res.status(400).json({
-        success: false,
-        message: 'This payment option is no longer available.',
-      });
+
+    // Validate amount — must be positive. Stripe requires minimum $0.50.
     if (amountCents <= 0)
-      return res.status(400).json({ success: false, message: 'Invalid payment amount.' });
+      return res.status(400).json({ success: false, message: 'Invalid payment amount computed. Please check subscription configuration.' });
+    if (amountCents < 50)
+      return res.status(400).json({ success: false, message: `Payment amount too small ($${amountDollars.toFixed(2)}). Minimum is $0.50.` });
 
     const metadata = {
       registrationId:    String(registrationId),
@@ -389,6 +472,15 @@ exports.createPaymentIntent = async (req, res) => {
     if (metaRenewalYears) metadata.renewalMultiYearCount = String(metaRenewalYears);
     // Store the RENEWAL-selected holder count for airline renewals
     if (bodyRenewalCount) metadata.renewalExactCount = String(Number(bodyRenewalCount));
+    // Store additional holder count for holder-upgrade purpose
+    if (bodyAdditionalCount) metadata.additionalHolderCount = String(Number(bodyAdditionalCount));
+    // Store tier ppc so confirm/webhook can update pricePerCertificate on the record
+    if (purpose === 'holder-upgrade') {
+      const _additional = Number(bodyAdditionalCount || 0);
+      const _current    = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      const _newTotal   = Math.max(3, _current + _additional);
+      metadata.newPricePerCertificate = String(tierPpcForPlan(doc.subscriptionPlan, _newTotal));
+    }
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount:   amountCents,
@@ -451,16 +543,39 @@ exports.confirmPayment = async (req, res) => {
       });
     }
 
+    // Security: verify that the registrationId in the request matches what Stripe has
+    if (pi.metadata?.registrationId && pi.metadata.registrationId !== String(registrationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment intent does not match the provided registration.',
+      });
+    }
+
     const { doc } = await findRegistration(registrationId, registrationModel);
     if (!doc)
       return res.status(404).json({ success: false, message: 'Registration record not found.' });
+
+    // ── Ownership check ───────────────────────────────────────────────────────
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const userEmail  = (req.user.email || '').toLowerCase();
+      const docEmail   = (doc.email || doc.pointOfContactEmail || '').toLowerCase();
+      const owns = userRegId === String(registrationId)
+        || userSubIds.includes(String(registrationId))
+        || (userEmail && docEmail && userEmail === docEmail);
+      if (!owns)
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
 
     const now              = new Date();
     const amountCents      = pi.amount_received || pi.amount;
     const amountDollars    = amountCents / 100;
 
     // ── Determine purpose early so invoice number and snapshot are correct ────
-    const isPurposeRenewal = (pi.metadata?.purpose || 'payment') === 'renewal';
+    const piPurpose = pi.metadata?.purpose || 'payment';
+    const isPurposeRenewal = piPurpose === 'renewal';
+    const isPurposeHolderUpgrade = piPurpose === 'holder-upgrade';
 
     // Renewals always get a fresh invoice number so it doesn't overlap with
     // the original subscription's invoice.
@@ -542,7 +657,7 @@ exports.confirmPayment = async (req, res) => {
       userAgent:           userAgent || req.headers['user-agent'] || '',
       confirmedVia:        'frontend',
       // Renewal metadata — persisted on Payment doc for use by applyRenewalToRegistration
-      purpose:                isPurposeRenewal ? 'renewal' : 'payment',
+      purpose:                isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : 'payment',
       newSubscriptionPlan:    pi.metadata?.newSubscriptionPlan || null,
       renewalMultiYearCount,
       renewalExactCount,
@@ -576,9 +691,39 @@ exports.confirmPayment = async (req, res) => {
       paymentDoc = await paymentDoc.save();
     }
 
-    const updatedReg = isPurposeRenewal
-      ? await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc)
-      : await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+    let updatedReg;
+    if (isPurposeRenewal) {
+      updatedReg = await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc);
+    } else if (isPurposeHolderUpgrade) {
+      // Increase committedCount by the additional holder count that was paid for
+      // and update pricePerCertificate to the new tier rate.
+      const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
+      if (additionalCount > 0) {
+        const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
+        if (freshDoc && freshModel) {
+          const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
+          const newCount  = currentCommitted + additionalCount;
+          // Use the tier ppc stored in metadata (computed at create-intent time) or recompute it.
+          const newPpc    = pi.metadata?.newPricePerCertificate
+            ? Number(pi.metadata.newPricePerCertificate)
+            : tierPpcForPlan(freshDoc.subscriptionPlan, newCount);
+          updatedReg = await freshModel.findByIdAndUpdate(
+            registrationId,
+            { $set: {
+                committedCount:        newCount,
+                holderCountValue:      String(newCount),
+                pricePerCertificate:   newPpc,
+              }
+            },
+            { new: true }
+          );
+        }
+      } else {
+        updatedReg = doc;
+      }
+    } else {
+      updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+    }
 
     // Create / update the canonical Invoice document (single source of truth).
     // This is what both the admin dashboard and the user SubscriptionPage read.
@@ -745,12 +890,16 @@ exports.stripeWebhook = async (req, res) => {
       const now              = new Date();
       const amountCents      = pi.amount_received || pi.amount;
       const amountDollars    = amountCents / 100;
-      const isPurposeRenewal = (pi.metadata?.purpose || 'payment') === 'renewal';
+      const webhookPurpose = pi.metadata?.purpose || 'payment';
+      const isPurposeRenewal = webhookPurpose === 'renewal';
+      const isPurposeHolderUpgradeWebhook = webhookPurpose === 'holder-upgrade';
 
       // Renewals always get a fresh invoice number.
+      // But if the frontend already confirmed and created an invoice number, reuse it
+      // to avoid duplicate invoices for the same payment.
       const invoiceNum = isPurposeRenewal
-        ? await generateInvoiceNumber()
-        : (doc.invoiceNumber || await generateInvoiceNumber());
+        ? (existing?.invoiceNumber || await generateInvoiceNumber())
+        : (existing?.invoiceNumber || doc.invoiceNumber || await generateInvoiceNumber());
 
       let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
       try {
@@ -814,7 +963,7 @@ exports.stripeWebhook = async (req, res) => {
         invoiceDraft:   null,
         description:    pi.description || '',
         confirmedVia:   'webhook',
-        purpose:              isPurposeRenewal ? 'renewal' : 'payment',
+        purpose:              isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : 'payment',
         newSubscriptionPlan:  newSubscriptionPlan || null,
         renewalMultiYearCount: webhookRenewalYears,
         renewalExactCount:     webhookRenewalCount,
@@ -828,9 +977,36 @@ exports.stripeWebhook = async (req, res) => {
         paymentDoc = await Payment.create(paymentData);
       }
 
-      const updatedRegWebhook = isPurposeRenewal
-        ? await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc)
-        : await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+      let updatedRegWebhook;
+      if (isPurposeRenewal) {
+        updatedRegWebhook = await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc);
+      } else if (isPurposeHolderUpgradeWebhook) {
+        const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
+        if (additionalCount > 0) {
+          const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
+          if (freshDoc && freshModel) {
+            const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
+            const newCount = currentCommitted + additionalCount;
+            const newPpc   = pi.metadata?.newPricePerCertificate
+              ? Number(pi.metadata.newPricePerCertificate)
+              : tierPpcForPlan(freshDoc.subscriptionPlan, newCount);
+            updatedRegWebhook = await freshModel.findByIdAndUpdate(
+              registrationId,
+              { $set: {
+                  committedCount:       newCount,
+                  holderCountValue:     String(newCount),
+                  pricePerCertificate:  newPpc,
+                }
+              },
+              { new: true }
+            );
+          }
+        } else {
+          updatedRegWebhook = doc;
+        }
+      } else {
+        updatedRegWebhook = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
+      }
 
       // Create / update canonical Invoice document so admin and user see same invoice.
       try {
@@ -848,7 +1024,9 @@ exports.stripeWebhook = async (req, res) => {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
       }
 
-      // Send confirmation email — renewal vs first payment (non-blocking)
+      // Send confirmation email — renewal vs first payment (non-blocking).
+      // Only send if the frontend confirmation hasn't already sent it
+      // (confirmedVia would be 'frontend' if frontend confirm already ran).
       if (updatedRegWebhook) {
         const sendFn = isPurposeRenewal
           ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
@@ -905,6 +1083,7 @@ exports.stripeWebhook = async (req, res) => {
               status:      'failed',
               isPaid:      false,
               confirmedVia:'webhook',
+              purpose:     'payment',
             },
           },
           { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -951,6 +1130,16 @@ exports.getPaymentById = async (req, res) => {
     const payment = await Payment.findById(req.params.id);
     if (!payment)
       return res.status(404).json({ success: false, message: 'Payment not found.' });
+
+    // Ownership check — non-admins can only view payments tied to their own registrations
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const owns = userRegId === String(payment.registrationId)
+        || userSubIds.includes(String(payment.registrationId));
+      if (!owns)
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
     res.json({ success: true, data: payment });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -958,9 +1147,104 @@ exports.getPaymentById = async (req, res) => {
 };
 
 
-// ─── POST /api/payments/admin/activate-renewal (admin) ───────────────────────
-// Immediately activates a queued nextRenewal on a registration, so the admin
-// can force the next plan to start before the current expiry date if needed.
+// ─── Shared activation helper ─────────────────────────────────────────────────
+/**
+ * performQueuedRenewalActivation
+ *
+ * Core logic shared by:
+ *   - activateQueuedRenewal (admin endpoint — can activate before expiry)
+ *   - autoActivateRenewal   (user endpoint — only activates when activationDate ≤ now)
+ *   - subscriptionReminderCron (daily cron pass)
+ *
+ * @param {Document} doc               - Mongoose registration document
+ * @param {Model}    Model             - Mongoose model (Airlines | Individual)
+ * @param {string}   registrationModel - 'Airlines' | 'Individual'
+ * @param {boolean}  byAdmin           - true when triggered by an admin
+ * @returns {Document} updated registration
+ */
+async function performQueuedRenewalActivation(doc, Model, registrationModel, byAdmin = false) {
+  const nr  = doc.nextRenewal;
+  const now = new Date();
+
+  // Mark the standalone Renewal doc as active
+  if (doc.nextRenewalId) {
+    await Renewal.findByIdAndUpdate(doc.nextRenewalId, {
+      $set: { status: 'active', activatedAt: now, activatedByAdmin: byAdmin },
+    });
+  }
+
+  // Resolve expirationDate:
+  // 1. Use the stored expiresAt from the nextRenewal snapshot (ideal path).
+  // 2. Fallback: compute from plan + activationDate in case the snapshot was created
+  //    before the expiresAt field was added (old data).
+  // 3. null for Unlimited Plan (no expiry).
+  const activePlan = nr.plan || doc.subscriptionPlan;
+  const expiresAt  = nr.expiresAt
+    || (activePlan !== 'Unlimited Plan'
+        ? computeExpiry(activePlan, nr.activationDate || now, nr.multiYearCount)
+        : null);
+
+  const update = {
+    subscriptionPlan:       activePlan,
+    // subscriptionDate = the renewal's activationDate (when the new plan period starts),
+    // not "now" which would show today's date instead of the queued start date.
+    subscriptionDate:       nr.activationDate || now,
+    invoiceNumber:          nr.invoiceNumber,
+    invoiceStatus:          'Paid',
+    paymentStatus:          'paid',
+    isPaid:                 true,
+    status:                 'Active',
+    isFormCompleted:        true,
+    // Reset reminder flags so the user gets fresh reminders for the new period
+    expiryReminder60SentAt: null,
+    expiryReminder30SentAt: null,
+    ...(expiresAt ? { expirationDate: expiresAt } : {}),
+    ...(nr.multiYearCount ? { multiYearCount: nr.multiYearCount } : {}),
+    ...(registrationModel === 'Individual' && nr.price ? { price: nr.price } : {}),
+    // Airline-only fields
+    ...(registrationModel !== 'Individual' ? {
+      ...(nr.committedCount ? {
+        committedCount:   nr.committedCount,
+        holderCountValue: String(nr.committedCount),
+        holderCount:      holderRangeFromCount(nr.committedCount),
+      } : {}),
+      ...(nr.price ? { amountPaid: nr.price, totalAmount: nr.price } : {}),
+    } : {}),
+  };
+
+  // nextRenewal is a typed subdocument — $unset leaves an empty shell.
+  // Set each field to null explicitly, then $unset nextRenewalId.
+  // The frontend checks nextRenewal.paidAt so nulling paidAt is sufficient,
+  // but we also null the whole object for cleanliness.
+  const updatedDoc = await Model.findByIdAndUpdate(
+    doc._id,
+    {
+      $set:   { ...update, 'nextRenewal.paidAt': null, 'nextRenewal.plan': null,
+                'nextRenewal.activationDate': null, 'nextRenewal.expiresAt': null,
+                'nextRenewal.invoiceNumber': null, 'nextRenewal.price': null },
+      $unset: { nextRenewalId: 1 },
+    },
+    { new: true },
+  );
+
+  // ── Send renewal activation email ─────────────────────────────────────────
+  // The `lastRenewal` snapshot on the doc holds the renewal details for the email template.
+  if (updatedDoc) {
+    const sendFn = registrationModel === 'Individual'
+      ? sendIndividualRenewalConfirmation
+      : sendAirlineRenewalConfirmation;
+    sendFn(updatedDoc).catch((e) =>
+      console.warn('[performQueuedRenewalActivation] Renewal email failed:', e.message)
+    );
+  }
+
+  return updatedDoc;
+}
+exports.performQueuedRenewalActivation = performQueuedRenewalActivation;
+
+
+// ─── POST /api/payments/admin/activate-renewal (admin) ────────────────────────
+// Admin-only: force-activate a queued renewal even before the expiry date.
 exports.activateQueuedRenewal = async (req, res) => {
   try {
     const { registrationId, registrationModel } = req.body;
@@ -971,50 +1255,63 @@ exports.activateQueuedRenewal = async (req, res) => {
     if (!doc || !Model)
       return res.status(404).json({ success: false, message: 'Registration not found.' });
 
-    const nr = doc.nextRenewal;
-    if (!nr?.paidAt)
+    if (!doc.nextRenewal?.paidAt)
       return res.status(400).json({ success: false, message: 'No queued renewal found on this record.' });
 
-    // ── Mark Renewal doc as active ────────────────────────────────────────────
-    if (doc.nextRenewalId) {
-      await Renewal.findByIdAndUpdate(doc.nextRenewalId, {
-        $set: { status: 'active', activatedAt: new Date(), activatedByAdmin: true },
+    const updated = await performQueuedRenewalActivation(doc, Model, registrationModel, true);
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ─── POST /api/payments/auto-activate-renewal (authenticated user) ─────────────
+// Called by the user's own subscription page when the page detects that a queued
+// renewal's activationDate has already passed.  Only activates if:
+//   1. The caller owns this registration, AND
+//   2. The activationDate is in the past (the plan legitimately expired).
+exports.autoActivateRenewal = async (req, res) => {
+  try {
+    const { registrationId, registrationModel } = req.body;
+    if (!registrationId || !registrationModel)
+      return res.status(400).json({ success: false, message: 'registrationId and registrationModel are required.' });
+
+    // Fetch the doc first so we can verify ownership by email as well as by ID.
+    // (A newly-created airline user's JWT may not have registrationId populated yet
+    //  if it was linked during this session — email is the reliable fallback.)
+    const { doc, Model } = await findRegistration(registrationId, registrationModel);
+    if (!doc || !Model)
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    // Auth: admins can activate anything; regular users must own this registration.
+    if (req.user.role !== 'admin') {
+      const userSubIds = (req.user.subscriptionIds || []).map(String);
+      const userRegId  = req.user.registrationId ? String(req.user.registrationId) : null;
+      const userEmail  = req.user.email?.toLowerCase?.() || '';
+      const docEmail   = (doc.email || doc.pointOfContactEmail || '').toLowerCase();
+      const owns = userRegId === String(registrationId)
+        || userSubIds.includes(String(registrationId))
+        || (userEmail && docEmail && userEmail === docEmail);
+      if (!owns)
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    const nr = doc.nextRenewal;
+    if (!nr?.paidAt)
+      return res.status(400).json({ success: false, message: 'No queued renewal on this record.' });
+
+    // Only auto-activate if the activation date has actually passed.
+    // (Admin force-activate skips this check; user cannot activate early.)
+    const activationDate = nr.activationDate ? new Date(nr.activationDate) : null;
+    if (activationDate && activationDate > new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Renewal activation date has not been reached yet.',
       });
     }
 
-    // ── Apply the queued renewal as the new active subscription ───────────────
-    const now = new Date();
-    const update = {
-      subscriptionPlan:      nr.plan || doc.subscriptionPlan,
-      // Use today (admin is activating NOW), NOT the future queued activation date.
-      // The expiry date (nr.expiresAt) stays as originally paid for — the admin is
-      // simply starting the period early; the end date does not change.
-      subscriptionDate:      now,
-      expirationDate:        nr.expiresAt || null,
-      invoiceNumber:         nr.invoiceNumber,
-      invoiceStatus:         'Paid',
-      paymentStatus:         'paid',
-      isPaid:                true,
-      status:                'Active',
-      isFormCompleted:       true,
-      // Clear reminder flags so user gets fresh expiry reminders for the new period
-      expiryReminder60SentAt: null,
-      expiryReminder30SentAt: null,
-      // Clear the queued renewal
-      nextRenewal:            null,
-      nextRenewalId:          null,
-      ...(nr.multiYearCount ? { multiYearCount: nr.multiYearCount } : {}),
-      ...(registrationModel === 'Individual' && nr.price ? { price: nr.price } : {}),
-      // Airline-only fields
-      ...(registrationModel !== 'Individual' ? {
-        // Restore committed holder count from the renewal snapshot
-        ...(nr.committedCount ? { committedCount: nr.committedCount, holderCountValue: String(nr.committedCount) } : {}),
-        // Record what was paid for this renewal
-        ...(nr.price ? { amountPaid: nr.price } : {}),
-      } : {}),
-    };
-
-    const updated = await Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
+    const updated = await performQueuedRenewalActivation(doc, Model, registrationModel, false);
     return res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1048,5 +1345,3 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
-

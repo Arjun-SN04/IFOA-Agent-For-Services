@@ -180,7 +180,10 @@ function buildAirlineRenewalHtml(doc) {
   const renewal = doc.lastRenewal || {};
   const plan    = renewal.plan || doc.subscriptionPlan || '';
   const email   = doc.email || doc.paymentEmail || '';
-  const holders = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+  const holders = Number(
+    renewal.committedCount ||
+    doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0
+  );
   const fmtD    = (d) => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
   const activationDate = fmtD(renewal.activationDate);
   const expiresAt      = renewal.expiresAt ? fmtD(renewal.expiresAt) : (doc.expirationDate ? fmtD(doc.expirationDate) : 'N/A (Unlimited)');
@@ -224,7 +227,7 @@ function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
 
   return wrap(`
     <p style="margin:0 0 16px;">Dear ${escHtml(name)},</p>
-    <p style="margin:0 0 16px;">This is a friendly reminder that <strong>${entity}</strong> subscription with IFOA USA is expiring in <strong>${daysLeft} days</strong> on <strong>${expiry}</strong>.</p>
+    <p style="margin:0 0 16px;">This is a friendly reminder that <strong>${escHtml(entity)}</strong> subscription with IFOA USA is expiring in <strong>${daysLeft} days</strong> on <strong>${expiry}</strong>.</p>
     <p style="margin:0 0 6px;"><strong>Current Plan:</strong> ${escHtml(plan)}</p>
     <p style="margin:0 0 6px;"><strong>Email:</strong> ${escHtml(email)}</p>
     <p style="margin:0 0 6px;"><strong>Expiry Date:</strong> ${expiry}</p>
@@ -267,6 +270,10 @@ function collectRecipients(...addresses) {
 async function sendMail({ to, subject, html }) {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn('[email] SMTP_USER/SMTP_PASS not set — skipping email to', to);
+    return;
+  }
+  if (!to || (Array.isArray(to) ? to.length === 0 : !to.trim())) {
+    console.warn('[email] No valid recipients — skipping email:', subject);
     return;
   }
   const transporter = createTransporter();
@@ -317,6 +324,8 @@ async function sendAirlinePaymentConfirmation(doc, userEmail) {
 
 /**
  * Send the Individual renewal confirmation email.
+ * @param {object} doc          - Individual registration document
+ * @param {string} [userEmail]  - Logged-in user's account email (may differ from doc.email)
  */
 async function sendIndividualRenewalConfirmation(doc, userEmail) {
   const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
@@ -330,6 +339,8 @@ async function sendIndividualRenewalConfirmation(doc, userEmail) {
 
 /**
  * Send the Airline renewal confirmation email.
+ * @param {object} doc          - Airlines registration document
+ * @param {string} [userEmail]  - Logged-in user's account email (may differ from doc.email)
  */
 async function sendAirlineRenewalConfirmation(doc, userEmail) {
   const recipients = collectRecipients(doc.paymentEmail, doc.email, userEmail);
@@ -341,14 +352,21 @@ async function sendAirlineRenewalConfirmation(doc, userEmail) {
   });
 }
 
+/**
+ * Send the subscription expiry reminder email.
+ * Uses collectRecipients so malformed/missing addresses are silently skipped.
+ * @param {object}  doc       - Airlines or Individual registration document
+ * @param {boolean} isAirline
+ * @param {number}  daysLeft
+ */
 async function sendExpiryReminder(doc, isAirline, daysLeft) {
-  const to = doc.paymentEmail || doc.email;
-  if (!to) return;
+  const recipients = collectRecipients(doc.paymentEmail, doc.email);
+  if (!recipients.length) return;
   const entity = isAirline ? (doc.airlineName || 'Your Company') : 'Your';
   await sendMail({
-    to,
+    to:      recipients.join(', '),
     subject: `IFOA USA — ${entity} Subscription Expires in ${daysLeft} Days`,
-    html: buildExpiryReminderHtml(doc, isAirline, daysLeft),
+    html:    buildExpiryReminderHtml(doc, isAirline, daysLeft),
   });
 }
 

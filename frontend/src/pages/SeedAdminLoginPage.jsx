@@ -143,7 +143,7 @@ export default function SeedAdminLoginPage() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3 justify-center">
-          {['Admin Access', 'Secure & Encrypted', 'FAA Platform'].map(b => (
+          {['Admin Access', 'Secure & Encrypted', 'FAA Portal'].map(b => (
             <span key={b} className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: 'white', color: '#475569', border: '1px solid #e2e8f0' }}>{b}</span>
           ))}
         </div>

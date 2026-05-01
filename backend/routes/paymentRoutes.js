@@ -9,6 +9,7 @@ const {
   getPaymentById,
   getAllPayments,
   activateQueuedRenewal,
+  autoActivateRenewal,
 } = require('../controller/paymentController');
 
 const auth = require('../middleware/auth');
@@ -39,10 +40,14 @@ router.get('/by-registration/:id', auth, getPaymentsByRegistration);
 // ── Admin: immediately activate a queued nextRenewal on a registration ───────
 router.post('/admin/activate-renewal', auth, adminOnly, activateQueuedRenewal);
 
+// ── User: auto-activate a queued renewal whose activation date has passed ────
+// Safe for non-admins — ownership + activationDate-past guard enforced in controller.
+router.post('/auto-activate-renewal', auth, autoActivateRenewal);
+
 // ── Admin: list all payments (paginated) ─────────────────────────────────────
 router.get('/', auth, adminOnly, getAllPayments);
 
-// ── Get single Payment by its _id ─────────────────────────────────────────
+// ── Get single Payment by its _id (ownership enforced in controller) ─────────
 router.get('/:id', auth, getPaymentById);
 
 module.exports = router;

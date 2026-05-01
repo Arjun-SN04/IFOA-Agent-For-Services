@@ -25,6 +25,7 @@ const RenewalSchema = new mongoose.Schema({
   // ── What was purchased ──────────────────────────────────────────────────────
   plan:           { type: String, required: true },
   multiYearCount: { type: Number, default: null },  // years for Multi-Year plan
+  committedCount: { type: Number, default: null },  // airline: holder count at renewal time
   price:          { type: Number, required: true },  // amount actually paid
 
   // ── When & period ───────────────────────────────────────────────────────────

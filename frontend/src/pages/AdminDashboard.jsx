@@ -1095,9 +1095,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
           {step === 'edit' && (
             <div className="px-6 py-5 space-y-5 max-h-[72vh] overflow-y-auto">
               {autoPreview && previewLoading && (
-                <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-                  <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
-                  Generating invoice preview…
+                <div className="flex items-center justify-center py-3">
+                  <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
                 </div>
               )}
 
@@ -1235,9 +1234,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               </div>
               <div className="bg-slate-100 p-4 h-[72vh] max-h-[820px] min-h-[520px] overflow-hidden">
                 {previewLoading ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-3">
+                  <div className="h-full flex items-center justify-center">
                     <svg className="w-8 h-8 animate-spin text-slate-500" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
-                    <p className="text-sm text-slate-400">Generating preview…</p>
                   </div>
                 ) : (
                   <iframe
@@ -1559,7 +1557,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
   if (!data.length) return <EmptyState message="No airline records found" />
 
   const planLabel = (p) =>
-    p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || 'â€”'
+    p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || '—'
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -1603,8 +1601,8 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           <Plane className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || 'â€”'}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || 'â€”'}</p>
+                          <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
                           {hasMany && (
                             <button
                               onClick={e => { e.stopPropagation(); toggle(key) }}
@@ -1619,8 +1617,8 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4"><p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || 'â€”'}</p></td>
-                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || 'â€”'}</p></td>
+                    <td className="px-4 py-4"><p className="text-slate-700 text-xs truncate max-w-[130px]">{primary.email || primary.contactEmail || '—'}</p></td>
+                    <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs font-medium text-slate-700">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-0.5">
@@ -1659,12 +1657,12 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           </div>
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
-                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[100px]">{sub.airlineName || 'â€”'}</p>
+                            <p className="text-xs font-semibold text-slate-700 truncate max-w-[100px]">{sub.airlineName || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[130px]">{sub.email || sub.contactEmail || 'â€”'}</p></td>
-                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || 'â€”'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[130px]">{sub.email || sub.contactEmail || '—'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-0.5">
@@ -1754,7 +1752,7 @@ function OverviewPanel({ individuals, airlines }) {
         <StatCard
           label="Paid"
           value={indPaid + airPaid}
-          sub={`${indPaid} ind Â· ${airPaid} air`}
+          sub={`${indPaid} ind · ${airPaid} air`}
           accent="emerald"
           icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
         />
@@ -1780,7 +1778,7 @@ function OverviewPanel({ individuals, airlines }) {
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries â€” All Registrations</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries — All Registrations</p>
           <div className="space-y-2">
             {topCountries.length === 0 ? <p className="text-sm text-slate-400">No data yet.</p> : topCountries.map(([country, count]) => (
               <div key={country} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
@@ -2012,7 +2010,7 @@ export default function AdminDashboard() {
         console.warn('[handleSaveInvoice] Invoice doc sync failed:', invSyncErr.message)
       }
 
-      showToast('Invoice saved â€” user will see updated invoice')
+      showToast('Invoice saved — user will see updated invoice')
     } catch (e) {
       showToast(e?.response?.data?.message || 'Could not save invoice changes', 'error')
       throw e
@@ -2276,9 +2274,8 @@ export default function AdminDashboard() {
       )}
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-40 gap-4">
+        <div className="flex items-center justify-center py-40">
           <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-          <p className="text-sm font-semibold text-slate-500">Loading recordsâ€¦</p>
         </div>
       ) : tab === 'overview' ? (
         <OverviewPanel individuals={individuals} airlines={airlines} />

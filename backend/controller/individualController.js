@@ -175,13 +175,14 @@ function inferRowKind(row) {
 async function linkOrCreateIndividualUser(individual, payload) {
   let user = await User.findOne({ email: payload.email });
   if (!user) {
-    const generatedPassword = (payload.firstName || 'ifoa12345').trim();
+    const generatedPassword = (payload.firstName || 'ifoa12345').trim().toLowerCase().replace(/\s+/g, '');
     user = await User.create({
       email: payload.email,
       password: generatedPassword,
       role: 'individual',
       firstName: payload.firstName,
       lastName: payload.lastName,
+      mustChangePassword: true,   // force password change on first login
       registrationId: individual._id,
       registrationModel: 'Individual',
       subscriptionIds: [individual._id],
@@ -343,6 +344,10 @@ exports.getIndividualByEmail = async (req, res) => {
     const email = (req.query.email || req.params.email || '').trim();
     if (!email)
       return res.status(400).json({ success: false, message: 'Email is required' });
+
+    // Non-admins may only query their own email
+    if (req.user?.role !== 'admin' && email.toLowerCase() !== (req.user?.email || '').toLowerCase())
+      return res.status(403).json({ success: false, message: 'Access denied.' });
 
     // Case-insensitive match — handles old records stored in mixed case
     const safeEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

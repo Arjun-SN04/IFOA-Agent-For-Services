@@ -32,6 +32,33 @@ function PageFallback() {
   return <div className="min-h-screen bg-slate-50" />
 }
 
+// ── Global mustChangePassword gate ──────────────────────────────────────────
+// Runs on EVERY route — public and protected alike.
+// If a token exists but the user hasn't set their password yet, they must not
+// be allowed to access ANY page (home, register form, dashboard, etc.) until
+// the forced-change modal is completed.  This prevents the "logged-in navbar
+// on public pages" and "prefilled form" bypass shown in the screenshots.
+function MustChangePasswordGate({ children }) {
+  const { user, loading, mustChangePassword } = useAuth()
+  const location = useLocation()
+
+  // Wait until auth is resolved — avoids a flash redirect
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-10 h-10 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
+      </div>
+    )
+  }
+
+  // Redirect from every page except /login itself
+  if (user && mustChangePassword && location.pathname !== '/login') {
+    return <Navigate to="/login" state={{ from: location, mustChangePassword: true }} replace />
+  }
+
+  return children
+}
+
 // Auth guard — memoised so it never re-mounts children on unrelated renders
 function RequireAuth({ roles }) {
   const { user, loading, mustChangePassword } = useAuth()
@@ -48,9 +75,6 @@ function RequireAuth({ roles }) {
   if (roles && !roles.includes(user.role)) {
     return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />
   }
-  // If the user must change their password, send them back to login page
-  // which will show the MustChangePasswordModal on top (they're already logged in,
-  // AuthContext still has the token, the modal will render immediately).
   if (mustChangePassword) {
     return <Navigate to="/login" state={{ from: location, mustChangePassword: true }} replace />
   }
@@ -101,6 +125,7 @@ function App() {
       <DataCacheProvider>
         <ScrollToTop />
         <ChatBot />
+        <MustChangePasswordGate>
         <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* ── Public ── */}
@@ -135,6 +160,7 @@ function App() {
             </Route>
           </Routes>
         </Suspense>
+        </MustChangePasswordGate>
       </DataCacheProvider>
     </AuthProvider>
   )

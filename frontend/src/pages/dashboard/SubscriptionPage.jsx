@@ -1052,6 +1052,145 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/*  UpgradeHoldersModal                                                          */
+/*  Lets an active airline add more certificate holders (count-based pricing).    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+// Airline pricing tiers — mirrors ONE_YEAR_PRICES / UNLIMITED_PRICES in airlinesController.js
+const AIRLINE_ONE_YEAR_PPC  = { '3 to 5': 60, '5 to 10': 55, 'More than 10': 49 }
+const AIRLINE_UNLIMITED_PPC = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 }
+
+function airlineHolderRange(count) {
+  if (count <= 5)  return '3 to 5'
+  if (count <= 10) return '5 to 10'
+  return 'More than 10'
+}
+
+function airlineTierPpc(plan, totalCount) {
+  const range = airlineHolderRange(totalCount)
+  return plan === 'Unlimited Plan' ? AIRLINE_UNLIMITED_PPC[range] : AIRLINE_ONE_YEAR_PPC[range]
+}
+
+function UpgradeHoldersModal({ sub, onClose, onSaved }) {
+  const currentCount  = Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
+  // Business rule: minimum 3 holders per upgrade
+  const minAdditional = 3
+
+  const [additionalCount, setAdditionalCount] = useState(minAdditional)
+  const [showPayment, setShowPayment] = useState(false)
+
+  // Tier-based ppc: derived from NEW total count (currentCount + additionalCount)
+  const totalCount   = currentCount + additionalCount
+  const newPpc       = airlineTierPpc(sub.subscriptionPlan, totalCount)
+  const currentPpc   = airlineTierPpc(sub.subscriptionPlan, currentCount) // for display comparison
+
+  const dueAmount = Math.round(newPpc * additionalCount * 100) / 100
+
+  const dueLabel = `$${newPpc}/cert x ${additionalCount} holder${additionalCount !== 1 ? 's' : ''}`
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  if (showPayment) {
+    return (
+      <PaymentModal
+        registrationId={sub._id}
+        registrationModel="Airlines"
+        amount={Math.round(dueAmount * 100)}
+        subscriptionData={sub}
+        purpose="holder-upgrade"
+        additionalHolderCount={additionalCount}
+        onClose={() => setShowPayment(false)}
+        onSuccess={(inv, updatedReg) => {
+          onSaved(updatedReg || sub)
+          onClose()
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between rounded-t-2xl">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Expand Team</p>
+            <h3 className="text-base font-black text-slate-900">Add More Certificate Holders</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Current state */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Current committed slots</span>
+              <span className="font-bold text-slate-900">{currentCount}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Current rate ({airlineHolderRange(currentCount)})</span>
+              <span className="font-bold text-slate-900">${currentPpc}/holder</span>
+            </div>
+          </div>
+
+          {/* Additional count selector */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Additional Holders to Add</label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setAdditionalCount(c => Math.max(minAdditional, c - 1))}
+                className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+              >−</button>
+              <span className="text-2xl font-black text-slate-900 w-12 text-center">{additionalCount}</span>
+              <button
+                type="button"
+                onClick={() => setAdditionalCount(c => c + 1)}
+                className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+              >+</button>
+            </div>
+            <p className="text-xs text-slate-500">
+              New total: <strong>{totalCount} holders</strong>
+              {' '}— rate: <strong>${newPpc}/cert</strong>
+              {' '}({airlineHolderRange(totalCount)})
+              {newPpc !== currentPpc && (
+                <span className="ml-1 text-blue-600">(tier updated)</span>
+              )}
+            </p>
+            <p className="text-[10px] text-blue-600">Minimum additional holders per upgrade: 3</p>
+          </div>
+
+          {/* Cost summary */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between text-sm">
+            <div>
+              <span className="text-slate-500">Amount due:</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">{dueLabel}</p>
+            </div>
+            <span className="font-black text-xl text-slate-900">${dueAmount.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Cancel
+          </button>
+          <button
+            onClick={() => setShowPayment(true)}
+            className="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white transition"
+          >
+            Proceed to Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /*  RenewModal                                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const INDIVIDUAL_PLANS = [
@@ -1060,10 +1199,29 @@ const INDIVIDUAL_PLANS = [
   { value: 'Unlimited Plan',                  label: 'Unlimited — $299',    price: 299 },
 ]
 const AIRLINE_PLANS = [
-  { value: '1 Year Subscription Plan',        label: '1 Year Plan'         },
-  { value: 'Multiple Years Subscription Plan', label: 'Multiple Years Plan' },
-  { value: 'Unlimited Plan',                  label: 'Unlimited Plan'      },
+  { value: '1 Year Subscription Plan', label: '1 Year Plan'    },
+  { value: 'Unlimited Plan',           label: 'Unlimited Plan' },
 ]
+
+// ── Airline tier pricing for renewals — identical to Form 1 (AirlinesStep1PlanAndDetails) ──
+// 1-Year:    3–5 → $60/cert, 5–10 → $55/cert, 10+ → $49/cert
+// Unlimited: 3–5 → $265/cert, 5–10 → $255/cert, 10+ → $245/cert
+const RENEW_PRICE_MAP = {
+  '3 to 5':       { '1 Year Subscription Plan': 60,  'Unlimited Plan': 265 },
+  '5 to 10':      { '1 Year Subscription Plan': 55,  'Unlimited Plan': 255 },
+  'More than 10': { '1 Year Subscription Plan': 49,  'Unlimited Plan': 245 },
+}
+
+function airlineRenewRange(count) {
+  if (count <= 5)  return '3 to 5'
+  if (count <= 10) return '5 to 10'
+  return 'More than 10'
+}
+
+function getRenewPpc(plan, count) {
+  const range = airlineRenewRange(Math.max(1, count))
+  return RENEW_PRICE_MAP[range]?.[plan] ?? 49
+}
 
 function RenewModal({ sub, role, onClose, onSaved }) {
   const isAirline = role === 'airline'
@@ -1085,18 +1243,25 @@ function RenewModal({ sub, role, onClose, onSaved }) {
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  // Compute renewal price based on selected plan + count
+  // ── Airline tier-based PPC — recalculated live from exactCount + plan ──
+  // This mirrors the logic in AirlinesStep1PlanAndDetails.jsx exactly.
+  // We never read the stored pricePerCertificate here because the count may
+  // have changed, which means the tier (and therefore the rate) may change too.
+  const renewPpc = isAirline ? getRenewPpc(plan, exactCount) : 0
+  const renewRange = isAirline ? airlineRenewRange(Math.max(1, exactCount)) : null
+
+  // Compute renewal price
   const renewalPrice = (() => {
     if (isAirline) {
-      const ppc   = Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0)
-      const count = Math.max(1, exactCount)
-      if (plan === 'Multiple Years Subscription Plan') return ppc * count * Math.max(2, multiYearRenewCount)
-      return ppc * count // 1 Year or Unlimited
+      // Both 1-Year and Unlimited: PPC × count (tier recalculated above)
+      return renewPpc * Math.max(1, exactCount)
     }
+    // Individual plans — no certificate holders, fixed prices
     if (plan === 'Unlimited Plan') return 299
     if (plan === 'Multiple Years Subscription Plan') return 55 * Math.max(2, multiYearRenewCount)
     return 69 // 1 Year
   })()
+
   const renewalAmountCents = Math.round(renewalPrice * 100)
   /* TEST MODE — chargedCents is $1 when testRenewMode, real amount otherwise */
   const chargedCents = testRenewMode ? 100 : renewalAmountCents
@@ -1106,15 +1271,11 @@ function RenewModal({ sub, role, onClose, onSaved }) {
   const daysLeft = currentSub.expirationDate
     ? Math.ceil((new Date(currentSub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
     : null
-  // Price breakdown label shown under the total for airlines
-  const pricingLabel = (() => {
-    if (!isAirline) return null
-    const ppc = Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0)
-    if (!ppc) return null
-    if (plan === 'Multiple Years Subscription Plan')
-      return `$${ppc}/cert × ${exactCount} holder${exactCount !== 1 ? 's' : ''} × ${multiYearRenewCount} yrs`
-    return `$${ppc}/cert × ${exactCount} holder${exactCount !== 1 ? 's' : ''}`
-  })()
+
+  // Pricing breakdown label shown under the total for airlines
+  const pricingLabel = isAirline
+    ? `$${renewPpc}/cert × ${exactCount} holder${exactCount !== 1 ? 's' : ''} (${renewRange})`
+    : null
 
   // Show the edit-details form on top of the renew modal
   if (showEditDetails) {
@@ -1145,6 +1306,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         newSubscriptionPlan={plan}
         renewalMultiYearCount={plan === 'Multiple Years Subscription Plan' ? multiYearRenewCount : undefined}
         renewalExactCount={isAirline ? exactCount : undefined}
+        renewalPricePerCert={isAirline ? renewPpc : undefined}
         onClose={() => setShowPayment(false)}
         onSuccess={(inv, updatedReg) => {
           onSaved(updatedReg || currentSub)
@@ -1168,16 +1330,23 @@ function RenewModal({ sub, role, onClose, onSaved }) {
 
         <div className="p-5 space-y-4">
           {/* Expiry status */}
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-            <p className="font-bold text-amber-800">
-              {daysLeft !== null && daysLeft <= 0
-                ? 'Your subscription has expired.'
-                : daysLeft !== null
-                ? `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} — ${currentExpiry}`
-                : `Current expiry: ${currentExpiry}`}
-            </p>
-            <p className="text-amber-700 text-xs mt-0.5">Renewing will extend from your current expiry date.</p>
-          </div>
+          {daysLeft !== null && daysLeft <= 0 ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm">
+              <p className="font-bold text-red-800">⚠️ Your subscription has expired.</p>
+              <p className="text-red-700 text-xs mt-0.5">
+                Renewing now will start a fresh period from today — coverage resumes immediately upon payment.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+              <p className="font-bold text-amber-800">
+                {daysLeft !== null
+                  ? `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} — ${currentExpiry}`
+                  : `Current expiry: ${currentExpiry}`}
+              </p>
+              <p className="text-amber-700 text-xs mt-0.5">Renewing will extend from your current expiry date.</p>
+            </div>
+          )}
 
           {/* Review credentials prompt */}
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between gap-3">
@@ -1219,14 +1388,14 @@ function RenewModal({ sub, role, onClose, onSaved }) {
             ))}
           </div>
 
-          {/* Airline: holder count adjustment */}
+          {/* Airline: holder count adjustment + live tier display */}
           {isAirline && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Holders</label>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setExactCount(c => Math.max(1, c - 1))}
+                  onClick={() => setExactCount(c => Math.max(3, c - 1))}
                   className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
                 >−</button>
                 <span className="text-lg font-black text-slate-900 w-10 text-center">{exactCount}</span>
@@ -1240,11 +1409,14 @@ function RenewModal({ sub, role, onClose, onSaved }) {
                 Current committed: {Number(currentSub.committedCount || currentSub.holderCountValue || 0)} holders.{' '}
                 Adjust if your team size changed.
               </p>
+              <p className="text-xs text-blue-700 font-semibold">
+                Tier: <strong>{renewRange}</strong> — <strong>${renewPpc}/cert</strong>
+              </p>
             </div>
           )}
 
-          {/* Multi-year count input — for BOTH individual and airline */}
-          {plan === 'Multiple Years Subscription Plan' && (
+          {/* Multi-year count input — individuals only (airlines don't have this plan) */}
+          {!isAirline && plan === 'Multiple Years Subscription Plan' && (
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Number of Years</label>
               <input
@@ -1255,11 +1427,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
                 value={multiYearRenewCount}
                 onChange={(e) => setMultiYearRenewCount(Math.max(2, Number(e.target.value) || 2))}
               />
-              <p className="text-xs text-slate-500">
-                {isAirline
-                  ? `$${Number(currentSub.pricePerCertificate || currentSub.pricePerCert || 0).toFixed(0)}/cert × ${exactCount} × ${multiYearRenewCount} years`
-                  : `$55 × ${multiYearRenewCount} years`}
-              </p>
+              <p className="text-xs text-slate-500">$55 × {multiYearRenewCount} years</p>
             </div>
           )}
 
@@ -1323,6 +1491,7 @@ export default function SubscriptionPage() {
   const [viewInvoice,   setViewInvoice]   = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [renewTarget, setRenewTarget] = useState(null)
+  const [upgradeTarget, setUpgradeTarget] = useState(null)
   /* ── TEST MODE — remove this block before production ──────────────────── */
   const [testPayMode, setTestPayMode] = useState(false)
   /* ── END TEST MODE ────────────────────────────────────────────────────── */
@@ -1399,6 +1568,42 @@ export default function SubscriptionPage() {
     }
     load()
   }, [user, token, linkRegistration, getOrFetch, invalidate])
+
+  // ── Auto-activate any queued renewals whose activationDate has passed ─────────
+  const autoActivateAttempted = useState(() => new Set())[0]
+  useEffect(() => {
+    if (!subs.length || !token || !user) return
+    const regModel = user.role === 'airline' ? 'Airlines' : 'Individual'
+    const now = new Date()
+
+    subs.forEach(async (s) => {
+      if (!s.nextRenewal?.paidAt) return
+      if (s._autoActivateFailed) return
+      if (autoActivateAttempted.has(String(s._id))) return
+      const activationDate = s.nextRenewal.activationDate
+        ? new Date(s.nextRenewal.activationDate)
+        : null
+      if (!activationDate || activationDate > now) return
+
+      autoActivateAttempted.add(String(s._id))
+      try {
+        const res = await API.post('/payments/auto-activate-renewal', {
+          registrationId: s._id,
+          registrationModel: regModel,
+        })
+        if (res.data?.success && res.data?.data) {
+          const activated = res.data.data
+          setSubs(prev => prev.map(x => x._id === activated._id ? activated : x))
+          setSub(prev => (prev?._id === activated._id ? activated : prev))
+          cacheSet(`subs_${user?.id || user?.email}`, subs.map(x => x._id === activated._id ? activated : x))
+        } else {
+          setSubs(prev => prev.map(x => x._id === s._id ? { ...x, _autoActivateFailed: true } : x))
+        }
+      } catch (_) {
+        setSubs(prev => prev.map(x => x._id === s._id ? { ...x, _autoActivateFailed: true } : x))
+      }
+    })
+  }, [subs, token, user, autoActivateAttempted, cacheSet])
 
   return (
     <DashboardLayout>
@@ -1478,6 +1683,7 @@ export default function SubscriptionPage() {
                   setShowPayModal(true)
                 }}
                 onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
+                onUpgrade={() => setUpgradeTarget(s)}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onEditForm={() => setEditTarget(s)}
                 onRenew={() => setRenewTarget(s)}
@@ -1499,20 +1705,14 @@ export default function SubscriptionPage() {
             subscriptionData={sub}
             onClose={() => { setShowPayModal(false); setPayTarget(null); setPayingId(null) }}
             onSuccess={async (inv) => {
-              // 1. Optimistically mark as paid immediately so UI updates at once
               const updated = { ...sub, paymentStatus: 'paid', status: 'Active', isPaid: true }
               setSubs(prev => prev.map(s => s._id === updated._id ? updated : s))
               setSub(updated)
-              // 2. Seed the cache with the paid record so the next getOrFetch
-              //    doesn't overwrite with a stale 'pending' response from the backend
-              //    before the Stripe webhook has had a chance to fire.
               cacheSet(`subs_${user?.id || user?.email}`, [updated])
               setShowPayModal(false)
               setPayTarget(null)
               setPayingId(null)
               if (inv) setViewInvoice(inv)
-              // 3. Fetch the truly-fresh record from the backend (non-blocking)
-              //    and update the cache + state once it confirms the paid status.
               try {
                 const headers = { Authorization: `Bearer ${token}` }
                 const isAirlineUser = user?.role === 'airline'
@@ -1522,14 +1722,13 @@ export default function SubscriptionPage() {
                 const r = await API.get(endpoint, { headers })
                 const fresh = r.data.data
                 if (fresh) {
-                  // Only accept the fresh record if it confirms paid; otherwise keep optimistic
                   const freshIsPaid = fresh.isPaid === true || fresh.paymentStatus === 'paid' || fresh.status === 'Active'
                   const merged = freshIsPaid ? fresh : { ...fresh, paymentStatus: 'paid', status: 'Active', isPaid: true }
                   setSubs(prev => prev.map(s => s._id === merged._id ? merged : s))
                   setSub(merged)
                   cacheSet(`subs_${user?.id || user?.email}`, [merged])
                 }
-              } catch (_) { /* non-critical — optimistic update already applied */ }
+              } catch (_) { /* non-critical */ }
             }}
           />
         )}
@@ -1578,6 +1777,19 @@ export default function SubscriptionPage() {
           }}
         />
       )}
+
+      {upgradeTarget && (
+        <UpgradeHoldersModal
+          sub={upgradeTarget}
+          onClose={() => setUpgradeTarget(null)}
+          onSaved={(updated) => {
+            setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
+            setSub((prev) => (prev?._id === updated._id ? updated : prev))
+            invalidate(`subs_${user?.id || user?.email}`)
+            setUpgradeTarget(null)
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }
@@ -1585,19 +1797,25 @@ export default function SubscriptionPage() {
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onViewInvoice, onEditForm, onRenew, /* TEST MODE */ testPayMode, onToggleTestPay }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onUpgrade, onViewInvoice, onEditForm, onRenew, /* TEST MODE */ testPayMode, onToggleTestPay }) {
   const isAirline = user?.role === 'airline'
   const isPaid   = s.isPaid === true || s.paymentStatus === 'paid'
   const pending  = !isPaid
   const active   = isPaid
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
 
-  const isUnlimited = s.subscriptionPlan === 'Unlimited Plan'
+  const isUnlimited  = s.subscriptionPlan === 'Unlimited Plan'
   const daysToExpiry = s.expirationDate
     ? Math.ceil((new Date(s.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
     : null
+  const isExpired    = isPaid && !isUnlimited && daysToExpiry !== null && daysToExpiry <= 0
+  const hasQueuedRenewalDue = isExpired && s.nextRenewal?.paidAt &&
+    s.nextRenewal.activationDate && new Date(s.nextRenewal.activationDate) <= new Date() &&
+    !s._autoActivateFailed
+
   /* TEST MODE — remove `|| testPayMode` from the next line before production */
-  const showRenew = active && !isUnlimited && ((daysToExpiry === null || daysToExpiry <= 60) || testPayMode)
+  const showRenew = active && !isUnlimited && !hasQueuedRenewalDue &&
+    ((daysToExpiry === null || daysToExpiry <= 60) || testPayMode)
 
   const handleInvoiceClick = async () => {
     try {
@@ -1674,7 +1892,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
     }
   }
 
-  const bannerCls = active
+  const bannerCls = isExpired
+    ? 'bg-gradient-to-r from-red-900 to-red-700'
+    : active
     ? 'bg-gradient-to-r from-slate-900 to-slate-700'
     : inactive
     ? 'bg-gradient-to-r from-slate-700 to-slate-600'
@@ -1692,6 +1912,50 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
           <p className="text-xs font-black uppercase tracking-widest text-slate-500">
             Subscription #{idx + 1}
           </p>
+        </div>
+      )}
+
+      {hasQueuedRenewalDue && (
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 sm:p-5 flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-5 h-5 text-emerald-600 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20"/>
+              <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-emerald-900">Activating your renewal…</p>
+            <p className="text-xs text-emerald-700 mt-0.5 leading-relaxed">
+              Your new <strong>{s.nextRenewal.plan}</strong> plan is being activated. This page will update automatically.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isExpired && !s.nextRenewal?.paidAt && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-900">Your subscription has expired</p>
+              <p className="text-xs text-red-700 mt-0.5">
+                Renew now to restore your FAA compliance coverage and keep your certifications active.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onRenew}
+            className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-red-200 w-full sm:w-auto"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Renew Now
+          </button>
         </div>
       )}
 
@@ -1725,7 +1989,15 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
       <div className={`rounded-2xl p-4 sm:p-6 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${bannerCls}`}>
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-2">
-            {active ? 'Active Subscription' : inactive ? 'Inactive Subscription' : s.status === 'Active' ? 'Active — Payment Pending' : 'Pending Subscription'}
+            {isExpired
+              ? 'Expired Subscription'
+              : active
+              ? 'Active Subscription'
+              : inactive
+              ? 'Inactive Subscription'
+              : s.status === 'Active'
+              ? 'Active — Payment Pending'
+              : 'Pending Subscription'}
           </p>
           <PlanBadge plan={s.subscriptionPlan} />
         </div>
@@ -1752,15 +2024,30 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               </svg>
               Edit Form
             </button>
+            {isAirline && active && !isExpired && (
+              <button
+                onClick={onUpgrade}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Holders
+              </button>
+            )}
             {showRenew && (
               <button
                 onClick={onRenew}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-bold transition ${
+                  isExpired
+                    ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-400'
+                    : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400'
+                }`}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Renew
+                {isExpired ? 'Renew (Expired)' : 'Renew'}
               </button>
             )}
             {active && (s.stripePaymentIntentId || s.invoiceGenerated || s.invoiceNumber) && (
@@ -1792,20 +2079,32 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               <Row label="Airline Name" value={s.airlineName} />
               <Row label="Subscription Plan" value={s.subscriptionPlan} />
               <Row label="Payment Status" value={<PayBadge status={s.paymentStatus} />} />
-              <Row label="Subscription Date" value={s.subscriptionDate ? fmt(s.subscriptionDate) : (active ? fmt(s.updatedAt) : 'Activates on payment')} />
+              <Row
+                label="Subscription Start Date"
+                value={
+                  s.subscriptionDate
+                    ? <span className="font-semibold text-slate-900">{fmt(s.subscriptionDate)}</span>
+                    : active ? fmt(s.updatedAt) : 'Activates on payment'
+                }
+              />
               <Row
                 label="Expiration Date"
                 value={
                   s.subscriptionPlan === 'Unlimited Plan'
                     ? 'Never (Unlimited ∞)'
                     : s.expirationDate
-                    ? fmt(s.expirationDate)
+                    ? isExpired
+                      ? <span className="text-red-600 font-bold">{fmt(s.expirationDate)} — EXPIRED</span>
+                      : <span className="font-semibold text-slate-900">{fmt(s.expirationDate)}</span>
                     : active ? '—' : 'Activates on payment'
                 }
               />
               <Row label="Price per Certificate" value={money(s.pricePerCertificate || s.pricePerCert)} />
               <Row label="Certificate Holders" value={`${s.certificateHolders?.length || 0} / ${s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0} holder(s)`} />
-              <Row label="Total Amount Due" value={money(getAirlineTotal(s))} />
+              {s.multiYearCount > 1 && (
+                <Row label="Plan Duration" value={`${s.multiYearCount} years`} />
+              )}
+              <Row label="Total Amount" value={money(getAirlineTotal(s))} />
               {(() => {
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
                 if (remaining > 0) return (
@@ -1854,8 +2153,26 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               <Row label="Status" value={<PayBadge status={s.status || s.paymentStatus} />} />
               <Row label="Payment Status" value={<PayBadge status={s.paymentStatus} />} />
               <Row label="Plan Price" value={money(s.price)} />
-              <Row label="Subscription Date" value={fmt(s.subscriptionDate || s.createdAt)} />
-              <Row label="Expiration Date" value={s.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : fmt(s.expirationDate)} />
+              <Row
+                label="Subscription Start Date"
+                value={
+                  s.subscriptionDate
+                    ? <span className="font-semibold text-slate-900">{fmt(s.subscriptionDate)}</span>
+                    : fmt(s.createdAt)
+                }
+              />
+              <Row
+                label="Expiration Date"
+                value={
+                  s.subscriptionPlan === 'Unlimited Plan'
+                    ? 'Never (Unlimited)'
+                    : s.expirationDate
+                    ? isExpired
+                      ? <span className="text-red-600 font-bold">{fmt(s.expirationDate)} — EXPIRED</span>
+                      : <span className="font-semibold text-slate-900">{fmt(s.expirationDate)}</span>
+                    : '—'
+                }
+              />
               <Row label="Primary Certificate" value={s.primaryCertificate} />
               <Row label="Certificate Type" value={s.primaryAirmanCertificate} />
               {s.faaCertificateNumber && <Row label="FAA Certificate #" value={s.faaCertificateNumber} />}
@@ -1882,14 +2199,10 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
 
         const activationDate = nr.activationDate ? new Date(nr.activationDate) : null
 
-        // Only show for genuinely queued renewals (activation date is in the future).
-        // If the plan was already expired and renewed immediately, the main subscription
-        // card already shows the correct dates — no duplicate card needed.
         if (!activationDate || activationDate <= new Date()) return null
 
         return (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 overflow-hidden">
-            {/* Header */}
             <div className="flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-emerald-100 bg-emerald-100/60">
               <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1907,7 +2220,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               </span>
             </div>
 
-            {/* Plan details grid */}
             <div className="px-4 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Plan</span>
@@ -1933,7 +2245,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onV
               </div>
             </div>
 
-            {/* Footer note */}
             <div className="px-4 sm:px-6 pb-4">
               <div className="rounded-xl bg-emerald-100/70 border border-emerald-200 px-4 py-3">
                 <p className="text-xs text-emerald-700 leading-relaxed">

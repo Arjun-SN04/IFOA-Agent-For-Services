@@ -85,13 +85,18 @@ const PaymentSchema = new mongoose.Schema({
     default: null,
   },
 
-  // ── Renewal metadata — persisted so applyRenewalToRegistration can read them ─
+  // ── Payment purpose ─────────────────────────────────────────────────────────
+  // 'payment'        — initial subscription payment
+  // 'renewal'        — renewal of an existing subscription
+  // 'holder-upgrade' — airline adds more certificate holder slots
   purpose: {
     type: String,
-    enum: ['payment', 'renewal'],
+    enum: ['payment', 'renewal', 'holder-upgrade'],
     default: 'payment',
     index: true,
   },
+
+  // ── Renewal metadata — persisted so applyRenewalToRegistration can read them ─
   newSubscriptionPlan:   { type: String, default: null },  // plan user chose at renewal time
   renewalMultiYearCount: { type: Number, default: null },  // years for multi-year renewal
   renewalExactCount:     { type: Number, default: null },  // holder count for airline renewal
