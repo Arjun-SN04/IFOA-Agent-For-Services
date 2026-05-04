@@ -5,7 +5,7 @@ if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required — set it in .
 if (JWT_SECRET.length < 16) throw new Error('JWT_SECRET must be at least 16 characters — use a strong random secret');
 
 // Paths that mustChangePassword users may still access (to complete the forced change)
-const ALLOWED_WHEN_MUST_CHANGE = ['/update-credentials', '/me'];
+const ALLOWED_WHEN_MUST_CHANGE = ['/update-credentials', '/me', '/link-registration'];
 
 module.exports = function authMiddleware(req, res, next) {
   // Primary: Authorization header

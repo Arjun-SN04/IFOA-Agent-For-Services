@@ -488,10 +488,14 @@ const isRecordCompleted = (record) => {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RegisterPage() {
   const { user, token, linkRegistration, addSubscription } = useAuth()
+  const location = useLocation()
+  const forcedPlanStart = location.state?.forcePlanChangeStart === true
+  const forcedRegType = location.state?.forceRegType
 
   const [regType, setRegType] = useState('individual')
   const [switchDirection, setSwitchDirection] = useState(1)
   const [transitionMode, setTransitionMode] = useState('step')
+  const shouldForcePlanStartRef = useRef(forcedPlanStart)
 
   // Auto-select the correct form type based on account role (runs once on first load).
   // Does NOT override if the user manually switches the toggle.
@@ -504,6 +508,13 @@ export default function RegisterPage() {
     }
   }, [user])
 
+  // Pre-fill email from user account so link-registration ownership check always passes
+  useEffect(() => {
+    if (!user?.email) return
+    setIndData(prev => prev.email ? prev : { ...prev, email: user.email })
+    setAirData(prev => prev.email ? prev : { ...prev, email: user.email })
+  }, [user?.email])
+
   const [indStep, setIndStep] = useState(1)
   const [indData, setIndData] = useState(INDIVIDUAL_INIT)
   const [indSubmitted, setIndSubmitted] = useState(false)
@@ -515,6 +526,21 @@ export default function RegisterPage() {
   const [airSubmitted, setAirSubmitted] = useState(false)
   const [airSubmitting, setAirSubmitting] = useState(false)
   const [airError, setAirError] = useState('')
+
+  // When redirected from "Change plan" on Subscription page, always land on
+  // Step 1 of the account-matching registration form.
+  useEffect(() => {
+    if (!shouldForcePlanStartRef.current) return
+    const targetType =
+      forcedRegType === 'airline' || forcedRegType === 'individual'
+        ? forcedRegType
+        : (user?.role === 'airline' ? 'airline' : 'individual')
+
+    setTransitionMode('step')
+    setRegType(targetType)
+    if (targetType === 'airline') setAirStep(1)
+    else setIndStep(1)
+  }, [forcedRegType, user?.role])
 
   const [showAuthModal, setShowAuthModal] = useState(false)
   const scrollContainerRef = useRef(null)
@@ -623,7 +649,7 @@ export default function RegisterPage() {
           if (pending && !cancelled) {
             const hydrated = hydrateIndividualFormFromExisting(pending)
             if (hydrated) setIndData((prev) => ({ ...prev, ...hydrated }))
-            setIndStep(4)
+            if (!shouldForcePlanStartRef.current) setIndStep(4)
           }
         }
       } else if (user.role === 'airline') {
@@ -639,7 +665,7 @@ export default function RegisterPage() {
           if (pending && !cancelled) {
             const hydrated = hydrateAirlineFormFromExisting(pending)
             if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
-            setAirStep(4)
+            if (!shouldForcePlanStartRef.current) setAirStep(4)
           }
         }
       }
@@ -649,6 +675,7 @@ export default function RegisterPage() {
   }, [user, token, findExistingSubmission, findAnyRecord])
 
   useEffect(() => {
+    if (shouldForcePlanStartRef.current) return
     if (regType === 'individual' && hasIndividualSubmission && indStep < 4) setIndStep(4)
     if (regType === 'airline' && hasAirlineSubmission && airStep < 4) setAirStep(4)
   }, [regType, hasIndividualSubmission, hasAirlineSubmission, indStep, airStep])
@@ -666,6 +693,42 @@ export default function RegisterPage() {
   const requireAuth = () => { if (!user) { setShowAuthModal(true); return false }; return true }
   const updateInd = (fields) => setIndData(prev => ({ ...prev, ...fields }))
   const updateAir = (fields) => setAirData(prev => ({ ...prev, ...fields }))
+  const getAuthHeaders = () => {
+    const bearer = token || localStorage.getItem('ifoa_token') || ''
+    return bearer ? { Authorization: `Bearer ${bearer}` } : {}
+  }
+  const syncIndividualPendingRecord = async (id) => {
+    if (!id) return
+    try {
+      await axios.put(
+        `${BASE_URL}/individuals/${id}`,
+        {
+          ...indData,
+          paymentStatus: 'pending',
+          status: 'Pending',
+          subscriptionDate: null,
+          expirationDate: null,
+        },
+        { headers: getAuthHeaders() },
+      )
+    } catch { void 0 }
+  }
+  const syncAirlinePendingRecord = async (id) => {
+    if (!id) return
+    try {
+      await axios.put(
+        `${BASE_URL}/airlines/${id}`,
+        {
+          ...airData,
+          paymentStatus: 'pending',
+          status: 'Pending',
+          subscriptionDate: null,
+          expirationDate: null,
+        },
+        { headers: getAuthHeaders() },
+      )
+    } catch { void 0 }
+  }
 
   const handleIndSubmit = async (opts = {}) => {
     if (hasIndividualSubmission) {
@@ -680,6 +743,7 @@ export default function RegisterPage() {
       if (user && newId) {
         try { if (!user.registrationId) await linkRegistration(newId, 'Individual'); else await addSubscription(newId) } catch { void 0 }
       }
+      if (newId) setIndData((prev) => ({ ...prev, _id: newId }))
       if (opts.returnId) return newId
       setIndSubmitted(true); return null
     } catch (e) {
@@ -687,7 +751,11 @@ export default function RegisterPage() {
       if (e?.response?.status === 409) {
         const existingId = e?.response?.data?.data?._id
         if (existingId) {
+          // Keep the existing pending record in sync with latest plan/details
+          // before opening payment.
+          await syncIndividualPendingRecord(existingId)
           try { if (!user.registrationId) await linkRegistration(existingId, 'Individual'); else await addSubscription(existingId) } catch { void 0 }
+          setIndData((prev) => ({ ...prev, _id: existingId }))
           if (opts.returnId) return existingId
           return null
         }
@@ -718,8 +786,10 @@ export default function RegisterPage() {
         })
         const existing = byEmail?.data?.data || (Array.isArray(byEmail?.data?.all) ? byEmail.data.all[0] : null)
         if (existing?._id) {
-          const hydrated = hydrateAirlineFormFromExisting(existing)
-          if (hydrated) setAirData((prev) => ({ ...prev, ...hydrated }))
+          // Keep the existing pending record in sync with latest plan/details
+          // before opening payment.
+          await syncAirlinePendingRecord(existing._id)
+          setAirData((prev) => ({ ...prev, _id: existing._id }))
           try { if (!user.registrationId) await linkRegistration(existing._id, 'Airlines'); else await addSubscription(existing._id) } catch { void 0 }
           return existing._id
         }
@@ -733,12 +803,17 @@ export default function RegisterPage() {
       if (user && newId) {
         try { if (!user.registrationId) await linkRegistration(newId, 'Airlines'); else await addSubscription(newId) } catch { void 0 }
       }
+      if (newId) setAirData((prev) => ({ ...prev, _id: newId }))
       if (opts.returnId) return newId
       setAirSubmitted(true); return null
     } catch (e) {
       if (e?.response?.status === 409) {
         const existingId = e?.response?.data?.data?._id
         if (existingId) {
+          // Keep the existing pending record in sync with latest plan/details
+          // before opening payment.
+          await syncAirlinePendingRecord(existingId)
+          setAirData((prev) => ({ ...prev, _id: existingId }))
           try { if (!user.registrationId) await linkRegistration(existingId, 'Airlines'); else await addSubscription(existingId) } catch { void 0 }
           // When called for payment (returnId=true), return the existing ID silently so
           // card/wire payment can proceed without blocking the user with an error.
@@ -781,7 +856,21 @@ export default function RegisterPage() {
     if (regType === 'individual') goIndStep(2); else goAirStep(2)
   }
   const handleNextToStep3 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(3); else goAirStep(3) }
-  const handleNextToStep4 = () => { if (!requireAuth()) return; if (regType === 'individual') goIndStep(4); else goAirStep(4) }
+  const handleNextToStep4 = async () => {
+    if (!requireAuth()) return
+    if (regType === 'individual') {
+      if (indData?._id) {
+        await syncIndividualPendingRecord(indData._id)
+      } else {
+        const pendingId = await handleIndSubmit({ paymentStatus: 'pending', returnId: true })
+        if (pendingId) setIndData((prev) => ({ ...prev, _id: pendingId }))
+      }
+      goIndStep(4)
+    } else {
+      if (airData?._id) await syncAirlinePendingRecord(airData._id)
+      goAirStep(4)
+    }
+  }
   const handleBack = (n)  => { if (regType === 'individual') goIndStep(n); else goAirStep(n) }
   const isBlocked = regType === 'individual' ? isIndBlocked : isAirBlocked
 
@@ -795,12 +884,10 @@ export default function RegisterPage() {
       <div
         className="flex"
         style={{
-          height: '100vh',
-          maxHeight: '100vh',
+          height: '100dvh',
+          maxHeight: '100dvh',
           overflow: 'hidden',
           background: '#f8fafc',
-          position: 'fixed',
-          inset: 0,
         }}
       >
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
@@ -810,7 +897,7 @@ export default function RegisterPage() {
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
-            height: '100vh',
+            height: '100dvh',
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,

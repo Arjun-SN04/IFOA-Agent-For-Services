@@ -23,17 +23,61 @@ function toDateOrNull(v) {
   } else if (typeof v === 'string') {
     const s = v.trim();
     if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(s)) {
-      const parts = s.replace(/[.-]/g, '/').split('/');
-      const mm = parts[0].padStart(2, '0');
-      const dd = parts[1].padStart(2, '0');
-      const yyyy = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-      parsed = `${yyyy}-${mm}-${dd}`;
+      const sep = s.includes('/') ? '/' : s.includes('-') ? '-' : '.';
+      const parts = s.split(sep);
+      // Determine whether date is Y-M-D, M-D-Y or D-M-Y.
+      // If sep is '-' and first part is length 4 => ISO YYYY-MM-DD.
+      // Otherwise choose day-first when the first part is > 12 (e.g. 23.06.2025),
+      // else assume month-first (common in US for slash-separated dates).
+      let year, month, day;
+      if (sep === '-' && parts[0].length === 4) {
+        // ISO: YYYY-MM-DD
+        [year, month, day] = parts;
+      } else {
+        const a = parts[0];
+        const b = parts[1];
+        const c = parts[2];
+        // normalize two-digit years
+        const normYear = (y) => (y.length === 2 ? `20${y}` : y);
+        if (Number(a) > 12) {
+          // treat as D-M-Y
+          day = a.padStart(2, '0');
+          month = b.padStart(2, '0');
+          year = normYear(c);
+        } else {
+          // treat as M-D-Y
+          month = a.padStart(2, '0');
+          day = b.padStart(2, '0');
+          year = normYear(c);
+        }
+      }
+      parsed = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     } else {
       parsed = s;
     }
   }
 
   const d = new Date(parsed);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// DOB-specific parser: dot/slash-separated text is always MM.DD.YYYY (US month-first).
+// Also accepts JS Date objects (from cellDates: true).
+function parseDobText(v) {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  if (typeof v === 'number') return toDateOrNull(v); // Excel serial
+  const s = String(v).trim();
+  // MM.DD.YYYY or MM/DD/YYYY
+  const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2,4})$/);
+  if (m) {
+    const [, mm, dd, rawY] = m;
+    const yyyy = rawY.length === 2 ? `20${rawY}` : rawY;
+    const d = new Date(`${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // Fallback: let JS parse ISO strings etc.
+  const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -70,12 +114,14 @@ function normalizePlanPrice(plan, multiYearCount, explicitPrice) {
 function computeExpiration(plan, subscriptionDate, multiYearCount) {
   if (!subscriptionDate) return null;
   const d = new Date(subscriptionDate);
-  if (plan === '1 Year Subscription Plan') {
+  // Flexible plan matching: handle variations in sheet text
+  const p = String(plan || '').toLowerCase();
+  if (p.includes('unlimited')) return null;
+  if (p.includes('1 year') || p.includes('1-year') || p.includes('one year')) {
     d.setFullYear(d.getFullYear() + 1);
     return d;
   }
-  if (plan === 'Multiple Years Subscription Plan') {
-    // Require an explicit year count; 2 is the minimum valid multi-year plan
+  if (p.includes('multi') || p.includes('multiple') || p.includes('year')) {
     const years = Number(multiYearCount) >= 2 ? Number(multiYearCount) : 2;
     d.setFullYear(d.getFullYear() + years);
     return d;
@@ -90,7 +136,28 @@ function buildIndividualPayload(raw) {
     pick(src, ['subscriptionPlan', 'plan', 'Subscription Plan']) ||
     '1 Year Subscription Plan';
 
-  const multiYearCount = Number(pick(src, ['multiYearCount', 'years'], 3));
+  // Multi-year parsing: the sheet may contain either a simple year count (e.g. "3")
+  // or a string containing a per-year price with the years mentioned (e.g. "$55 per year (3 years)").
+  // Try numeric parse first; if that looks like a price (e.g. >20) or is missing,
+  // fallback to extracting a small integer (2-20) from the raw text.
+  const rawMYCell = pick(src, ['multiYearCount', 'years', 'Multi Year Plan'], '');
+  const numericMY = toNumberOrUndefined(rawMYCell);
+  let multiYearCount;
+  if (numericMY !== undefined && Number.isFinite(numericMY) && numericMY >= 2 && numericMY <= 20) {
+    multiYearCount = Math.round(numericMY);
+  } else {
+    const rawStr = String(rawMYCell || '').trim();
+    // Common patterns: "3 years", "(3 years)", "55 per year (3 years)", "x3", "3yr"
+    const m = rawStr.match(/(\d{1,2})\s*(?:years?|yrs?|yr|y)\b/i)
+      || rawStr.match(/\((\d{1,2})\)/)
+      || rawStr.match(/x\s*(\d{1,2})\b/i)
+      || rawStr.match(/\b(\d{1,2})\b/);
+    if (m && m[1]) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v >= 2 && v <= 20) multiYearCount = v;
+    }
+    if (!multiYearCount) multiYearCount = 2;
+  }
 
   const firstName = String(pick(src, ['firstName', 'First Name'])).trim();
   const lastName = String(pick(src, ['lastName', 'Last Name'])).trim();
@@ -110,7 +177,8 @@ function buildIndividualPayload(raw) {
   const payload = {
     status,
     subscriptionPlan,
-    price: normalizePlanPrice(subscriptionPlan, multiYearCount, toNumberOrUndefined(pick(src, ['price', 'TOTAL', 'Total', 'total']))),
+    // 'Total Service Fees' = individual fee; 'TOTAL' = grand total (skip it for price)
+    price: normalizePlanPrice(subscriptionPlan, multiYearCount, toNumberOrUndefined(pick(src, ['price', 'Total Service Fees', 'totalServiceFees']))),
     subscriptionDate,
     expirationDate: toDateOrNull(pick(src, ['expirationDate', 'Expiration Date'])),
     totalServiceFees: toNumberOrUndefined(pick(src, ['totalServiceFees', 'Total Service Fees'])),
@@ -118,7 +186,8 @@ function buildIndividualPayload(raw) {
     firstName,
     lastName,
     middleName: String(pick(src, ['middleName', 'Middle Name'])).trim(),
-    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])) || toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date('1990-01-01'),
+    // parseDobText: dot/slash-separated text is MM.DD.YYYY (US month-first)
+    dateOfBirth: parseDobText(pick(src, ['dateOfBirth', 'Date of Birth'])) || null,
 
     addressLine1: String(pick(src, ['addressLine1', 'Address Line 1'])).trim(),
     city: String(pick(src, ['city', 'City'])).trim(),
@@ -282,6 +351,15 @@ exports.adminImportIndividualsFromExcel = async (req, res) => {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+
+      // Skip blank/header rows (all meaningful fields empty)
+      const hasContent = ['First Name', 'firstName', 'Last Name', 'lastName', 'Email', 'email', 'Phone', 'phone']
+        .some(k => row[k] && String(row[k]).trim() !== '');
+      if (!hasContent) {
+        skipped.push({ row: i + 2, reason: 'Blank row skipped.' });
+        continue;
+      }
+
       const rowKind = inferRowKind(row);
       if (rowKind !== 'individual') {
         skipped.push({ row: i + 2, reason: `Skipped ${rowKind} row during individual import.` });

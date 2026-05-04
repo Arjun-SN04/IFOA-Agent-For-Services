@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
@@ -421,7 +422,23 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   const [fetchError,   setFetchError]   = useState(null)
   const [loading,      setLoading]      = useState(true)
 
+  // Lock background page scroll without shifting viewport position.
+  // This page uses its own fixed-height scroll container, so forcing
+  // body to `position: fixed` can make the checkout panel render off-screen.
   useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow
+    const prevHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevBodyOverflow
+      document.documentElement.style.overflow = prevHtmlOverflow
+    }
+  }, [])
+
+  useEffect(() => {
+    // Don't fire until we have a real registrationId — avoids 401 on first render
+    if (!registrationId || !registrationModel) return
     const create = async () => {
       try {
         const body = {
@@ -447,7 +464,12 @@ export default function PaymentModal({ registrationId, registrationModel, amount
           body: JSON.stringify(body),
         })
         const json = await res.json()
-        if (!json.success) throw new Error(json.message || 'Could not create payment intent')
+        // 403 + mustChangePassword: redirect to login so user can set password first
+        if (res.status === 403 && json?.mustChangePassword) {
+          window.location.replace('/login')
+          return
+        }
+        if (!res.ok || !json.success) throw new Error(json.message || 'Could not create payment intent')
         setClientSecret(json.clientSecret)
       } catch (err) {
         setFetchError(err.message)
@@ -458,12 +480,12 @@ export default function PaymentModal({ registrationId, registrationModel, amount
     create()
   }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount])
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
+      <div className="w-full max-w-sm max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
+        <div className="flex-shrink-0 bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -484,7 +506,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
           </button>
         </div>
 
-        <div className="px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading && (
             <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -522,6 +544,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

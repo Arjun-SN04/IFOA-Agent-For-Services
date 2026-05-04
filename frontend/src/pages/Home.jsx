@@ -459,67 +459,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── WHO NEEDS IT ── */}
-      <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
-        <div className="max-w-6xl mx-auto">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="grid lg:grid-cols-2 gap-14 items-center">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Who Needs This</p>
-              <h2 className="text-3xl sm:text-4xl font-bold leading-snug mb-6" style={{ color: C.dark }}>Who Needs a FAA<br />Agent for Service?</h2>
-              <p className="leading-relaxed mb-6 text-base" style={{ color: C.gray600 }}>
-                New requirements published in{' '}
-                <a href="https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_3-1.pdf" target="_blank" rel="noreferrer" className="font-bold underline" style={{ color: C.dark }}>FAA AC 3-1</a>
-                {' '}and{' '}
-                <a href="https://www.ecfr.gov/current/title-14/chapter-I/subchapter-A/part-3/subpart-C" target="_blank" rel="noreferrer" className="font-bold underline" style={{ color: C.dark }}>14 CFR Part 3 Subpart C</a>
-                {' '}require FAA certificate holders with non-U.S. addresses to appoint a U.S. Agent for Service.
-              </p>
-              <ul className="space-y-3 mb-8">
-                {['FAA-Certificated Pilots (Part 61)', 'Aircraft Mechanics & Dispatchers (Part 65)', 'Flight & Ground Instructors', 'Aircraft Owners (Part 47)', 'Aviation Businesses (Part 107)'].map(item => (
-                  <li key={item} className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: C.blueMuted }}>
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ color: C.blue }}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                    <span className="text-sm font-medium" style={{ color: C.gray700 }}>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap gap-3">
-                <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-7 py-3 rounded-xl text-sm transition-all duration-200"
-                  style={{ background: C.blue }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
-                  onMouseLeave={e => e.currentTarget.style.background = C.blue}>
-                  Register as Airline
-                </Link>
-                <Link to="/register" className="inline-flex items-center gap-2 font-semibold px-7 py-3 rounded-xl text-sm transition-all duration-200"
-                  style={{ color: C.dark, border: `1px solid ${C.gray200}` }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.gray400; e.currentTarget.style.background = C.gray50 }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.background = '' }}>
-                  Individual Plan
-                </Link>
-              </div>
-            </div>
-            <div className="flex flex-col gap-5">
-              <div className="relative rounded-3xl overflow-hidden shadow-xl" style={{ height: 340 }}>
-                <img src={dgrCrewImg} alt="FAA certified aviation crew" className="w-full h-full object-cover object-top" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(15,23,42,0.05), rgba(15,23,42,0.45))' }} />
-                <div className="absolute top-4 left-4">
-                  <span className="inline-flex items-center gap-1.5 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(8px)' }}>
-                    14 CFR Part 3 · Subpart C
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {[{ value: '14 CFR', label: 'Regulation' }, { value: 'Part 3', label: 'Subpart C' }, { value: '100%', label: 'FAA Compliant' }].map(s => (
-                  <div key={s.label} className="rounded-xl px-4 py-3 text-center" style={{ border: `1px solid ${C.gray200}`, background: C.gray50 }}>
-                    <p className="font-black text-sm" style={{ color: C.dark }}>{s.value}</p>
-                    <p className="text-[10px] mt-0.5 font-medium" style={{ color: C.gray400 }}>{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+     
 
       {/* ── SUBSCRIPTION PLANS ── */}
       <section id="pricing" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
@@ -535,45 +475,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── PRICING HIGHLIGHT + VIDEO ── */}
-      <section className="py-20 px-6" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-14 items-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>Pricing</p>
-            <h2 className="text-4xl sm:text-5xl font-black mb-6" style={{ color: C.dark }}>Less Than $70 Per Year</h2>
-            <p className="leading-relaxed mb-4" style={{ color: C.gray700 }}>
-              Choose one affordable payment of <strong style={{ color: C.dark }}>$69 per year,</strong> or <strong style={{ color: C.dark }}>$299 for an UNLIMITED period</strong>, with absolutely <strong style={{ color: C.dark }}>NO HIDDEN FEES.</strong>
-            </p>
-            <p className="leading-relaxed mb-6" style={{ color: C.gray700 }}>
-              You will gain a dedicated U.S. mailing address for FAA correspondence, instant digital forwarding, and secure online access.
-            </p>
-            <p className="font-black text-xl mb-3" style={{ color: C.dark }}>Do not miss this unbeatable rate!</p>
-            <p className="mb-8" style={{ color: C.gray600 }}>Register today and lock in worry-free compliance!</p>
-            <Link to="/register" className="inline-flex items-center gap-2 text-white font-bold px-8 py-3.5 rounded-xl text-sm transition-all duration-200"
-              style={{ background: C.blue }}
-              onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
-              onMouseLeave={e => e.currentTarget.style.background = C.blue}>
-              Create Your Account
-            </Link>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }}>
-            <div className="rounded-2xl overflow-hidden shadow-lg mb-6">
-              <iframe width="100%" height="315" src="https://www.youtube.com/embed/qYtEEb3GeVM" title="IFOA USA" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full" />
-            </div>
-            <div className="space-y-4">
-              {['A dedicated U.S. address for official FAA correspondence', 'Real-time unlimited digital mail forwarding so you never miss important documents'].map((point, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center" style={{ borderColor: C.blue }}>
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: C.blue }}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  </div>
-                  <p className="text-sm leading-relaxed" style={{ color: C.gray700 }}>{point}</p>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
+ 
       {/* FAQ */}
       <FAQSection />
 

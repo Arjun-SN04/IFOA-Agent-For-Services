@@ -48,25 +48,33 @@ function StatusBadge({ status }) {
   )
 }
 
-/* ── Edit Name Modal ──────────────────────────────────────────────────────── */
-function EditNameModal({ user, onClose, onSave }) {
-  const [firstName, setFirstName] = useState(user?.firstName || '')
-  const [lastName, setLastName]   = useState(user?.lastName || '')
-  const [saving, setSaving]       = useState(false)
-  const [err, setErr]             = useState('')
+/* ── Edit Profile Modal (name + airline name combined) ────────────────────── */
+function EditProfileModal({ user, isAirline, onClose, onSaveName, onSaveAirlineName }) {
+  const [firstName, setFirstName]     = useState(user?.firstName || '')
+  const [lastName, setLastName]       = useState(user?.lastName || '')
+  const [airlineName, setAirlineName] = useState(user?.airlineName || '')
+  const [saving, setSaving]           = useState(false)
+  const [err, setErr]                 = useState('')
 
   const handleSave = async () => {
     if (!firstName.trim() && !lastName.trim()) {
       setErr('Please enter at least a first name or last name.')
       return
     }
+    if (isAirline && !airlineName.trim()) {
+      setErr('Airline name cannot be empty.')
+      return
+    }
     setSaving(true)
     setErr('')
     try {
-      await onSave(firstName.trim(), lastName.trim())
+      await onSaveName(firstName.trim(), lastName.trim())
+      if (isAirline && airlineName.trim() !== (user?.airlineName || '')) {
+        await onSaveAirlineName(airlineName.trim())
+      }
       onClose()
     } catch (e) {
-      setErr(e?.response?.data?.message || 'Failed to update name.')
+      setErr(e?.response?.data?.message || 'Failed to update profile.')
     } finally {
       setSaving(false)
     }
@@ -79,7 +87,7 @@ function EditNameModal({ user, onClose, onSave }) {
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 bg-slate-50">
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">Edit Profile</p>
-            <h3 className="text-base sm:text-lg font-black text-slate-900">Change Your Name</h3>
+            <h3 className="text-base sm:text-lg font-black text-slate-900">Update Your Details</h3>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition flex-shrink-0">✕</button>
         </div>
@@ -103,6 +111,25 @@ function EditNameModal({ user, onClose, onSave }) {
               placeholder="Enter last name"
             />
           </div>
+          {isAirline && (
+            <>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-semibold text-amber-800">
+                  ⚠️ Changing the airline name will update how it appears on <strong>all future form submissions</strong>.
+                  Existing submitted records are not affected.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Airline / Company Name</label>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300"
+                  value={airlineName}
+                  onChange={e => setAirlineName(e.target.value)}
+                  placeholder="e.g. Skyline Airways Inc."
+                />
+              </div>
+            </>
+          )}
         </div>
         <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 bg-slate-50 px-4 sm:px-6 py-4">
           <button onClick={onClose} disabled={saving}
@@ -126,71 +153,6 @@ function EditNameModal({ user, onClose, onSave }) {
   )
 }
 
-/* ── Edit Airline Name Modal ──────────────────────────────────────────────── */
-function EditAirlineNameModal({ currentName, onClose, onSave }) {
-  const [name, setName] = useState(currentName || '')
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-
-  const handleSave = async () => {
-    if (!name.trim()) { setErr('Airline name cannot be empty.'); return }
-    setSaving(true)
-    setErr('')
-    try {
-      await onSave(name.trim())
-      onClose()
-    } catch (e) {
-      setErr(e?.response?.data?.message || 'Failed to update airline name.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 bg-slate-50">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-0.5">Airline Account</p>
-            <h3 className="text-base sm:text-lg font-black text-slate-900">Change Airline Name</h3>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition flex-shrink-0">✕</button>
-        </div>
-        <div className="px-4 sm:px-6 py-5 space-y-4">
-          {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs font-semibold text-amber-800">
-              ⚠️ Changing the airline name will update how it appears on <strong>all future form submissions</strong>.
-              Existing submitted records are not affected.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Airline / Company Name</label>
-            <input
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 hover:border-slate-300"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Skyline Airways Inc."
-            />
-          </div>
-        </div>
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-slate-100 bg-slate-50 px-4 sm:px-6 py-4">
-          <button onClick={onClose} disabled={saving}
-            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
-            {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
-            {saving ? 'Saving…' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* ── ProfilePage ──────────────────────────────────────────────────────────── */
 export default function ProfilePage() {
   const { user, token, updateProfile, updateAirlineName } = useAuth()
@@ -198,8 +160,7 @@ export default function ProfilePage() {
   const [subs, setSubs] = useState([])
   const [sub, setSub] = useState(null)
   const [subLoading, setSubLoading] = useState(true)
-  const [editNameOpen, setEditNameOpen] = useState(false)
-  const [editAirlineNameOpen, setEditAirlineNameOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [viewInvoice, setViewInvoice] = useState(null)
 
   const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'
@@ -267,14 +228,13 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout>
-      {editNameOpen && (
-        <EditNameModal user={user} onClose={() => setEditNameOpen(false)} onSave={updateProfile} />
-      )}
-      {editAirlineNameOpen && (
-        <EditAirlineNameModal
-          currentName={user?.airlineName}
-          onClose={() => setEditAirlineNameOpen(false)}
-          onSave={updateAirlineName}
+      {editOpen && (
+        <EditProfileModal
+          user={user}
+          isAirline={user?.role === 'airline'}
+          onClose={() => setEditOpen(false)}
+          onSaveName={updateProfile}
+          onSaveAirlineName={updateAirlineName}
         />
       )}
 
@@ -314,13 +274,13 @@ export default function ProfilePage() {
 
             {/* Edit button */}
             <button
-              onClick={() => setEditNameOpen(true)}
+              onClick={() => setEditOpen(true)}
               className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-white transition-all shadow-sm"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
               </svg>
-              Edit Name
+              Edit Profile
             </button>
           </div>
         </div>
@@ -329,16 +289,9 @@ export default function ProfilePage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Account Details</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={() => setEditNameOpen(true)} className="text-xs text-blue-600 font-semibold hover:underline">
-                Edit Name →
-              </button>
-              {user?.role === 'airline' && (
-                <button onClick={() => setEditAirlineNameOpen(true)} className="text-xs text-red-600 font-semibold hover:underline">
-                  Edit Airline Name →
-                </button>
-              )}
-            </div>
+            <button onClick={() => setEditOpen(true)} className="text-xs text-blue-600 font-semibold hover:underline">
+              Edit Profile →
+            </button>
           </div>
           <div className="px-4 sm:px-6 py-2">
             <InfoRow label="First Name" value={user?.firstName} />

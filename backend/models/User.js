@@ -14,14 +14,13 @@ const UserSchema = new mongoose.Schema({
   mustChangePassword: { type: Boolean, default: false },
   // Reference to their primary registration record (for airline/individual)
   registrationId: { type: mongoose.Schema.Types.ObjectId, refPath: 'registrationModel' },
+  // No built-in enum — custom validator allows null (admin/new users have no registration).
   registrationModel: {
     type: String,
-    enum: { values: ['Individual', 'AirlinesSubscription', 'Airlines'], message: '{VALUE} is not a valid registrationModel' },
     default: null,
-    // Allow null/undefined — only validate non-null values
     validate: {
       validator: function(v) { return v == null || ['Individual', 'AirlinesSubscription', 'Airlines'].includes(v); },
-      message:   props => `\`${props.value}\` is not a valid enum value for path \`registrationModel\`.`,
+      message:   props => `\`${props.value}\` is not a valid registrationModel`,
     },
   },
   // All subscription IDs ever created by this account (airlines can have multiple)

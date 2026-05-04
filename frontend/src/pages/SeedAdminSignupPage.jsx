@@ -107,9 +107,10 @@ export default function SeedAdminSignupPage() {
                     style={{ borderColor: '#e2e8f0', background: '#f8fafc', color: '#0f172a' }}
                     onFocus={focusStyle}
                     onBlur={blurStyle}
-                  </div>
-                  <div className="mt-5 flex flex-wrap gap-3 justify-center">
-                    {['Admin Signup', 'Secure & Encrypted', 'FAA Portal'].map((badge) => (
+                  />
+                </div>
+
+                <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>Last Name</label>
                   <input
                     type="text"

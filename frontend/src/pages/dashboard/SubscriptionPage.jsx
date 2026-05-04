@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
@@ -100,35 +100,20 @@ const AIRLINE_CERT_TYPES = [
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  EditSubscriptionFormModal                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
-const INDIV_PLAN_PRICES = {
-  '1 Year Subscription Plan': 69,
-  'Multiple Years Subscription Plan': (years) => 55 * (Number(years) > 1 ? Number(years) : 2),
-  'Unlimited Plan': 299,
-}
-
-function computeIndivPrice(plan, multiYearCount) {
-  if (plan === 'Multiple Years Subscription Plan') {
-    return 55 * (Number(multiYearCount) > 1 ? Number(multiYearCount) : 2)
-  }
-  return INDIV_PLAN_PRICES[plan] ?? 69
-}
-
 function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
+  const navigate = useNavigate()
   const isAirline = role === 'airline'
   const isPaid = sub.isPaid === true || sub.paymentStatus === 'paid'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [limitWarning, setLimitWarning] = useState('')
 
-  // Pre-payment plan/count state (only editable when !isPaid)
-  const [selectedPlan, setSelectedPlan] = useState(sub.subscriptionPlan || '1 Year Subscription Plan')
-  const [multiYearCount, setMultiYearCount] = useState(Number(sub.multiYearCount) || 2)
+  // Pre-payment count state (airline only)
   const [exactCount, setExactCount] = useState(Number(sub.holderCountValue || sub.committedCount || sub.certificateHolders?.length || 1))
 
   const pricePerCert = Number(sub.pricePerCertificate || sub.pricePerCert || 0)
 
   // Live-computed amounts (only relevant pre-payment)
-  const computedIndivPrice = computeIndivPrice(selectedPlan, multiYearCount)
   const computedAirlineTotal = pricePerCert > 0 ? pricePerCert * exactCount : getAirlineTotal(sub)
 
   const maxHolders = isPaid
@@ -308,16 +293,11 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             secondaryIacraTrackingNumber: form.hasSecondaryCertificate ? form.secondaryIacraTrackingNumber : '',
           }
 
-      // Pre-payment: include plan/count changes so backend can recompute price
+      // Pre-payment: include count changes for airline so backend can recompute price
       if (!isPaid) {
         if (isAirline) {
           airlineBase.holderCountValue = exactCount
           airlineBase.committedCount   = exactCount
-        } else {
-          individualBase.subscriptionPlan = selectedPlan
-          if (selectedPlan === 'Multiple Years Subscription Plan') {
-            individualBase.multiYearCount = multiYearCount
-          }
         }
       }
 
@@ -335,6 +315,16 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   /* input / select shared style */
   const inp = 'rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition w-full'
   const inpSm = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition w-full'
+
+  const handleChangePlan = () => {
+    onClose?.()
+    navigate('/register', {
+      state: {
+        forcePlanChangeStart: true,
+        forceRegType: isAirline ? 'airline' : 'individual',
+      },
+    })
+  }
 
   /* Lock body scroll when modal is open */
   useEffect(() => {
@@ -384,14 +374,13 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Plan</p>
                       <p className="text-sm font-bold text-slate-800">{sub.subscriptionPlan || '—'}</p>
                     </div>
-                    <a
-                      href="/register"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={handleChangePlan}
                       className="text-[10px] font-bold text-blue-600 hover:underline whitespace-nowrap flex-shrink-0"
                     >
                       Change plan ↗
-                    </a>
+                    </button>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Exact Certificate Holder Count</label>
@@ -411,31 +400,22 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Plan</label>
-                    <select className={inp + ' cursor-pointer'} value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)}>
-                      <option value="1 Year Subscription Plan">1 Year Subscription Plan — $69</option>
-                      <option value="Multiple Years Subscription Plan">Multiple Years Subscription Plan — $55/yr</option>
-                      <option value="Unlimited Plan">Unlimited Plan — $299</option>
-                    </select>
-                  </div>
-                  {selectedPlan === 'Multiple Years Subscription Plan' && (
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Number of Years</label>
-                      <input
-                        type="number"
-                        min="2"
-                        max="10"
-                        className={inp}
-                        value={multiYearCount}
-                        onChange={(e) => setMultiYearCount(Math.max(2, Number(e.target.value) || 2))}
-                      />
-                      <p className="text-xs text-slate-500">$55 × {multiYearCount} years</p>
+                  <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Plan</p>
+                      <p className="text-sm font-bold text-slate-800">{sub.subscriptionPlan || '—'}</p>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleChangePlan}
+                      className="text-[10px] font-bold text-blue-600 hover:underline whitespace-nowrap flex-shrink-0"
+                    >
+                      Change plan ↗
+                    </button>
+                  </div>
                   <div className="rounded-lg border border-blue-300 bg-white px-4 py-2.5 flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-600">Plan price</span>
-                    <span className="text-sm font-black text-blue-700">${computedIndivPrice.toFixed(2)}</span>
+                    <span className="text-sm font-black text-blue-700">${Number(sub.price || sub.totalServiceFees || 0).toFixed(2)}</span>
                   </div>
                 </div>
               )}
@@ -1071,13 +1051,15 @@ function airlineTierPpc(plan, totalCount) {
   return plan === 'Unlimited Plan' ? AIRLINE_UNLIMITED_PPC[range] : AIRLINE_ONE_YEAR_PPC[range]
 }
 
-function UpgradeHoldersModal({ sub, onClose, onSaved }) {
+function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
   const currentCount  = Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
   // Business rule: minimum 3 holders per upgrade
   const minAdditional = 3
 
   const [additionalCount, setAdditionalCount] = useState(minAdditional)
   const [showPayment, setShowPayment] = useState(false)
+  /* TEST MODE — remove before production */
+  const [testPayMode, setTestPayMode] = useState(false)
 
   // Tier-based ppc: derived from NEW total count (currentCount + additionalCount)
   const totalCount   = currentCount + additionalCount
@@ -1087,24 +1069,68 @@ function UpgradeHoldersModal({ sub, onClose, onSaved }) {
   const dueAmount = Math.round(newPpc * additionalCount * 100) / 100
 
   const dueLabel = `$${newPpc}/cert x ${additionalCount} holder${additionalCount !== 1 ? 's' : ''}`
+  const expectedCommittedCount = totalCount
+  const expectedPpc = newPpc
 
   useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow
+    const prevHtmlOverflow = document.documentElement.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prevBodyOverflow
+      document.documentElement.style.overflow = prevHtmlOverflow
+    }
   }, [])
+
+  const forceUnlockScroll = () => {
+    document.body.style.overflow = ''
+    document.documentElement.style.overflow = ''
+  }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  const fetchLatestUpgradeState = async (fallback) => {
+    if (!token) return fallback
+
+    let latest = fallback
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const fresh = await API.get(`/airlines/${sub._id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const doc = fresh?.data?.data
+        if (doc?._id) {
+          latest = doc
+          const committedNow = Number(doc.committedCount || doc.holderCountValue || 0)
+          const ppcNow = Number(doc.pricePerCertificate || doc.pricePerCert || 0)
+          if (committedNow >= expectedCommittedCount && ppcNow === expectedPpc) {
+            break
+          }
+        }
+      } catch { void 0 }
+      if (attempt < 4) await sleep(700)
+    }
+    return latest
+  }
 
   if (showPayment) {
     return (
       <PaymentModal
         registrationId={sub._id}
         registrationModel="Airlines"
-        amount={Math.round(dueAmount * 100)}
+        amount={testPayMode ? 100 : Math.round(dueAmount * 100)}
         subscriptionData={sub}
         purpose="holder-upgrade"
         additionalHolderCount={additionalCount}
-        onClose={() => setShowPayment(false)}
-        onSuccess={(inv, updatedReg) => {
-          onSaved(updatedReg || sub)
+        onClose={() => {
+          setShowPayment(false)
+        }}
+        onSuccess={async (inv, updatedReg) => {
+          const latest = await fetchLatestUpgradeState(updatedReg || sub)
+          await Promise.resolve(onSaved(latest))
+          setShowPayment(false)
+          forceUnlockScroll()
           onClose()
         }}
       />
@@ -1174,16 +1200,26 @@ function UpgradeHoldersModal({ sub, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Cancel
-          </button>
-          <button
-            onClick={() => setShowPayment(true)}
-            className="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white transition"
-          >
-            Proceed to Payment
-          </button>
+        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex items-center justify-between gap-3">
+          {/* TEST MODE TOGGLE — remove before production */}
+          <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setTestPayMode(v => !v)}>
+            <div className={`w-8 h-4 rounded-full relative transition-colors ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 $1 test</span>
+          </div>
+          {/* END TEST MODE TOGGLE */}
+          <div className="flex gap-3">
+            <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button
+              onClick={() => setShowPayment(true)}
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white transition"
+            >
+              {testPayMode ? 'Pay $1.00 (Test)' : 'Proceed to Payment'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1449,13 +1485,12 @@ function RenewModal({ sub, role, onClose, onSaved }) {
 
         <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl space-y-3">
           {/* ── TEST MODE TOGGLE — remove this block before production ──── */}
-          <label className="flex items-center gap-2 cursor-pointer select-none justify-end">
+          <div className="flex items-center gap-2 cursor-pointer select-none justify-end" onClick={() => setTestRenewMode(v => !v)}>
             <div className={`w-8 h-4 rounded-full relative transition-colors ${testRenewMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testRenewMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </div>
-            <input type="checkbox" className="sr-only" checked={testRenewMode} onChange={() => setTestRenewMode(v => !v)} />
             <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 Test: charge $1 only</span>
-          </label>
+          </div>
           {/* ── END TEST MODE TOGGLE ──────────────────────────────────── */}
           <div className="flex flex-col sm:flex-row justify-end gap-3">
             <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -1501,6 +1536,21 @@ export default function SubscriptionPage() {
     (user?.role === 'airline' ? 'Airlines' : 'Individual')
 
   const isPending = (s) => s && s.paymentStatus !== 'paid' && s.status !== 'Active'
+
+  useEffect(() => {
+    const anyModalOpen = !!(
+      showPayModal ||
+      showAddHolders ||
+      viewInvoice ||
+      editTarget ||
+      renewTarget ||
+      upgradeTarget
+    )
+    if (!anyModalOpen) {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showPayModal, showAddHolders, viewInvoice, editTarget, renewTarget, upgradeTarget])
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -1746,6 +1796,7 @@ export default function SubscriptionPage() {
           onSuccess={(result) => {
             setSubs(prev => prev.map(s => s._id === result.data?._id ? result.data : s))
             setSub(result.data)
+            cacheSet(`subs_${user?.id || user?.email}`, [result.data])
             setShowAddHolders(false)
           }}
         />
@@ -1781,11 +1832,31 @@ export default function SubscriptionPage() {
       {upgradeTarget && (
         <UpgradeHoldersModal
           sub={upgradeTarget}
+          token={token}
           onClose={() => setUpgradeTarget(null)}
-          onSaved={(updated) => {
+          onSaved={async (updated) => {
             setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
             setSub((prev) => (prev?._id === updated._id ? updated : prev))
             invalidate(`subs_${user?.id || user?.email}`)
+            // Ensure UI reflects backend-confirmed values immediately after holder upgrade payment.
+            try {
+              let latest = updated
+              for (let i = 0; i < 4; i += 1) {
+                const fresh = await API.get(`/airlines/${updated._id}`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+                if (fresh?.data?.data?._id) {
+                  latest = fresh.data.data
+                  const committedNow = Number(latest.committedCount || latest.holderCountValue || 0)
+                  const committedExpected = Number(updated.committedCount || updated.holderCountValue || 0)
+                  if (committedNow >= committedExpected) break
+                }
+                await new Promise((resolve) => setTimeout(resolve, 650))
+              }
+              setSubs((prev) => prev.map((x) => x._id === latest._id ? latest : x))
+              setSub((prev) => (prev?._id === latest._id ? latest : prev))
+              cacheSet(`subs_${user?.id || user?.email}`, [latest])
+            } catch { void 0 }
             setUpgradeTarget(null)
           }}
         />
@@ -2062,13 +2133,12 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               </button>
             )}
             {/* ── TEST MODE TOGGLE — remove this block before production ── */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none ml-1">
+            <div className="flex items-center gap-1.5 cursor-pointer select-none ml-1" onClick={onToggleTestPay}>
               <div className={`w-7 h-3.5 rounded-full relative transition-colors flex-shrink-0 ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
                 <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
               </div>
-              <input type="checkbox" className="sr-only" checked={!!testPayMode} onChange={onToggleTestPay} />
               <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider whitespace-nowrap">🧪 $1 Test</span>
-            </label>
+            </div>
             {/* ── END TEST MODE TOGGLE ──────────────────────────────────── */}
             <PayBadge status={s.paymentStatus || s.status} />
           </div>
@@ -2156,15 +2226,17 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               <Row
                 label="Subscription Start Date"
                 value={
-                  s.subscriptionDate
+                  active && s.subscriptionDate
                     ? <span className="font-semibold text-slate-900">{fmt(s.subscriptionDate)}</span>
-                    : fmt(s.createdAt)
+                    : 'Activates on payment'
                 }
               />
               <Row
                 label="Expiration Date"
                 value={
-                  s.subscriptionPlan === 'Unlimited Plan'
+                  !active
+                    ? 'Activates on payment'
+                    : s.subscriptionPlan === 'Unlimited Plan'
                     ? 'Never (Unlimited)'
                     : s.expirationDate
                     ? isExpired

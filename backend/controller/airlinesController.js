@@ -38,16 +38,43 @@ function toDateOrNull(v) {
   } else if (typeof v === 'string') {
     const s = v.trim();
     if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(s)) {
-      const parts = s.replace(/[.-]/g, '/').split('/');
-      const mm = parts[0].padStart(2, '0');
-      const dd = parts[1].padStart(2, '0');
-      const yyyy = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-      parsed = `${yyyy}-${mm}-${dd}`;
+      const sep = s.includes('/') ? '/' : s.includes('-') ? '-' : '.';
+      const parts = s.split(sep);
+      // Slash = MM/DD/YYYY, dash = YYYY-MM-DD or MM-DD-YYYY, dot = MM.DD.YYYY (US month-first)
+      let month, day, yyyy;
+      if (sep === '-' && parts[0].length === 4) {
+        // ISO: YYYY-MM-DD
+        [yyyy, month, day] = parts;
+      } else {
+        // MM/DD/YYYY or MM.DD.YYYY — month first
+        [month, day, yyyy] = parts;
+      }
+      yyyy = yyyy.length === 2 ? `20${yyyy}` : yyyy;
+      parsed = `${yyyy}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     } else {
       parsed = s;
     }
   }
   const d = new Date(parsed);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// DOB-specific parser: dot/slash-separated text is always MM.DD.YYYY (US month-first).
+// Also accepts JS Date objects (from cellDates: true).
+function parseDobText(v) {
+  if (!v) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  if (typeof v === 'number') return toDateOrNull(v); // Excel serial
+  const s = String(v).trim();
+  // MM.DD.YYYY or MM/DD/YYYY
+  const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2,4})$/);
+  if (m) {
+    const [, mm, dd, rawY] = m;
+    const yyyy = rawY.length === 2 ? `20${rawY}` : rawY;
+    const d = new Date(`${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -92,7 +119,7 @@ function buildHolderFromExportRow(row, fallbackEmail, fallbackCertType) {
 
   return {
     fullName: holderName || 'Unknown Holder',
-    dateOfBirth: toDateOrNull(pick(row, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || new Date('1990-01-01'),
+    dateOfBirth: parseDobText(pick(row, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || null,
     certificateType: pick(row, ['holderCertificateType', 'certificateType', 'Primary Certificate'], fallbackCertType || 'Part 65 - Aircraft Dispatcher'),
     certificateStatus: certStatus,
     faaCertificateNumber: String(pick(row, ['holderFaaCertificateNumber', 'faaCertificateNumber', 'FAA Certificate Number', '__EMPTY_1'], '')).trim(),
@@ -122,6 +149,10 @@ function buildAirlinePayload(raw) {
     subscriptionPlan = unlimitedVal ? 'Unlimited Plan' : (oneYearVal ? '1 Year Subscription Plan' : '1 Year Subscription Plan');
   }
 
+  // Multi-year count: only treat as count if it looks like a year (integer 2-20), not a price
+  const rawMYC = toNumberOrUndefined(pick(src, ['multiYearCount', 'years', 'Multi Year Plan'], ''));
+  const multiYearCount = (rawMYC && Number.isFinite(rawMYC) && rawMYC >= 2 && rawMYC <= 20) ? Math.round(rawMYC) : 2;
+
   const holderCountNum = Number(toNumberOrUndefined(pick(src, ['holderCountValue', 'Team Members', 'TeamMembers'], '3')) || 3);
   const holderCount = pick(src, ['holderCount'], holderRangeFromCount(holderCountNum));
   const holderCountValue = String(holderCountNum || 3);
@@ -145,7 +176,7 @@ function buildAirlinePayload(raw) {
 
   const holder = buildHolderFromExportRow(src, email, pick(src, ['Primary Certificate', 'certificateType'], 'Part 65 - Aircraft Dispatcher')) || {
     fullName: `${firstName} ${lastName}`.trim(),
-    dateOfBirth: toDateOrNull(pick(src, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || new Date('1990-01-01'),
+    dateOfBirth: parseDobText(pick(src, ['holderDateOfBirth', 'dateOfBirth', 'Date of Birth'])) || null,
     certificateType: pick(src, ['holderCertificateType', 'certificateType', 'Primary Certificate'], 'Part 65 - Aircraft Dispatcher'),
     certificateStatus: pick(src, ['holderCertificateStatus', 'certificateStatus'], 'EXISTING'),
     faaCertificateNumber: String(pick(src, ['holderFaaCertificateNumber', 'faaCertificateNumber', 'FAA Certificate Number'], '')).trim(),
@@ -165,7 +196,7 @@ function buildAirlinePayload(raw) {
     firstName,
     lastName,
     middleName: String(pick(src, ['middleName', 'Middle Name'], '')).trim(),
-    dateOfBirth: toDateOrNull(pick(src, ['dateOfBirth', 'Date of Birth'])),
+    dateOfBirth: parseDobText(pick(src, ['dateOfBirth', 'Date of Birth'])) || null,
     email,
     phone,
     addressLine1: String(pick(src, ['addressLine1', 'Address Line 1'], '')).trim(),
@@ -193,11 +224,12 @@ function buildAirlinePayload(raw) {
   payload.committedCount = Number(payload.holderCountValue || payload.certificateHolders.length || 1);
   payload.totalAmount = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.committedCount;
   payload.amountPaid = isUnlimited ? payload.pricePerCertificate : payload.pricePerCertificate * payload.certificateHolders.length;
+  payload.multiYearCount = multiYearCount;
   payload.subscriptionDate = paid ? (toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date'])) || new Date()) : toDateOrNull(pick(src, ['subscriptionDate', 'Subscription Date']));
   // Compute expirationDate — use value from sheet if present, otherwise derive from plan + subscriptionDate
   payload.expirationDate = toDateOrNull(pick(src, ['expirationDate', 'Expiration Date']));
-  if (paid && !payload.expirationDate && payload.subscriptionDate) {
-    payload.expirationDate = computeAirlinesExpirationDate(payload.subscriptionPlan, payload.subscriptionDate);
+  if (!payload.expirationDate && payload.subscriptionDate) {
+    payload.expirationDate = computeAirlinesExpirationDate(payload.subscriptionPlan, payload.subscriptionDate, multiYearCount);
   }
   payload.invoiceStatus = pick(src, ['invoiceStatus', 'Invoice ', 'Invoice'], paid ? 'Paid' : 'Pending');
   payload.invoiceNumber = pick(src, ['invoiceNumber', 'Invoice Number'], '');
@@ -222,7 +254,7 @@ function parseAirlineRecordsFromRows(rows) {
     if (!Array.isArray(current.certificateHolders) || !current.certificateHolders.length) {
       current.certificateHolders = [buildHolderFromExportRow({}, current.email, current.primaryCertificate) || {
         fullName: `${current.firstName} ${current.lastName}`.trim(),
-        dateOfBirth: new Date('1990-01-01'),
+        dateOfBirth: null,
         certificateType: 'Part 65 - Aircraft Dispatcher',
         certificateStatus: 'EXISTING',
         faaCertificateNumber: '',
@@ -572,8 +604,12 @@ exports.updateAirlinesSubscription = async (req, res) => {
     // committedCount / holderCountValue changes — for both pre-payment (non-admin)
     // AND admin edits on already-paid records.
     if (payload.holderCountValue !== undefined || payload.committedCount !== undefined) {
-      const existingForPrice = await Airlines.findById(req.params.id)
+      let existingForPrice = await Airlines.findById(req.params.id)
         .select('isPaid pricePerCertificate pricePerCert holderCountValue committedCount subscriptionPlan');
+      if (!existingForPrice) {
+        existingForPrice = await AirlinesSubscription.findById(req.params.id)
+          .select('isPaid pricePerCertificate pricePerCert holderCountValue committedCount subscriptionPlan');
+      }
       if (existingForPrice) {
         const newCount = Number(payload.holderCountValue ?? payload.committedCount ?? existingForPrice.holderCountValue ?? existingForPrice.committedCount ?? 0);
         const newRange = holderRangeFromCount(newCount);
@@ -590,12 +626,38 @@ exports.updateAirlinesSubscription = async (req, res) => {
             payload.totalServiceFees = recomputedPpc * newCount;
             payload.committedCount = newCount;
           } else if (!existingForPrice.isPaid) {
-            // Non-admin, pre-payment: allow recompute so PaymentModal shows correct figure
-            const pricePerCert = Number(existingForPrice.pricePerCertificate || existingForPrice.pricePerCert || recomputedPpc);
-            payload.totalAmount = pricePerCert * newCount;
-            payload.totalServiceFees = pricePerCert * newCount;
+            // Non-admin, pre-payment: recalculate from selected plan + holder range.
+            // Using the existing DB price here causes stale totals after plan changes.
+            payload.pricePerCertificate = recomputedPpc;
+            payload.totalAmount = recomputedPpc * newCount;
+            payload.totalServiceFees = recomputedPpc * newCount;
             payload.committedCount = newCount;
           }
+        }
+      }
+    }
+
+    // If the user changes only plan/range (count unchanged) before payment,
+    // still recompute the pending pricing to keep Subscription and Step 4 aligned.
+    if (!isAdmin && (payload.subscriptionPlan !== undefined || payload.holderCount !== undefined)) {
+      let existingForPlan = await Airlines.findById(req.params.id)
+        .select('isPaid subscriptionPlan holderCount holderCountValue committedCount');
+      if (!existingForPlan) {
+        existingForPlan = await AirlinesSubscription.findById(req.params.id)
+          .select('isPaid subscriptionPlan holderCount holderCountValue committedCount');
+      }
+      if (existingForPlan && !existingForPlan.isPaid) {
+        const currentCount = Number(existingForPlan.holderCountValue || existingForPlan.committedCount || 0);
+        if (currentCount > 0) {
+          const range = payload.holderCount || existingForPlan.holderCount || holderRangeFromCount(currentCount);
+          const plan = payload.subscriptionPlan || existingForPlan.subscriptionPlan || '1 Year Subscription Plan';
+          const recomputedPpc = resolvePricePerCertificate({ subscriptionPlan: plan, holderCount: range });
+          payload.holderCount = range;
+          payload.pricePerCertificate = recomputedPpc;
+          payload.totalAmount = recomputedPpc * currentCount;
+          payload.totalServiceFees = recomputedPpc * currentCount;
+          payload.committedCount = currentCount;
+          payload.holderCountValue = String(currentCount);
         }
       }
     }
@@ -691,14 +753,15 @@ exports.deleteAirlinesSubscription = async (req, res) => {
 };
 
 // ── Compute expiration date from plan ─────────────────────────────────────────
-function computeAirlinesExpirationDate(subscriptionPlan, fromDate) {
+function computeAirlinesExpirationDate(subscriptionPlan, fromDate, multiYearCount) {
   const d = new Date(fromDate);
   if (subscriptionPlan === '1 Year Subscription Plan') {
     d.setFullYear(d.getFullYear() + 1);
     return d;
   }
   if (subscriptionPlan === 'Multiple Years Subscription Plan') {
-    d.setFullYear(d.getFullYear() + 3);
+    const years = Number(multiYearCount) >= 2 ? Number(multiYearCount) : 2;
+    d.setFullYear(d.getFullYear() + years);
     return d;
   }
   return null; // Unlimited Plan
@@ -723,7 +786,7 @@ exports.markAirlinesPaid = async (req, res) => {
     if (doc.isPaid || doc.paymentStatus === 'paid')
       return res.json({ success: true, data: doc, alreadyPaid: true });
 
-    const expirationDate = computeAirlinesExpirationDate(doc.subscriptionPlan, now);
+    const expirationDate = computeAirlinesExpirationDate(doc.subscriptionPlan, now, doc.multiYearCount);
 
     const update = {
       paymentStatus:    'paid',
@@ -1291,7 +1354,8 @@ exports.renewAirlinesSubscription = async (req, res) => {
       ? new Date(doc.expirationDate)
       : new Date();
 
-    const newExpiry = computeAirlinesExpirationDate(newPlan, base);
+    const renewMultiYearCount = req.body.multiYearCount || doc.multiYearCount || 2;
+    const newExpiry = computeAirlinesExpirationDate(newPlan, base, renewMultiYearCount);
     if (!newExpiry) {
       return res.status(400).json({ success: false, message: 'Cannot compute expiry for the selected plan.' });
     }
@@ -1343,18 +1407,4 @@ exports.markAirlinesInvoiceGenerated = async (req, res) => {
   }
 };
 
-// ─── PATCH /api/airlines/:id/request-invoice ─────────────────────────────────
-// Called by airline user to request an invoice from admin.
-exports.requestAirlineInvoice = async (req, res) => {
-  try {
-    const doc = await Airlines.findByIdAndUpdate(
-      req.params.id,
-      { $set: { invoiceRequested: true, invoiceRequestedAt: new Date() } },
-      { new: true }
-    );
-    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
-    res.json({ success: true, data: doc });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+// Duplicate removed — requestAirlineInvoice is defined above (exports at line ~796).

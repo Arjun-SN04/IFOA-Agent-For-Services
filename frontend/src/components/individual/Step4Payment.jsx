@@ -287,7 +287,7 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
       {error && <div className="rounded-[26px] border border-red-200 bg-red-50/80 p-5 text-sm leading-6 text-red-700">{error}</div>}
 
       <div className="flex flex-col justify-between gap-3 border-t border-slate-100 pt-2 sm:flex-row">
-        <button onClick={onBack} disabled={submitting}
+        <button type="button" onClick={onBack} disabled={submitting}
           className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 px-6 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4"><path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0 5-5m-5 5h12" /></svg>
           Back
@@ -295,19 +295,19 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
 
         {/* TEST MODE TOGGLE — remove this block before production */}
         {!hasExistingRegistration && (
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setTestPayMode(v => !v)}>
             <div className={`w-8 h-4 rounded-full relative transition-colors ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </div>
-            <input type="checkbox" className="sr-only" checked={testPayMode} onChange={() => setTestPayMode(v => !v)} />
             <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 Test: charge $1 only</span>
-          </label>
+          </div>
         )}
         {/* END TEST MODE TOGGLE */}
 
         {/* Only show pay button if no existing registration */}
         {!hasExistingRegistration && (
           <button
+            type="button"
             onClick={handlePayClick}
             disabled={submitting || isBlocked}
             title={isBlocked ? 'You need an Individual account to submit this form' : undefined}

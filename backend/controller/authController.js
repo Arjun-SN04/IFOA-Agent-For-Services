@@ -20,6 +20,10 @@ const signToken = (user) =>
       email:              user.email,
       role:               user.role,
       mustChangePassword: user.mustChangePassword || false,
+      // Include ownership fields so requireOwnership middleware can verify
+      // record access without a DB lookup on every request.
+      registrationId:     user.registrationId ? String(user.registrationId) : null,
+      subscriptionIds:    (user.subscriptionIds || []).map(id => String(id)),
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES, algorithm: 'HS256' },
@@ -282,15 +286,18 @@ exports.linkRegistration = async (req, res) => {
 
     // Verify the registration record's email matches the calling user's email
     // so a user cannot link someone else's record to their account.
+    // Check ALL email fields on the doc — airlines have separate email/pointOfContactEmail/paymentEmail.
     if (req.user.role !== 'admin') {
       const Individual = require('../models/Individual');
       const Airlines   = require('../models/Airlines');
       const Model = registrationModel === 'Individual' ? Individual : Airlines;
       const doc = await Model.findById(registrationId).lean();
       if (!doc) return res.status(404).json({ message: 'Registration record not found.' });
-      const docEmail  = (doc.email || doc.pointOfContactEmail || '').toLowerCase();
       const userEmail = (req.user.email || '').toLowerCase();
-      if (!docEmail || docEmail !== userEmail)
+      const docEmails = [
+        doc.email, doc.pointOfContactEmail, doc.contactEmail, doc.paymentEmail,
+      ].filter(Boolean).map(e => e.toLowerCase());
+      if (!docEmails.length || !docEmails.includes(userEmail))
         return res.status(403).json({ message: 'This registration does not belong to your account.' });
     }
 
