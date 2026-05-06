@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 const CertificateHolderSchema = new mongoose.Schema({
   fullName:                     { type: String, required: true, trim: true },
-  dateOfBirth:                  { type: Date, required: true },
+  // Keep optional for backward compatibility with legacy/admin Excel airline sheets
+  // where team-member DOB is not present as a dedicated column.
+  dateOfBirth:                  { type: Date, required: false, default: null },
   certificateType: {
     type: String,
     required: true,

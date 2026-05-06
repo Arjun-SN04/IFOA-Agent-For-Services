@@ -1908,7 +1908,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
     ((daysToExpiry === null || daysToExpiry <= 60) || testPayMode)
 
   const handleInvoiceClick = async () => {
-    const activeInvoice = String(s.invoiceNumber || '').trim()
     const queuedInvoice = String(s.nextRenewal?.invoiceNumber || '').trim()
 
     try {
@@ -1916,16 +1915,17 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
         headers: { Authorization: `Bearer ${token}` },
       })
       const docs = invRes.data?.data || []
-      let invDoc = null
 
-      if (activeInvoice) {
-        invDoc = docs.find((d) => String(d?.invoiceNumber || '').trim() === activeInvoice) || null
-      }
-      if (!invDoc && queuedInvoice) {
-        invDoc = docs.find((d) => String(d?.invoiceNumber || '').trim() !== queuedInvoice) || null
-      }
-      if (!invDoc) {
-        invDoc = docs[0] || null
+      // Backend now sorts by updatedAt desc — docs[0] is the most recently
+      // updated invoice, which reflects any admin edits after a holder upgrade.
+      // Skip the queued-renewal invoice if present so the current plan invoice
+      // is always shown first.
+      let invDoc = null
+      if (docs.length > 0) {
+        // Prefer a non-queued invoice (i.e. the active subscription's invoice)
+        invDoc = queuedInvoice
+          ? (docs.find((d) => String(d?.invoiceNumber || '').trim() !== queuedInvoice) || docs[0])
+          : docs[0]
       }
 
       if (invDoc) {
@@ -2155,7 +2155,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 {isExpired ? 'Renew (Expired)' : 'Renew'}
               </button>
             )}
-            {active && (s.stripePaymentIntentId || s.invoiceGenerated || s.invoiceNumber) && (
+            {active && (
               <button
                 onClick={handleInvoiceClick}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
@@ -2205,7 +2205,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               />
               <Row label="Price per Certificate" value={money(s.pricePerCertificate || s.pricePerCert)} />
               <Row label="Certificate Holders" value={`${s.certificateHolders?.length || 0} / ${s.committedCount || s.holderCountValue || s.certificateHolders?.length || 0} holder(s)`} />
-              {s.multiYearCount > 1 && (
+              {s.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(s.multiYearCount) > 1 && (
                 <Row label="Plan Duration" value={`${s.multiYearCount} years`} />
               )}
               <Row label="Total Amount" value={money(getAirlineTotal(s))} />

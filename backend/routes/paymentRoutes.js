@@ -10,6 +10,7 @@ const {
   getAllPayments,
   activateQueuedRenewal,
   autoActivateRenewal,
+  refreshInvoice,
 } = require('../controller/paymentController');
 
 const auth = require('../middleware/auth');

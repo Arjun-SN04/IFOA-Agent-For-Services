@@ -154,9 +154,22 @@ function buildAirlinePayload(raw) {
     subscriptionPlan = unlimitedVal ? 'Unlimited Plan' : (oneYearVal ? '1 Year Subscription Plan' : '1 Year Subscription Plan');
   }
 
-  // Multi-year count: only treat as count if it looks like a year (integer 2-20), not a price
-  const rawMYC = toNumberOrUndefined(pick(src, ['multiYearCount', 'years', 'Multi Year Plan'], ''));
-  const multiYearCount = (rawMYC && Number.isFinite(rawMYC) && rawMYC >= 2 && rawMYC <= 20) ? Math.round(rawMYC) : 2;
+  // Multi-year count applies only to "Multiple Years Subscription Plan".
+  // Do not default to 2 for 1-year/unlimited airline plans.
+  const isMultiYearPlan = subscriptionPlan === 'Multiple Years Subscription Plan';
+  const rawMYC = toNumberOrUndefined(pick(src, [
+    'multiYearCount',
+    'multiYearYears',
+    'yearCount',
+    'years',
+    'Years',
+    'No of Years',
+    'Number of Years',
+    'Multi Year Count',
+  ], ''));
+  const multiYearCount = isMultiYearPlan
+    ? ((rawMYC && Number.isFinite(rawMYC) && rawMYC >= 2 && rawMYC <= 20) ? Math.round(rawMYC) : 2)
+    : null;
 
   const holderCountNum = Number(toNumberOrUndefined(pick(src, ['holderCountValue', 'Team Members', 'TeamMembers'], '3')) || 3);
   const holderCount = pick(src, ['holderCount'], holderRangeFromCount(holderCountNum));
@@ -1356,6 +1369,43 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // Create airline record
     const airline = new Airlines(body);
     await airline.save();
+
+    // Create canonical Invoice document for admin-created (paid) airlines so
+    // the airline user immediately sees the Invoice button in the dashboard.
+    try {
+      const invoiceNumber = await generateInvoiceNumber();
+      await createOrUpdateInvoice({
+        registrationId:    airline._id,
+        registrationModel: 'Airlines',
+        paymentId:         null,
+        snapshot: {
+          name:            airline.pointOfContact || '',
+          email:           airline.pointOfContactEmail || airline.email || '',
+          airlineName:     airline.airlineName || '',
+          subscriptionPlan: airline.subscriptionPlan || '',
+          subscriptionDate: airline.subscriptionDate || new Date(),
+          expirationDate:  airline.expirationDate || null,
+          holderCount:     airline.committedCount || airline.holderCountValue || 0,
+          pricePerCert:    airline.pricePerCertificate || airline.pricePerCert || 0,
+          subtotal:        airline.totalAmount || airline.amountPaid || 0,
+          tax:             0,
+          totalPaid:       airline.amountPaid || airline.totalAmount || 0,
+        },
+        amountDollars:       airline.amountPaid || airline.totalAmount || 0,
+        paidAt:              airline.subscriptionDate || new Date(),
+        paymentMethod:       'admin',
+        adminGenerated:      true,
+        existingInvoiceNumber: invoiceNumber,
+      });
+
+      // Mark registration fields for immediate visibility in the UI
+      airline.invoiceNumber = invoiceNumber;
+      airline.invoiceGenerated = true;
+      await airline.save();
+    } catch (invErr) {
+      // Non-critical: log and continue — admin can still generate invoice later
+      console.warn('[adminCreateAirlineForm] Invoice creation failed:', invErr.message);
+    }
 
     // Create or update User account for airline
     let user = await User.findOne({ email: body.pointOfContactEmail });

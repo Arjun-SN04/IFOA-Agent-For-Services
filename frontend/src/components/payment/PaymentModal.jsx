@@ -128,6 +128,50 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
   const [phase,         setPhase]        = useState('form')
   const [invoice,       setInvoice]      = useState(null)
 
+  const fetchCanonicalInvoice = async (token) => {
+    try {
+      const res = await fetch(`${BASE_URL}/invoices/by-registration/${registrationId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return null
+
+      const json = await res.json()
+      const docs = Array.isArray(json?.data) ? json.data : []
+      if (!docs.length) return null
+
+      // Prefer the newest canonical invoice document. The backend updates the
+      // original invoice in place for holder-upgrades, so this usually returns
+      // the airline's active invoice with the refreshed holder count.
+      return docs[0]
+    } catch {
+      return null
+    }
+  }
+
+  const invoiceDocToInvoice = (invDoc, fallbackPaymentId) => {
+    if (!invDoc) return null
+    const lineItem = Array.isArray(invDoc.lineItems) ? invDoc.lineItems[0] : null
+    return {
+      invoiceNumber:     invDoc.invoiceNumber || '—',
+      paidAt:            invDoc.paidAt || invDoc.issueDate,
+      subscriptionPlan:  invDoc.subscriptionPlan || '—',
+      expirationDate:    invDoc.expirationDate || null,
+      amount:            invDoc.totalAmount ?? invDoc.subtotal ?? 0,
+      currency:          invDoc.currency || 'USD',
+      paymentId:         invDoc.paymentId || fallbackPaymentId || '—',
+      name:              invDoc.recipientName || invDoc.recipientCompany || '',
+      email:             invDoc.recipientEmail || '',
+      phone:             invDoc.recipientPhone || '',
+      address:           [invDoc.recipientAddress1, invDoc.recipientAddress2, invDoc.recipientCountry].filter(Boolean).join(', '),
+      isAirline:         invDoc.isAirline || registrationModel !== 'Individual',
+      airlineName:       invDoc.recipientCompany || '',
+      pricePerCert:      lineItem?.unitPrice ?? null,
+      holderCount:       lineItem?.quantity ?? null,
+      invoiceDraft:      invDoc.draft || null,
+      _invoiceDocId:     invDoc._id,
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!stripe || !elements) return
@@ -194,10 +238,14 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
           }
         }
 
-        // 4. Build invoice from server Payment doc if available, otherwise build locally
-        const inv = confirmJson.payment
-          ? serverPaymentToInvoice(confirmJson.payment)
-          : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date())
+        // 4. Prefer the canonical Invoice doc so airline holder-upgrades show
+        // the refreshed active-plan invoice to both the airline and admin.
+        const canonicalInvoice = await fetchCanonicalInvoice(token)
+        const inv = canonicalInvoice
+          ? invoiceDocToInvoice(canonicalInvoice, confirmJson.payment?.stripePaymentIntentId || paymentIntent.id)
+          : (confirmJson.payment
+              ? serverPaymentToInvoice(confirmJson.payment)
+              : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date()))
 
         setInvoice(inv)
         // Show success tick screen first

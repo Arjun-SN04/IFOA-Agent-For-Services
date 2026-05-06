@@ -99,6 +99,82 @@ function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
 }
 
 /**
+ * updateOriginalInvoiceAfterHolderUpgrade
+ *
+ * After a holder-upgrade payment succeeds the airline's committedCount and
+ * pricePerCertificate have been bumped on the registration record.  The
+ * ORIGINAL Payment / Invoice docs still show the old holder count and total.
+ * This helper re-computes the invoice snapshot for the original payment and
+ * updates both the Payment doc and the canonical Invoice doc so the user
+ * always sees the active-plan totals on their invoice.
+ *
+ * @param {string}   registrationId
+ * @param {string}   registrationModel
+ * @param {Document} updatedReg  - The registration doc AFTER the count/ppc update
+ */
+async function updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, updatedReg) {
+  try {
+    // Find the original (first-payment) Payment doc for this registration.
+    const originalPayment = await Payment.findOne({
+      registrationId,
+      registrationModel,
+      purpose: { $in: ['payment', null, undefined] },
+      isPaid: true,
+    }).sort({ paidAt: 1 }); // earliest paid payment = original subscription payment
+
+    if (!originalPayment) return;
+
+    const newCount = Number(updatedReg.committedCount || updatedReg.holderCountValue || 0);
+    const newPpc   = Number(updatedReg.pricePerCertificate || updatedReg.pricePerCert || 0);
+    const newTotal = newPpc > 0 && newCount > 0 ? newPpc * newCount : originalPayment.amountDollars;
+
+    // Update the snapshot in-place so the invoice PDF always reflects the current plan.
+    const snap        = { ...(originalPayment.invoiceSnapshot || {}) };
+    snap.holderCount  = newCount;
+    snap.pricePerCert = newPpc;
+    snap.subtotal     = newTotal;
+    snap.totalPaid    = newTotal;
+
+    originalPayment.invoiceSnapshot = snap;
+    originalPayment.amountDollars   = newTotal;
+    originalPayment.markModified('invoiceSnapshot');
+    await originalPayment.save();
+
+    // Build the plan label for the line item description
+    const planLabel = (snap.subscriptionPlan || updatedReg.subscriptionPlan || '1 Year Plan')
+      .replace(' Subscription Plan', '')
+      .replace(' Plan', '');
+
+    // Build updated line items reflecting the new holder count and total.
+    // These are passed as draftOverrides so the draft (what the PDF reads) is
+    // also updated — without this, the draft keeps the old quantity/total even
+    // though the Invoice root fields are correctly updated.
+    const updatedLineItems = [{
+      description: `Agent For Service - ${planLabel}`,
+      quantity:    newCount,
+      unitPrice:   newPpc,
+      totalPrice:  newTotal,
+    }];
+
+    // Sync the canonical Invoice document so user and admin see the same total.
+    // Pass draftOverrides so the PDF-ready draft is also refreshed.
+    await createOrUpdateInvoice({
+      registrationId,
+      registrationModel,
+      paymentId:             originalPayment._id,
+      snapshot:              snap,
+      amountDollars:         newTotal,
+      paidAt:                originalPayment.paidAt,
+      paymentMethod:         originalPayment.paymentMethodType || 'card',
+      existingInvoiceNumber: originalPayment.invoiceNumber,
+      draftOverrides: { lineItems: updatedLineItems },
+    });
+  } catch (err) {
+    console.warn('[updateOriginalInvoiceAfterHolderUpgrade] Non-critical error:', err.message);
+  }
+}
+
+/**
  * Build the invoice snapshot stored permanently on the Payment document.
  * For airlines the total is ALWAYS pricePerCert × committedCount so legacy
  * DB records with the old flat-rate bug are corrected at payment-confirm time.
@@ -468,7 +544,7 @@ exports.createPaymentIntent = async (req, res) => {
     if (amountCents <= 0)
       return res.status(400).json({ success: false, message: 'Invalid payment amount computed. Please check subscription configuration.' });
     if (amountCents < 50)
-      return res.status(400).json({ success: false, message: `Payment amount too small ($${amountDollars.toFixed(2)}). Minimum is $0.50.` });
+      return res.status(400).json({ success: false, message: `Payment amount too small (${amountDollars.toFixed(2)}). Minimum is $0.50.` });
 
     const metadata = {
       registrationId:    String(registrationId),
@@ -744,23 +820,32 @@ exports.confirmPayment = async (req, res) => {
       } else {
         updatedReg = doc;
       }
+
+      // After a holder-upgrade, update the ORIGINAL subscription invoice so it
+      // reflects the new total (pricePerCert × new committedCount).
+      if (updatedReg) {
+        await updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, updatedReg);
+      }
     } else {
       updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
     }
 
     // Create / update the canonical Invoice document (single source of truth).
     // This is what both the admin dashboard and the user SubscriptionPage read.
+    // For holder-upgrades this is already handled inside updateOriginalInvoiceAfterHolderUpgrade.
     try {
-      await createOrUpdateInvoice({
-        registrationId,
-        registrationModel,
-        paymentId:      paymentDoc._id,
-        snapshot:       paymentDoc.invoiceSnapshot || {},
-        amountDollars:  paymentDoc.amountDollars,
-        paidAt:         paymentDoc.paidAt,
-        paymentMethod:  paymentDoc.paymentMethodType || 'card',
-        existingInvoiceNumber: paymentDoc.invoiceNumber,
-      });
+      if (!isPurposeHolderUpgrade) {
+        await createOrUpdateInvoice({
+          registrationId,
+          registrationModel,
+          paymentId:      paymentDoc._id,
+          snapshot:       paymentDoc.invoiceSnapshot || {},
+          amountDollars:  paymentDoc.amountDollars,
+          paidAt:         paymentDoc.paidAt,
+          paymentMethod:  paymentDoc.paymentMethodType || 'card',
+          existingInvoiceNumber: paymentDoc.invoiceNumber,
+        });
+      }
     } catch (invoiceErr) {
       // Non-critical — log but don't fail the payment response
       console.warn('[confirmPayment] Invoice doc creation failed:', invoiceErr.message);
@@ -1012,6 +1097,12 @@ exports.stripeWebhook = async (req, res) => {
         ? Number(pi.metadata.renewalExactCount) : null;
 
       let invoiceSnapshot;
+      // For holder-upgrade payments we may need to update the registration
+      // committedCount before building the invoice snapshot so the invoice
+      // reflects the new holder count. Track whether we performed the
+      // update here to avoid double-updating later in the webhook flow.
+      let holderUpgradePerformed = false;
+      let updatedRegAfterHolderUpgrade = null;
       if (isPurposeRenewal) {
         const renewalPlan   = pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
         const renewalYears  = webhookRenewalYears || doc.multiYearCount || null;
@@ -1024,6 +1115,32 @@ exports.stripeWebhook = async (req, res) => {
           ...(webhookRenewalCount ? { committedCount: webhookRenewalCount, holderCountValue: webhookRenewalCount } : {}),
         };
         invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
+      } else if (isPurposeHolderUpgradeWebhook) {
+        // If this webhook is for adding holders, apply the committedCount
+        // bump immediately so the invoice snapshot uses the new count.
+        const additionalCount = pi.metadata?.additionalHolderCount ? Number(pi.metadata.additionalHolderCount) : 0;
+        if (additionalCount > 0) {
+          const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
+          if (freshDoc && freshModel) {
+            const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
+            const newCount = currentCommitted + additionalCount;
+            const newPpc = pi.metadata?.newPricePerCertificate ? Number(pi.metadata.newPricePerCertificate) : tierPpcForPlan(freshDoc.subscriptionPlan, newCount);
+            await freshModel.findByIdAndUpdate(registrationId, {
+              $set: {
+                committedCount:      newCount,
+                holderCountValue:    String(newCount),
+                pricePerCertificate: newPpc,
+              }
+            });
+            updatedRegAfterHolderUpgrade = await freshModel.findById(registrationId);
+            holderUpgradePerformed = true;
+            invoiceSnapshot = buildInvoiceSnapshot(updatedRegAfterHolderUpgrade, registrationModel, amountDollars, now);
+          } else {
+            invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
+          }
+        } else {
+          invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
+        }
       } else {
         invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
       }
@@ -1068,43 +1185,59 @@ exports.stripeWebhook = async (req, res) => {
       } else if (isPurposeHolderUpgradeWebhook) {
         const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
         if (additionalCount > 0) {
-          const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
-          if (freshDoc && freshModel) {
-            const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
-            const newCount = currentCommitted + additionalCount;
-            const newPpc   = pi.metadata?.newPricePerCertificate
-              ? Number(pi.metadata.newPricePerCertificate)
-              : tierPpcForPlan(freshDoc.subscriptionPlan, newCount);
-            updatedRegWebhook = await freshModel.findByIdAndUpdate(
-              registrationId,
-              { $set: {
-                  committedCount:       newCount,
-                  holderCountValue:     String(newCount),
-                  pricePerCertificate:  newPpc,
-                }
-              },
-              { new: true }
-            );
+          if (holderUpgradePerformed && updatedRegAfterHolderUpgrade) {
+            // We already applied the committedCount bump earlier to build the
+            // invoice snapshot — reuse that updated document instead of
+            // performing the update again.
+            updatedRegWebhook = updatedRegAfterHolderUpgrade;
+          } else {
+            const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
+            if (freshDoc && freshModel) {
+              const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
+              const newCount = currentCommitted + additionalCount;
+              const newPpc   = pi.metadata?.newPricePerCertificate
+                ? Number(pi.metadata.newPricePerCertificate)
+                : tierPpcForPlan(freshDoc.subscriptionPlan, newCount);
+              updatedRegWebhook = await freshModel.findByIdAndUpdate(
+                registrationId,
+                { $set: {
+                    committedCount:       newCount,
+                    holderCountValue:     String(newCount),
+                    pricePerCertificate:  newPpc,
+                  }
+                },
+                { new: true }
+              );
+            }
           }
         } else {
           updatedRegWebhook = doc;
+        }
+
+        // After a holder-upgrade, update the ORIGINAL subscription invoice so it
+        // reflects the new total (pricePerCert × new committedCount).
+        if (updatedRegWebhook) {
+          await updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, updatedRegWebhook);
         }
       } else {
         updatedRegWebhook = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
       }
 
       // Create / update canonical Invoice document so admin and user see same invoice.
+      // For holder-upgrades this is already handled inside updateOriginalInvoiceAfterHolderUpgrade.
       try {
-        await createOrUpdateInvoice({
-          registrationId,
-          registrationModel,
-          paymentId:      paymentDoc._id,
-          snapshot:       paymentDoc.invoiceSnapshot || {},
-          amountDollars:  paymentDoc.amountDollars,
-          paidAt:         paymentDoc.paidAt,
-          paymentMethod:  paymentDoc.paymentMethodType || 'card',
-          existingInvoiceNumber: paymentDoc.invoiceNumber,
-        });
+        if (!isPurposeHolderUpgradeWebhook) {
+          await createOrUpdateInvoice({
+            registrationId,
+            registrationModel,
+            paymentId:      paymentDoc._id,
+            snapshot:       paymentDoc.invoiceSnapshot || {},
+            amountDollars:  paymentDoc.amountDollars,
+            paidAt:         paymentDoc.paidAt,
+            paymentMethod:  paymentDoc.paymentMethodType || 'card',
+            existingInvoiceNumber: paymentDoc.invoiceNumber,
+          });
+        }
       } catch (invoiceErr) {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
       }
@@ -1328,6 +1461,28 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
 exports.performQueuedRenewalActivation = performQueuedRenewalActivation;
 
 
+// ─── POST /api/payments/admin/refresh-invoice ─────────────────────────────────
+// Admin-only: force-refresh the canonical Invoice doc for a registration by
+// re-running updateOriginalInvoiceAfterHolderUpgrade with the current DB state.
+// Fixes invoices that were created before the holder-upgrade draft-refresh fix.
+exports.refreshInvoice = async (req, res) => {
+  try {
+    const { registrationId, registrationModel } = req.body;
+    if (!registrationId || !registrationModel)
+      return res.status(400).json({ success: false, message: 'registrationId and registrationModel are required.' });
+
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    if (!doc)
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    await updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, doc);
+    return res.json({ success: true, message: 'Invoice refreshed successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
 // ─── POST /api/payments/admin/activate-renewal (admin) ────────────────────────
 // Admin-only: force-activate a queued renewal even before the expiry date.
 exports.activateQueuedRenewal = async (req, res) => {
@@ -1430,4 +1585,3 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-

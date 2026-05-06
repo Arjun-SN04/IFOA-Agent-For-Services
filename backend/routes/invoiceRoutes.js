@@ -70,15 +70,36 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
 
     // Non-admin ownership check
     if (req.user.role !== 'admin') {
-      const ids = [
+      // Primary check: JWT-embedded IDs (fast path)
+      const jwtIds = [
         ...(req.user.subscriptionIds || []).map(String),
         req.user.registrationId ? String(req.user.registrationId) : null,
       ].filter(Boolean);
-     if (!ids.includes(String(regId)))
-        return res.json({ success: true, data: [] }); // silent empty — frontend uses s.invoiceDraft
+
+      if (!jwtIds.includes(String(regId))) {
+        // Fallback: verify ownership via DB — covers cases where the JWT was
+        // issued before a holder-upgrade or link-registration call updated the
+        // user record. Check both Airlines and Individual collections by email.
+        let ownsReg = false;
+        if (req.user.email) {
+          const Airlines    = require('../models/Airlines');
+          const Individual  = require('../models/Individual');
+          const [airlineDoc, individualDoc] = await Promise.all([
+            Airlines.findOne({ _id: regId, email: req.user.email }).select('_id').lean(),
+            Individual.findOne({ _id: regId, email: req.user.email }).select('_id').lean(),
+          ]);
+          ownsReg = !!(airlineDoc || individualDoc);
+        }
+        if (!ownsReg) {
+          return res.json({ success: true, data: [] }); // not theirs — silent empty
+        }
+      }
     }
 
-    const invoices = await Invoice.find({ registrationId: regId }).sort({ createdAt: -1 });
+    // Sort by updatedAt desc so the most recently edited invoice comes first.
+    // This is critical for airlines that have had admin edits after a holder
+    // upgrade: the latest invoice doc reflects the current holder count and amount.
+    const invoices = await Invoice.find({ registrationId: regId }).sort({ updatedAt: -1 });
     res.json({ success: true, data: invoices });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
