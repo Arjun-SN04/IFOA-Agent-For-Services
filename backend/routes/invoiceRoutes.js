@@ -15,7 +15,11 @@ const router   = express.Router();
 const Invoice  = require('../models/Invoice');
 const Payment  = require('../models/Payment');
 const auth     = require('../middleware/auth');
-const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const {
+  generateInvoiceNumber,
+  isInvoiceNumberTaken,
+  normalizeInvoiceNumber,
+} = require('../services/invoiceNumberService');
 
 const adminOnly = (req, res, next) => {
   if (req.user?.role !== 'admin')
@@ -92,8 +96,20 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
     if (!invoice)
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
 
-    // Update the top-level invoice number if provided
-    if (invoiceNumber) invoice.invoiceNumber = invoiceNumber;
+    const requestedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
+    if (requestedInvoiceNumber && requestedInvoiceNumber !== invoice.invoiceNumber) {
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
+        excludeInvoiceId: invoice._id,
+        excludePaymentId: invoice.paymentId || null,
+      });
+      if (alreadyUsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invoice number already exists. Please use a different value.',
+        });
+      }
+      invoice.invoiceNumber = requestedInvoiceNumber;
+    }
 
     if (draft) {
       // Always embed invoiceNumber into the draft payload so both admin and
@@ -122,6 +138,12 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
 
     res.json({ success: true, data: invoice });
   } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice number already exists. Please use a different value.',
+      });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 });

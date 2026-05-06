@@ -9,6 +9,9 @@ const {
   getAirlinesSubscriptionByEmail,
   updateAirlinesSubscription,
   deleteAirlinesSubscription,
+  bulkDeleteAirlines,
+  setRenewalInvoiceNumber,
+  updateRenewalDetails,
   exportAirlinesExcel,
   addHoldersToSubscription,
   markAirlinesPaid,
@@ -67,6 +70,8 @@ router.post('/admin/import-excel', authMiddleware, requireAdmin, upload.single('
 // ── Record-level actions ──────────────────────────────────────────────────────
 // mark-paid bypasses Stripe — admin only
 router.patch('/:id/mark-paid',              authMiddleware, requireAdmin, markAirlinesPaid);
+router.patch('/:id/renewal-invoice',        authMiddleware, requireAdmin, setRenewalInvoiceNumber);
+router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, updateRenewalDetails);
 // wire invoice request — owner or admin
 router.patch('/:id/request-invoice',        authMiddleware, requireOwnership, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
@@ -77,6 +82,7 @@ router.post('/:id/renew',                   authMiddleware, requireOwnership, re
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/',    authMiddleware, requireAdmin,    getAllAirlinesSubscriptions);
+router.delete('/bulk', authMiddleware, requireAdmin, bulkDeleteAirlines);
 router.get('/:id', authMiddleware, requireOwnership, getAirlinesSubscriptionById);
 router.put('/:id', authMiddleware, requireOwnership, updateAirlinesSubscription);
 router.delete('/:id', authMiddleware, requireAdmin, deleteAirlinesSubscription);

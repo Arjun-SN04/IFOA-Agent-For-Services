@@ -32,13 +32,27 @@ API.interceptors.request.use((config) => {
   return config
 })
 
-async function fetchPaymentRecord(registrationId, token) {
+async function fetchPaymentRecord(registrationId, token, preferredInvoiceNumber, queuedInvoiceNumber) {
   try {
     const res = await axios.get(`${BASE_URL}/payments/by-registration/${registrationId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     const payments = res.data.data || []
-    return payments.find(p => p.isPaid) || payments[0] || null
+    const paid = payments.filter(p => p?.isPaid)
+
+    const preferred = String(preferredInvoiceNumber || '').trim()
+    if (preferred) {
+      const exact = paid.find((p) => String(p?.invoiceNumber || '').trim() === preferred)
+      if (exact) return exact
+    }
+
+    const queued = String(queuedInvoiceNumber || '').trim()
+    if (queued) {
+      const nonQueued = paid.find((p) => String(p?.invoiceNumber || '').trim() !== queued)
+      if (nonQueued) return nonQueued
+    }
+
+    return paid[0] || payments[0] || null
   } catch {
     return null
   }
@@ -83,6 +97,11 @@ function Row({ label, value }) {
 }
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
+const fmtYMD = (d) => {
+  if (!d) return '—'
+  const dt = new Date(d)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
 const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
 
 const INDIVIDUAL_CERT_TYPES = [
@@ -1889,11 +1908,26 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
     ((daysToExpiry === null || daysToExpiry <= 60) || testPayMode)
 
   const handleInvoiceClick = async () => {
+    const activeInvoice = String(s.invoiceNumber || '').trim()
+    const queuedInvoice = String(s.nextRenewal?.invoiceNumber || '').trim()
+
     try {
       const invRes = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const invDoc = (invRes.data?.data || [])[0]
+      const docs = invRes.data?.data || []
+      let invDoc = null
+
+      if (activeInvoice) {
+        invDoc = docs.find((d) => String(d?.invoiceNumber || '').trim() === activeInvoice) || null
+      }
+      if (!invDoc && queuedInvoice) {
+        invDoc = docs.find((d) => String(d?.invoiceNumber || '').trim() !== queuedInvoice) || null
+      }
+      if (!invDoc) {
+        invDoc = docs[0] || null
+      }
+
       if (invDoc) {
         const invoiceDraft = invDoc.draft || null
         onViewInvoice?.({
@@ -1939,7 +1973,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
     }
 
     try {
-      const paymentDoc = await fetchPaymentRecord(s._id, token)
+      const paymentDoc = await fetchPaymentRecord(s._id, token, activeInvoice, queuedInvoice)
       if (paymentDoc?.isPaid) {
         onViewInvoice?.(serverPaymentToInvoice(paymentDoc))
         return
@@ -2153,8 +2187,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 label="Subscription Start Date"
                 value={
                   s.subscriptionDate
-                    ? <span className="font-semibold text-slate-900">{fmt(s.subscriptionDate)}</span>
-                    : active ? fmt(s.updatedAt) : 'Activates on payment'
+                    ? <span className="font-semibold text-slate-900">{fmtYMD(s.subscriptionDate)}</span>
+                    : active ? fmtYMD(s.updatedAt) : 'Activates on payment'
                 }
               />
               <Row
@@ -2164,8 +2198,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                     ? 'Never (Unlimited ∞)'
                     : s.expirationDate
                     ? isExpired
-                      ? <span className="text-red-600 font-bold">{fmt(s.expirationDate)} — EXPIRED</span>
-                      : <span className="font-semibold text-slate-900">{fmt(s.expirationDate)}</span>
+                      ? <span className="text-red-600 font-bold">{fmtYMD(s.expirationDate)} — EXPIRED</span>
+                      : <span className="font-semibold text-slate-900">{fmtYMD(s.expirationDate)}</span>
                     : active ? '—' : 'Activates on payment'
                 }
               />
@@ -2227,7 +2261,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 label="Subscription Start Date"
                 value={
                   active && s.subscriptionDate
-                    ? <span className="font-semibold text-slate-900">{fmt(s.subscriptionDate)}</span>
+                    ? <span className="font-semibold text-slate-900">{fmtYMD(s.subscriptionDate)}</span>
                     : 'Activates on payment'
                 }
               />
@@ -2240,8 +2274,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                     ? 'Never (Unlimited)'
                     : s.expirationDate
                     ? isExpired
-                      ? <span className="text-red-600 font-bold">{fmt(s.expirationDate)} — EXPIRED</span>
-                      : <span className="font-semibold text-slate-900">{fmt(s.expirationDate)}</span>
+                      ? <span className="text-red-600 font-bold">{fmtYMD(s.expirationDate)} — EXPIRED</span>
+                      : <span className="font-semibold text-slate-900">{fmtYMD(s.expirationDate)}</span>
                     : '—'
                 }
               />
@@ -2284,7 +2318,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-emerald-800">Next Subscription Plan</p>
                 <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                  Activates on {fmt(activationDate)} — when your current plan expires
+                  Activates on {fmtYMD(activationDate)} — when your current plan expires
                 </p>
               </div>
               <span className="ml-auto text-[10px] font-semibold text-emerald-600">
@@ -2299,14 +2333,14 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Starts On</span>
-                <span className="text-sm font-semibold text-slate-800">{fmt(activationDate)}</span>
+                <span className="text-sm font-semibold text-slate-800">{fmtYMD(activationDate)}</span>
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">
                   {nr.plan === 'Unlimited Plan' ? 'Duration' : 'Expires On'}
                 </span>
                 <span className="text-sm font-semibold text-slate-800">
-                  {nr.plan === 'Unlimited Plan' ? 'Lifetime (No Expiry)' : fmt(nr.expiresAt)}
+                  {nr.plan === 'Unlimited Plan' ? 'Lifetime (No Expiry)' : fmtYMD(nr.expiresAt)}
                 </span>
               </div>
               <div className="flex flex-col gap-1">
@@ -2320,10 +2354,32 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
             <div className="px-4 sm:px-6 pb-4">
               <div className="rounded-xl bg-emerald-100/70 border border-emerald-200 px-4 py-3">
                 <p className="text-xs text-emerald-700 leading-relaxed">
-                  ✓ Your renewal is confirmed and queued. Your current plan remains fully active until <strong>{fmt(s.expirationDate)}</strong>. This new plan starts automatically on <strong>{fmt(activationDate)}</strong> — no action needed.
+                  ✓ Your renewal is confirmed and queued. Your current plan remains fully active until <strong>{fmtYMD(s.expirationDate)}</strong>. This new plan starts automatically on <strong>{fmtYMD(activationDate)}</strong> — no action needed.
                 </p>
                 {nr.invoiceNumber && (
-                  <p className="text-[10px] text-emerald-500 mt-1.5 font-mono">Invoice: {nr.invoiceNumber}</p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <p className="text-[10px] text-emerald-500 font-mono">Invoice: {nr.invoiceNumber}</p>
+                    <button
+                      onClick={() => onViewInvoice?.({
+                        invoiceNumber:    nr.invoiceNumber,
+                        paidAt:           nr.paidAt,
+                        subscriptionPlan: nr.plan,
+                        expirationDate:   nr.expiresAt || null,
+                        amount:           nr.price,
+                        name:             isAirline ? (s.airlineName || '') : `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                        email:            s.email || s.contactEmail || '',
+                        address:          s.addressLine1 || '',
+                        isAirline,
+                        airlineName:      s.airlineName || '',
+                        pricePerCert:     s.pricePerCertificate || null,
+                        holderCount:      s.certificateHolders?.length || s.committedCount || null,
+                      })}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 border border-emerald-300 bg-white rounded-md px-2 py-0.5 hover:bg-emerald-50 transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      Preview Invoice
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

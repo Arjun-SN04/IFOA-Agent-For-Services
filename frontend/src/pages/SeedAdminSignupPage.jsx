@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_white.png'
 import { seedAdminSignup } from '../services/api'
@@ -161,10 +162,10 @@ export default function SeedAdminSignupPage() {
                     <button
                       type="button"
                       onClick={() => setShowPw((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 transition-colors"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:text-slate-600 transition-colors"
                       style={{ color: '#94a3b8' }}
                     >
-                      {showPw ? 'Hide' : 'Show'}
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -186,10 +187,10 @@ export default function SeedAdminSignupPage() {
                     <button
                       type="button"
                       onClick={() => setShowConfirm((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 transition-colors"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 hover:text-slate-600 transition-colors"
                       style={{ color: '#94a3b8' }}
                     >
-                      {showConfirm ? 'Hide' : 'Show'}
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>

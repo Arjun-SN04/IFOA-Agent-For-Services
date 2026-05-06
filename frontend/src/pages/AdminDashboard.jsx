@@ -10,6 +10,12 @@ import { getAirlineTotal, fmtAirlineTotal } from '../utils/airlineTotal'
 import {
   deleteAirlinesSubscription,
   deleteIndividual,
+  bulkDeleteIndividuals,
+  bulkDeleteAirlines,
+  setIndividualRenewalInvoice,
+  setAirlinesRenewalInvoice,
+  updateIndividualRenewalDetails,
+  updateAirlinesRenewalDetails,
   exportAirlinesExcel,
   exportIndividualsExcel,
   getAllAirlinesSubscriptions,
@@ -26,6 +32,24 @@ import {
 
 const fmtDate = (v) =>
   v ? new Date(v).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+
+const fmtDateYMD = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const fmtDateMDY = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const y = d.getFullYear()
+  return `${m}-${day}-${y}`
+}
 
 const fmtMoney = (v) =>
   v !== undefined && v !== null && v !== ''
@@ -106,13 +130,35 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
     ? `Multiple Years (${Number(nr.multiYearCount) > 1 ? Number(nr.multiYearCount) : Math.max(2, Math.round(Number(nr.price || 0) / ppu))} yrs)`
     : nr.plan === 'Unlimited Plan'
       ? 'Unlimited Plan'
-      : (nr.plan || '—')
+      : (nr.plan || '�')
 
   const [activating, setActivating] = React.useState(false)
   const [activateErr, setActivateErr] = React.useState('')
+  const [editing, setEditing] = React.useState(false)
+  const [savingEdit, setSavingEdit] = React.useState(false)
+  const [editErr, setEditErr] = React.useState('')
+
+  const fmtInput = (v) => {
+    if (!v) return ''
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toISOString().slice(0, 10)
+  }
+
+  const [editForm, setEditForm] = React.useState({
+    plan: nr.plan || '',
+    multiYearCount: nr.multiYearCount || '',
+    committedCount: nr.committedCount || '',
+    activationDate: fmtInput(nr.activationDate),
+    expiresAt: fmtInput(nr.expiresAt),
+    price: nr.price ?? '',
+    invoiceNumber: nr.invoiceNumber || '',
+  })
+
+  const setEdit = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }))
 
   const handleActivate = async () => {
-    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n• Switch plan to: ${nrPlanLabel}\n• Set expiry to: ${fmtDate(nr.expiresAt)}\n• Use invoice: ${nr.invoiceNumber || '—'}\n\nThis cannot be undone automatically.`)) return
+    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n� Switch plan to: ${nrPlanLabel}\n� Set expiry to: ${fmtDate(nr.expiresAt)}\n� Use invoice: ${nr.invoiceNumber || '�'}\n\nThis cannot be undone automatically.`)) return
     setActivating(true)
     setActivateErr('')
     try {
@@ -125,6 +171,38 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
     }
   }
 
+  const handleSaveEdit = async () => {
+    setSavingEdit(true)
+    setEditErr('')
+    try {
+      const payload = {
+        plan: editForm.plan,
+        activationDate: editForm.activationDate,
+        expiresAt: editForm.expiresAt,
+        price: Number(editForm.price),
+        invoiceNumber: editForm.invoiceNumber,
+      }
+
+      if (editForm.plan === 'Multiple Years Subscription Plan') {
+        payload.multiYearCount = Number(editForm.multiYearCount)
+      }
+      if (registrationModel === 'Airlines' && editForm.committedCount !== '') {
+        payload.committedCount = Number(editForm.committedCount)
+      }
+
+      const res = registrationModel === 'Airlines'
+        ? await updateAirlinesRenewalDetails(record._id, payload)
+        : await updateIndividualRenewalDetails(record._id, payload)
+
+      setEditing(false)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      setEditErr(e?.response?.data?.message || 'Failed to update queued renewal.')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   return (
     <div className="border-t border-emerald-100 pt-5">
       <div className="flex items-center justify-between mb-3">
@@ -134,21 +212,129 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
             Queued
           </span>
         </div>
-        {/* Admin: force-activate the queued plan immediately */}
-        <button
-          onClick={handleActivate}
-          disabled={activating}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white transition"
-        >
-          {activating ? (
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20"/><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z"/></svg>
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-          )}
-          {activating ? 'Activating…' : 'Activate Now'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setEditErr('')
+              setEditing((v) => !v)
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 transition"
+          >
+            Edit Queued Plan
+          </button>
+          <button
+            onClick={handleActivate}
+            disabled={activating}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white transition"
+          >
+            {activating ? (
+              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20"/><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z"/></svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            )}
+            {activating ? 'Activating�' : 'Activate Now'}
+          </button>
+        </div>
       </div>
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        {editing && (
+          <div className="rounded-lg border border-emerald-300 bg-white p-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Plan</label>
+                <select
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={editForm.plan}
+                  onChange={(e) => setEdit('plan', e.target.value)}
+                >
+                  <option value="1 Year Subscription Plan">1 Year Subscription Plan</option>
+                  <option value="Multiple Years Subscription Plan">Multiple Years Subscription Plan</option>
+                  <option value="Unlimited Plan">Unlimited Plan</option>
+                </select>
+              </div>
+              {editForm.plan === 'Multiple Years Subscription Plan' && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Years</label>
+                  <input
+                    type="number"
+                    min="2"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    value={editForm.multiYearCount}
+                    onChange={(e) => setEdit('multiYearCount', e.target.value)}
+                  />
+                </div>
+              )}
+              {registrationModel === 'Airlines' && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Committed Count</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    value={editForm.committedCount}
+                    onChange={(e) => setEdit('committedCount', e.target.value)}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Activation Date</label>
+                <input
+                  type="date"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={editForm.activationDate}
+                  onChange={(e) => setEdit('activationDate', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Expires At</label>
+                <input
+                  type="date"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={editForm.expiresAt}
+                  onChange={(e) => setEdit('expiresAt', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Amount Paid</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={editForm.price}
+                  onChange={(e) => setEdit('price', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice #</label>
+                <input
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={editForm.invoiceNumber}
+                  onChange={(e) => setEdit('invoiceNumber', e.target.value)}
+                />
+              </div>
+            </div>
+            {editErr && <p className="mt-2 text-[11px] text-red-600 font-semibold">{editErr}</p>}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white"
+              >
+                {savingEdit ? 'Saving�' : 'Save Queued Plan'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <ViewField label="Next Plan" value={nrPlanLabel} />
           <ViewField label="Paid On" value={fmtDate(nr.paidAt)} />
@@ -158,7 +344,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
           <ViewField label="Invoice #" value={nr.invoiceNumber} />
         </div>
         <p className="mt-3 text-[10px] text-emerald-600 leading-relaxed">
-          Current plan remains active until {fmtDate(record.expirationDate)}. Queued plan activates automatically on {fmtDate(nr.activationDate)}.
+          Current plan remains active until {fmtDateYMD(record.expirationDate)}. Queued plan activates automatically on {fmtDateYMD(nr.activationDate)}.
         </p>
         {activateErr && (
           <p className="mt-2 text-[11px] text-red-600 font-semibold">{activateErr}</p>
@@ -167,8 +353,6 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
     </div>
   )
 }
-
-// ─── Individual View Modal ─────────────────────────────────────────────────────
 function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
   const fullName = [record.firstName, record.middleName, record.lastName].filter(Boolean).join(' ') || 'Individual'
   return (
@@ -211,8 +395,8 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="Invoice" value={record.invoiceStatus} />
                 <ViewField label="Invoice #" value={record.invoiceNumber} />
                 <ViewField label="Plan" value={record.subscriptionPlan} />
-                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
-                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDate(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
+                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDateYMD(record.subscriptionDate) : (record.isPaid ? fmtDateYMD(record.updatedAt) : 'Activates on payment')} />
+                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDateYMD(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price" value={fmtMoney(record.price)} />
                 <ViewField label="Service Fees" value={fmtMoney(record.totalServiceFees)} />
               </div>
@@ -222,7 +406,7 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="First Name" value={record.firstName} />
                 <ViewField label="Middle Name" value={record.middleName} />
                 <ViewField label="Last Name" value={record.lastName} />
-                <ViewField label="DOB" value={record.dateOfBirth ? fmtDate(record.dateOfBirth) : '—'} />
+                <ViewField label="DOB" value={record.dateOfBirth ? fmtDateMDY(record.dateOfBirth) : '—'} />
                 <ViewField label="Email" value={record.email} />
                 <ViewField label="Phone" value={record.phone} />
                 <div className="col-span-2 sm:col-span-3">
@@ -300,8 +484,8 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="Plan" value={record.subscriptionPlan} />
                 <ViewField label="Holder Count" value={record.holderCount} />
                 <ViewField label="Exact Count" value={record.holderCountValue} />
-                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDate(record.subscriptionDate) : (record.isPaid ? fmtDate(record.updatedAt) : 'Activates on payment')} />
-                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDate(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
+                <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDateYMD(record.subscriptionDate) : (record.isPaid ? fmtDateYMD(record.updatedAt) : 'Activates on payment')} />
+                <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDateYMD(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price/Cert" value={fmtMoney(record.pricePerCertificate ?? record.pricePerCert)} />
                 <ViewField label="Total Fees" value={fmtAirlineTotal(record)} />
               </div>
@@ -317,7 +501,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="First Name" value={record.firstName || record.contactFirstName} />
                 <ViewField label="Last Name" value={record.lastName || record.contactLastName} />
                 <ViewField label="Middle Name" value={record.middleName} />
-                <ViewField label="Date of Birth" value={record.dateOfBirth ? fmtDate(record.dateOfBirth) : '—'} />
+                <ViewField label="Date of Birth" value={record.dateOfBirth ? fmtDateMDY(record.dateOfBirth) : '—'} />
                 <ViewField label="Email" value={record.email || record.contactEmail} />
                 <ViewField label="Phone" value={record.phone || record.contactPhone} />
                 <ViewField label="Payment Email" value={record.paymentEmail} />
@@ -873,6 +1057,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
   const [previewData, setPreviewData] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const initialInvoice = {
     invoiceNumber:     defaultInvoiceNumber,
@@ -965,6 +1150,28 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   }, [previewOnly, previewData, previewLoading, inv])
 
   const set = (f, v) => setInv(p => ({ ...p, [f]: v }))
+  const adjustInvoiceNumber = (delta) => {
+    const current = String(inv.invoiceNumber || '').trim()
+    if (!current) return
+
+    // Preferred format: "Invoice US-34-26" -> adjust 34 only
+    const standard = current.match(/^(.*?US-)(\d+)(-\d{2})(.*)$/i)
+    if (standard) {
+      const [, prefix, seqStr, yearPart, suffix] = standard
+      const nextSeq = Math.max(1, Number(seqStr) + delta)
+      set('invoiceNumber', `${prefix}${nextSeq}${yearPart}${suffix}`)
+      return
+    }
+
+    // Fallback: adjust the first numeric block found.
+    const generic = current.match(/^(\D*?)(\d+)(.*)$/)
+    if (generic) {
+      const [, prefix, numStr, suffix] = generic
+      const nextNum = Math.max(1, Number(numStr) + delta)
+      set('invoiceNumber', `${prefix}${nextNum}${suffix}`)
+    }
+  }
+
   const setItem = (i, f, v) => setInv(p => ({
     ...p,
     lineItems: p.lineItems.map((it, idx) => {
@@ -987,6 +1194,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
   const handleSaveInvoice = async () => {
     setSavingInvoice(true)
+    setSaveError('')
     const payload = {
       invoiceNumber:    inv.invoiceNumber,
       invoiceStatus:    'Generated',
@@ -996,6 +1204,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     try {
       await onSaveInvoice(record._id, type, payload)
       setSavedSnapshot(serializeInvoice(inv))
+    } catch (err) {
+      setSaveError(err?.response?.data?.message || 'Could not save invoice changes.')
     } finally {
       setSavingInvoice(false)
     }
@@ -1094,6 +1304,15 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
           {/* ── Step 2: Edit Invoice ── */}
           {step === 'edit' && (
             <div className="px-6 py-5 space-y-5 max-h-[72vh] overflow-y-auto">
+              {saveError && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-xs text-red-700 font-semibold">{saveError}</p>
+                </div>
+              )}
+
               {autoPreview && previewLoading && (
                 <div className="flex items-center justify-center py-3">
                   <svg className="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
@@ -1121,7 +1340,38 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Invoice Details</p>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Number</label><input className={iCls} value={inv.invoiceNumber} onChange={e => set('invoiceNumber', e.target.value)} /></div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Number</label>
+                    <div className="relative">
+                      <input
+                        className={`${iCls} pr-10`}
+                        value={inv.invoiceNumber}
+                        onChange={e => set('invoiceNumber', e.target.value)}
+                      />
+                      <div className="absolute right-1 top-1 bottom-1 flex flex-col">
+                        <button
+                          type="button"
+                          aria-label="Increase invoice number"
+                          onClick={() => adjustInvoiceNumber(1)}
+                          className="h-1/2 px-1.5 rounded-t-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Decrease invoice number"
+                          onClick={() => adjustInvoiceNumber(-1)}
+                          className="h-1/2 px-1.5 rounded-b-md border border-t-0 border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Issue Date</label><input className={iCls} type="date" value={inv.issueDate} onChange={e => set('issueDate', e.target.value)} /></div>
                   <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Payable By</label><input className={iCls} type="date" value={inv.payableBy} onChange={e => set('payableBy', e.target.value)} /></div>
                 </div>
@@ -1370,7 +1620,7 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
 }
 
 // ─── Grouped Individuals Table ─────────────────────────────────────────────────
-function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
+function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId, selectedIds = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [expanded, setExpanded] = useState({})
 
   const groups = useMemo(() => {
@@ -1390,12 +1640,19 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
   const planLabel = (p) =>
     p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('Unlimited') ? 'Unlimited' : p?.includes('1 Year') ? '1 Year' : p || '—'
 
+  const allIds = data.map(r => r._id)
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id))
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[900px] table-fixed text-sm">
+        <table className="w-full min-w-[1100px] table-fixed text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr>
+              <th className="px-3 py-3.5 w-10">
+                <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(allIds)}
+                  className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+              </th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Contact</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Email / Phone</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
@@ -1414,16 +1671,23 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
               const isOpen = !!expanded[key]
               const hasMany = group.length > 1
               const initials = ((primary.firstName?.[0] || '') + (primary.lastName?.[0] || '')).toUpperCase() || 'I'
+              const isSelected = selectedIds.has(primary._id)
 
               return (
                 <React.Fragment key={key}>
                   <tr
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${
-                      String(primary._id) === String(highlightedId)
+                      isSelected
+                        ? 'bg-blue-50'
+                        : String(primary._id) === String(highlightedId)
                         ? 'bg-amber-50 outline outline-2 outline-amber-400'
                         : isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'
                     }`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
+                    <td className="px-3 py-4" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={isSelected} onChange={() => onToggleSelect(primary._id)}
+                        className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+                    </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 text-xs font-black flex items-center justify-center flex-shrink-0">
@@ -1479,8 +1743,12 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr key={sub._id + '-sub'}
-                      className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                      className={`border-b border-slate-100 transition-colors cursor-pointer ${selectedIds.has(sub._id) ? 'bg-blue-50' : 'bg-amber-50/30 hover:bg-amber-50/60'}`}
                       onClick={() => onView(sub)}>
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(sub._id)} onChange={() => onToggleSelect(sub._id)}
+                          className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3 pl-4">
                           <div className="flex flex-col items-center flex-shrink-0">
@@ -1530,7 +1798,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
   )
 }
 
-function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId }) {
+function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId, selectedIds = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [expanded, setExpanded] = useState({})
   const highlightRef = useRef(null)
 
@@ -1559,21 +1827,28 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
   const planLabel = (p) =>
     p?.includes('Unlimited') ? 'Unlimited' : p?.includes('Multiple') ? 'Multiple Yrs' : p?.includes('1 Year') ? '1 Year' : p || '—'
 
+  const allIds = data.map(r => r._id)
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id))
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="max-h-[68vh] overflow-y-auto overflow-x-hidden">
-        <table className="w-full table-fixed text-sm">
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
+        <table className="w-full min-w-[1260px] table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
+              <th className="px-3 py-3.5 w-10">
+                <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(allIds)}
+                  className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+              </th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Airline & Contact</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Email</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Country</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders / Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-40">Email</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Holders / Total</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-56">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1582,6 +1857,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
               const key = ((primary.airlineName || '').toLowerCase().trim() || primary._id) + '-' + primary._id
               const isOpen = !!expanded[key]
               const hasMany = group.length > 1
+              const isSelected = selectedIds.has(primary._id)
               const contactName = [primary.firstName, primary.lastName].filter(Boolean).join(' ') ||
                 [primary.contactFirstName, primary.contactLastName].filter(Boolean).join(' ') || ''
 
@@ -1590,11 +1866,17 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                   <tr
                     ref={String(primary._id) === String(highlightedId) ? highlightRef : null}
                     className={`border-b border-slate-100 transition-colors cursor-pointer ${
-                      String(primary._id) === String(highlightedId)
+                      isSelected
+                        ? 'bg-blue-50'
+                        : String(primary._id) === String(highlightedId)
                         ? 'bg-blue-50 ring-2 ring-inset ring-blue-500'
                         : isOpen ? 'bg-slate-50' : 'hover:bg-slate-50/60'
                     }`}
                     onClick={() => hasMany ? toggle(key) : onView(primary)}>
+                    <td className="px-3 py-4" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={isSelected} onChange={() => onToggleSelect(primary._id)}
+                        className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+                    </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center flex-shrink-0">
@@ -1646,9 +1928,13 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                   {hasMany && isOpen && group.map((sub, si) => (
                     <tr
                       key={sub._id + '-sub'}
-                      className="border-b border-slate-100 bg-amber-50/30 hover:bg-amber-50/60 transition-colors cursor-pointer"
+                      className={`border-b border-slate-100 transition-colors cursor-pointer ${selectedIds.has(sub._id) ? 'bg-blue-50' : 'bg-amber-50/30 hover:bg-amber-50/60'}`}
                       onClick={() => onView(sub)}
                     >
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(sub._id)} onChange={() => onToggleSelect(sub._id)}
+                          className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3 pl-4">
                           <div className="flex flex-col items-center flex-shrink-0">
@@ -1839,6 +2125,9 @@ export default function AdminDashboard() {
   const [toast, setToast] = useState(null)
   const [highlightedAirlineId, setHighlightedAirlineId] = useState(null)
   const [invoiceModal, setInvoiceModal] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkGenerating, setBulkGenerating] = useState(false)
 
   const highlightId = useMemo(() => {
     const p = new URLSearchParams(locationSearch)
@@ -1893,6 +2182,10 @@ export default function AdminDashboard() {
     const pollTimer = setInterval(() => loadData(false), 30000)
     return () => clearInterval(pollTimer)
   }, [])
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [tab])
 
   useEffect(() => {
     if (tab !== 'add-airline' && tab !== 'add-individual') {
@@ -1956,8 +2249,80 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    if (!window.confirm(`Permanently delete ${ids.length} selected record(s)?`)) return
+    setBulkDeleting(true)
+    try {
+      if (tab === 'airlines') {
+        await bulkDeleteAirlines(ids)
+        setAirlines(p => p.filter(x => !selectedIds.has(x._id)))
+      } else {
+        await bulkDeleteIndividuals(ids)
+        setIndividuals(p => p.filter(x => !selectedIds.has(x._id)))
+      }
+      setSelectedIds(new Set())
+      showToast(`Deleted ${ids.length} record(s)`)
+    } catch {
+      showToast('Bulk delete failed', 'error')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const handleBulkGenerateInvoice = async () => {
+    const records = filtered.filter(r => selectedIds.has(r._id))
+    if (records.length === 0) return
+    setBulkGenerating(true)
+    try {
+      const type = tab === 'airlines' ? 'airline' : 'individual'
+      for (const record of records) {
+        await resolveInvoiceNumber(record, type)
+      }
+      showToast(`Generated invoice numbers for ${records.length} record(s)`, 'success')
+      setSelectedIds(new Set())
+    } catch {
+      showToast('Failed to generate some invoice numbers', 'error')
+    } finally {
+      setBulkGenerating(false)
+    }
+  }
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
+  const toggleSelectAll = (ids) => setSelectedIds(prev => {
+    if (ids.every(id => prev.has(id))) return new Set()
+    return new Set(ids)
+  })
+
   const handleSaveInvoice = async (id, type, payload) => {
     try {
+      // Validate/save against canonical payment/invoice records first so
+      // duplicate invoice-number errors are shown before registration updates.
+      let paidDoc = null
+      try {
+        const paymentsRes = await getPaymentsByRegistration(id)
+        const payments = paymentsRes.data?.data || []
+        paidDoc = payments.find(p => p.isPaid) || payments[0] || null
+      } catch (_) { /* non-critical lookup */ }
+
+      let invDoc = null
+      try {
+        const invDocRes = await getInvoiceByRegistration(id)
+        invDoc = (invDocRes.data?.data || [])[0] || null
+      } catch (_) { /* non-critical lookup */ }
+
+      if (paidDoc?._id && payload.invoiceDraft) {
+        await savePaymentInvoiceDraft(paidDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+      } else if (invDoc?._id) {
+        await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+      }
+
       const registrationUpdate = {
         invoiceStatus: payload.invoiceStatus,
         invoiceGenerated: payload.invoiceGenerated,
@@ -1989,25 +2354,13 @@ export default function AdminDashboard() {
         )
       }
 
+      // Keep Invoice doc in sync as best-effort when Payment save path ran first.
       try {
-        const paymentsRes = await getPaymentsByRegistration(id)
-        const payments = paymentsRes.data?.data || []
-        const paidDoc = payments.find(p => p.isPaid) || payments[0]
-        if (paidDoc?._id && payload.invoiceDraft) {
-          await savePaymentInvoiceDraft(paidDoc._id, payload.invoiceDraft, payload.invoiceNumber)
-        }
-      } catch (paymentSyncErr) {
-        console.warn('[handleSaveInvoice] Payment doc sync failed:', paymentSyncErr.message)
-      }
-
-      try {
-        const invDocRes = await getInvoiceByRegistration(id)
-        const invDoc = (invDocRes.data?.data || [])[0]
-        if (invDoc?._id) {
+        if (paidDoc?._id && invDoc?._id) {
           await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
         }
       } catch (invSyncErr) {
-        console.warn('[handleSaveInvoice] Invoice doc sync failed:', invSyncErr.message)
+        console.warn('[handleSaveInvoice] Invoice doc sync warning:', invSyncErr.message)
       }
 
       showToast('Invoice saved — user will see updated invoice')
@@ -2032,39 +2385,65 @@ export default function AdminDashboard() {
   // Resolve (and immediately persist) an invoice number before opening any invoice modal.
   // This prevents the number from incrementing every time the modal is opened without saving.
   const resolveInvoiceNumber = async (record, type) => {
+    let resolved = record
+
     // 1. Already on the record — use it.
-    if (record.invoiceNumber) return record
-
-    // 2. Check Invoice collection (covers Stripe-paid records).
-    try {
-      const invRes = await getInvoiceByRegistration(record._id)
-      const existingNum = (invRes.data?.data || [])[0]?.invoiceNumber
-      if (existingNum) {
-        const patched = { ...record, invoiceNumber: existingNum }
-        if (type === 'airline') setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
-        else setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
-        return patched
-      }
-    } catch (_) { /* fall through */ }
-
-    // 3. Truly no number exists — generate one and persist it immediately so
-    //    closing the modal without saving doesn't waste the number.
-    try {
-      const genRes = await generateInvoiceNumber()
-      const newNum = genRes.data?.invoiceNumber
-      if (newNum) {
-        if (type === 'airline') {
-          await updateAirlinesSubscription(record._id, { invoiceNumber: newNum })
-          setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
-        } else {
-          await updateIndividual(record._id, { invoiceNumber: newNum })
-          setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+    if (!resolved.invoiceNumber) {
+      // 2. Check Invoice collection (covers Stripe-paid records).
+      try {
+        const invRes = await getInvoiceByRegistration(record._id)
+        const existingNum = (invRes.data?.data || [])[0]?.invoiceNumber
+        if (existingNum) {
+          resolved = { ...resolved, invoiceNumber: existingNum }
+          if (type === 'airline') setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
+          else setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
         }
-        return { ...record, invoiceNumber: newNum }
-      }
-    } catch (_) { /* fall through — modal opens without a number */ }
+      } catch (_) { /* fall through */ }
 
-    return record
+      // 3. Still no number — generate one and persist.
+      if (!resolved.invoiceNumber) {
+        try {
+          const genRes = await generateInvoiceNumber()
+          const newNum = genRes.data?.invoiceNumber
+          if (newNum) {
+            if (type === 'airline') {
+              await updateAirlinesSubscription(record._id, { invoiceNumber: newNum })
+              setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+            } else {
+              await updateIndividual(record._id, { invoiceNumber: newNum })
+              setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+            }
+            resolved = { ...resolved, invoiceNumber: newNum }
+          }
+        } catch (_) { /* fall through */ }
+      }
+    }
+
+    // 4. Also resolve nextRenewal.invoiceNumber if a queued plan exists and
+    //    has no invoice number (or shares the same number as the active plan).
+    const nr = resolved.nextRenewal
+    if (nr?.paidAt && (!nr.invoiceNumber || nr.invoiceNumber === resolved.invoiceNumber)) {
+      try {
+        const genRes = await generateInvoiceNumber()
+        const newQueuedNum = genRes.data?.invoiceNumber
+        if (newQueuedNum) {
+          if (type === 'airline') {
+            await setAirlinesRenewalInvoice(record._id, newQueuedNum)
+            setAirlines(p => p.map(x => x._id === record._id
+              ? { ...x, nextRenewal: { ...x.nextRenewal, invoiceNumber: newQueuedNum } }
+              : x))
+          } else {
+            await setIndividualRenewalInvoice(record._id, newQueuedNum)
+            setIndividuals(p => p.map(x => x._id === record._id
+              ? { ...x, nextRenewal: { ...x.nextRenewal, invoiceNumber: newQueuedNum } }
+              : x))
+          }
+          resolved = { ...resolved, nextRenewal: { ...nr, invoiceNumber: newQueuedNum } }
+        }
+      } catch (_) { /* non-critical */ }
+    }
+
+    return resolved
   }
 
   const openInvoiceGenerate = async (record, type) => {
@@ -2270,6 +2649,33 @@ export default function AdminDashboard() {
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
             <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
           </p>
+          {selectedIds.size > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">{selectedIds.size} selected</span>
+              <button
+                onClick={handleBulkGenerateInvoice}
+                disabled={bulkGenerating || bulkDeleting}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-3 py-1.5 text-xs font-bold text-white transition"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                {bulkGenerating ? 'Generating…' : 'Generate Invoice'}
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting || bulkGenerating}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-60 px-3 py-1.5 text-xs font-bold text-white transition"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+                {bulkDeleting ? 'Deleting…' : 'Delete Selected'}
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -2296,6 +2702,9 @@ export default function AdminDashboard() {
           deleting={deleting}
           onInvoice={r => hasExistingInvoice(r) ? openInvoiceEdit(r, 'individual') : openInvoiceGenerate(r, 'individual')}
           onInvoicePreview={r => openInvoicePreview(r, 'individual')}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
         />
       ) : (
         <AirlinesTable
@@ -2306,8 +2715,12 @@ export default function AdminDashboard() {
           deleting={deleting}
           onInvoice={r => hasExistingInvoice(r) ? openInvoiceEdit(r, 'airline') : openInvoiceGenerate(r, 'airline')}
           onInvoicePreview={r => openInvoicePreview(r, 'airline')}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
         />
       )}
     </DashboardLayout>
   )
 }
+

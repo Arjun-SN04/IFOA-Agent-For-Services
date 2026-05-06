@@ -1,9 +1,14 @@
 const Airlines             = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription'); // legacy model
 const User = require('../models/User');
+const Renewal = require('../models/Renewal');
 const ExcelJS = require('exceljs');
 const XLSX = require('xlsx');
-const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const {
+  generateInvoiceNumber,
+  isInvoiceNumberTaken,
+  normalizeInvoiceNumber,
+} = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice }  = require('../services/invoiceService');
 const { sendAirlinePaymentConfirmation } = require('../services/emailService');
 
@@ -592,6 +597,26 @@ exports.updateAirlinesSubscription = async (req, res) => {
     if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
     if (payload.pointOfContactEmail) payload.pointOfContactEmail = String(payload.pointOfContactEmail).toLowerCase().trim();
 
+    if (isAdmin && Object.prototype.hasOwnProperty.call(payload, 'invoiceNumber')) {
+      const requestedInvoiceNumber = normalizeInvoiceNumber(payload.invoiceNumber);
+      let currentDoc = await Airlines.findById(req.params.id).select('invoiceNumber');
+      if (!currentDoc) currentDoc = await AirlinesSubscription.findById(req.params.id).select('invoiceNumber');
+      if (!currentDoc)
+        return res.status(404).json({ success: false, message: 'Not found' });
+
+      const currentInvoiceNumber = normalizeInvoiceNumber(currentDoc.invoiceNumber);
+      if (requestedInvoiceNumber && requestedInvoiceNumber !== currentInvoiceNumber) {
+        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber);
+        if (alreadyUsed) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invoice number already exists. Please use a different value.',
+          });
+        }
+      }
+      payload.invoiceNumber = requestedInvoiceNumber;
+    }
+
     // Keep completion flag in sync when payment state is explicitly changed.
     if (payload.paymentStatus === 'paid' || payload.isPaid === true) {
       payload.isFormCompleted = true;
@@ -749,6 +774,197 @@ exports.deleteAirlinesSubscription = async (req, res) => {
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Bulk Delete ────────────────────────────────────────────────────────────────
+exports.bulkDeleteAirlines = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ success: false, message: 'No ids provided.' });
+
+    const deleted = await Airlines.find({ _id: { $in: ids } });
+    await Airlines.deleteMany({ _id: { $in: ids } });
+    await AirlinesSubscription.deleteMany({ _id: { $in: ids } });
+
+    for (const doc of deleted) {
+      await User.updateMany(
+        { subscriptionIds: doc._id },
+        { $pull: { subscriptionIds: doc._id } },
+      );
+      await User.updateMany(
+        { registrationId: doc._id },
+        { $set: { registrationId: null, registrationModel: null } },
+      );
+    }
+
+    res.json({ success: true, message: `Deleted ${deleted.length} record(s).`, count: deleted.length });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Set nextRenewal.invoiceNumber (admin only) ─────────────────────────────────
+exports.setRenewalInvoiceNumber = async (req, res) => {
+  try {
+    const { invoiceNumber } = req.body;
+    const requestedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
+    if (!requestedInvoiceNumber)
+      return res.status(400).json({ success: false, message: 'invoiceNumber required.' });
+
+    const current = await Airlines.findById(req.params.id).select('nextRenewal nextRenewalId');
+    if (!current) return res.status(404).json({ success: false, message: 'Not found.' });
+
+    const currentQueuedInvoiceNumber = normalizeInvoiceNumber(current.nextRenewal?.invoiceNumber);
+    if (requestedInvoiceNumber !== currentQueuedInvoiceNumber) {
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber);
+      if (alreadyUsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invoice number already exists. Please use a different value.',
+        });
+      }
+    }
+
+    const doc = await Airlines.findByIdAndUpdate(
+      req.params.id,
+      { $set: { 'nextRenewal.invoiceNumber': requestedInvoiceNumber } },
+      { new: true },
+    );
+
+    if (current.nextRenewalId) {
+      await Renewal.findByIdAndUpdate(current.nextRenewalId, {
+        $set: { invoiceNumber: requestedInvoiceNumber },
+      });
+    }
+
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice number already exists. Please use a different value.',
+      });
+    }
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Update nextRenewal details (admin only) ────────────────────────────────────
+exports.updateRenewalDetails = async (req, res) => {
+  try {
+    const current = await Airlines.findById(req.params.id).select('invoiceNumber nextRenewal nextRenewalId');
+    if (!current) return res.status(404).json({ success: false, message: 'Not found.' });
+    if (!current.nextRenewal?.paidAt) {
+      return res.status(400).json({ success: false, message: 'No queued renewal found.' });
+    }
+
+    const set = {};
+    const renewalSet = {};
+    const body = req.body || {};
+
+    if (Object.prototype.hasOwnProperty.call(body, 'plan')) {
+      const plan = String(body.plan || '').trim();
+      const allowed = new Set([
+        '1 Year Subscription Plan',
+        'Multiple Years Subscription Plan',
+        'Unlimited Plan',
+      ]);
+      if (!allowed.has(plan)) {
+        return res.status(400).json({ success: false, message: 'Invalid renewal plan.' });
+      }
+      set['nextRenewal.plan'] = plan;
+      renewalSet.plan = plan;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'multiYearCount')) {
+      const years = Number(body.multiYearCount);
+      if (!Number.isFinite(years) || years < 2) {
+        return res.status(400).json({ success: false, message: 'multiYearCount must be at least 2.' });
+      }
+      set['nextRenewal.multiYearCount'] = years;
+      renewalSet.multiYearCount = years;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'committedCount')) {
+      const committedCount = Number(body.committedCount);
+      if (!Number.isFinite(committedCount) || committedCount < 1) {
+        return res.status(400).json({ success: false, message: 'committedCount must be at least 1.' });
+      }
+      set['nextRenewal.committedCount'] = committedCount;
+      renewalSet.committedCount = committedCount;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'activationDate')) {
+      const d = new Date(body.activationDate);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid activationDate.' });
+      }
+      set['nextRenewal.activationDate'] = d;
+      renewalSet.activationDate = d;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'expiresAt')) {
+      const d = new Date(body.expiresAt);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid expiresAt.' });
+      }
+      set['nextRenewal.expiresAt'] = d;
+      renewalSet.expiresAt = d;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'price')) {
+      const price = Number(body.price);
+      if (!Number.isFinite(price) || price < 0) {
+        return res.status(400).json({ success: false, message: 'price must be a non-negative number.' });
+      }
+      set['nextRenewal.price'] = price;
+      renewalSet.price = price;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'invoiceNumber')) {
+      const requestedInvoiceNumber = normalizeInvoiceNumber(body.invoiceNumber);
+      if (!requestedInvoiceNumber) {
+        return res.status(400).json({ success: false, message: 'invoiceNumber required.' });
+      }
+      const currentQueuedInvoiceNumber = normalizeInvoiceNumber(current.nextRenewal?.invoiceNumber);
+      if (requestedInvoiceNumber !== currentQueuedInvoiceNumber) {
+        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber);
+        if (alreadyUsed) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invoice number already exists. Please use a different value.',
+          });
+        }
+      }
+      set['nextRenewal.invoiceNumber'] = requestedInvoiceNumber;
+      renewalSet.invoiceNumber = requestedInvoiceNumber;
+    }
+
+    if (Object.keys(set).length === 0) {
+      return res.status(400).json({ success: false, message: 'No renewal fields provided.' });
+    }
+
+    const doc = await Airlines.findByIdAndUpdate(
+      req.params.id,
+      { $set: set },
+      { new: true },
+    );
+
+    if (current.nextRenewalId && Object.keys(renewalSet).length > 0) {
+      await Renewal.findByIdAndUpdate(current.nextRenewalId, { $set: renewalSet });
+    }
+
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice number already exists. Please use a different value.',
+      });
+    }
+    res.status(400).json({ success: false, message: err.message });
   }
 };
 

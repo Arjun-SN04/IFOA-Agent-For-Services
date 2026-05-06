@@ -224,6 +224,11 @@ export default function ProfilePage() {
   }, [user, token, getOrFetch, invalidate])
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'
+  const fmtYMD = (d) => {
+    if (!d) return '—'
+    const dt = new Date(d)
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+  }
   const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
 
   return (
@@ -384,7 +389,7 @@ export default function ProfilePage() {
                           }`}>
                             {s.subscriptionPlan === 'Unlimited Plan'
                               ? 'Never (Unlimited ∞)'
-                              : s.expirationDate ? fmt(s.expirationDate)
+                              : s.expirationDate ? fmtYMD(s.expirationDate)
                               : active ? '—' : 'Activates on payment'}
                           </p>
                         </div>
@@ -419,7 +424,7 @@ export default function ProfilePage() {
                         <InfoRow label="Country" value={s.country} />
                         <InfoRow label="Price per Certificate" value={money(s.pricePerCertificate || s.pricePerCert)} />
                         <InfoRow label="Certificate Holders" value={`${s.certificateHolders?.length || 0} holder(s)`} />
-                        <InfoRow label="Subscription Date" value={s.subscriptionDate ? fmt(s.subscriptionDate) : (s.paymentStatus === 'paid' ? fmt(s.updatedAt) : 'Activates on payment')} />
+                        <InfoRow label="Subscription Date" value={s.subscriptionDate ? fmtYMD(s.subscriptionDate) : (s.paymentStatus === 'paid' ? fmtYMD(s.updatedAt) : 'Activates on payment')} />
                         <InfoRow
                           label="Expiration Date"
                           value={
@@ -456,12 +461,12 @@ export default function ProfilePage() {
                     ) : (
                       <>
                         <InfoRow label="Status" value={<StatusBadge status={s.status || s.paymentStatus} />} />
-                        <InfoRow label="Subscription Date" value={s.subscriptionDate ? fmt(s.subscriptionDate) : (active ? fmt(s.updatedAt) : 'Activates on payment')} />
+                        <InfoRow label="Subscription Date" value={s.subscriptionDate ? fmtYMD(s.subscriptionDate) : (active ? fmtYMD(s.updatedAt) : 'Activates on payment')} />
                         <InfoRow
                           label="Expiration Date"
                           value={
                             s.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited ∞)'
-                              : s.expirationDate ? fmt(s.expirationDate)
+                              : s.expirationDate ? fmtYMD(s.expirationDate)
                               : active ? '—' : 'Activates on payment'
                           }
                         />

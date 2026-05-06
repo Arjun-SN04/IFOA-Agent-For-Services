@@ -14,7 +14,11 @@
  */
 
 const Invoice        = require('../models/Invoice');
-const { generateInvoiceNumber } = require('./invoiceNumberService');
+const {
+  generateInvoiceNumber,
+  isInvoiceNumberTaken,
+  normalizeInvoiceNumber,
+} = require('./invoiceNumberService');
 
 /**
  * Build a 30-days-from-now Date.
@@ -88,10 +92,23 @@ async function createOrUpdateInvoice(opts) {
   let existing = await Invoice.findOne(query);
 
   // ── 2. Determine invoice number ───────────────────────────────────────────
-  const invoiceNumber =
-    existing?.invoiceNumber ||
-    existingInvoiceNumber   ||
-    (await generateInvoiceNumber());
+  let invoiceNumber = existing?.invoiceNumber || null;
+  if (!invoiceNumber) {
+    const preferredInvoiceNumber = normalizeInvoiceNumber(existingInvoiceNumber);
+    if (preferredInvoiceNumber) {
+      const preferredTaken = await isInvoiceNumberTaken(preferredInvoiceNumber, {
+        excludePaymentId: paymentId || null,
+        excludeInvoiceId: existing?._id || null,
+        excludeRegistrationId: registrationId || null,
+        excludeRegistrationModel: registrationModel || null,
+      });
+      invoiceNumber = preferredTaken
+        ? await generateInvoiceNumber()
+        : preferredInvoiceNumber;
+    } else {
+      invoiceNumber = await generateInvoiceNumber();
+    }
+  }
 
   // ── 3. Build the full document payload ────────────────────────────────────
   const isAirline    = registrationModel !== 'Individual';

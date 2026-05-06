@@ -9,6 +9,9 @@ const {
   getIndividualByEmail,
   updateIndividual,
   deleteIndividual,
+  bulkDeleteIndividuals,
+  setRenewalInvoiceNumber,
+  updateRenewalDetails,
   exportToExcel,
   markIndividualPaid,
   markInvoiceGenerated,
@@ -63,11 +66,14 @@ router.get('/by-email',     authMiddleware, getIndividualByEmail);
 // mark-paid bypasses Stripe — admin only
 router.patch('/:id/mark-paid',              authMiddleware, requireAdmin, markIndividualPaid);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
+router.patch('/:id/renewal-invoice',        authMiddleware, requireAdmin, setRenewalInvoiceNumber);
+router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, updateRenewalDetails);
 // renew — owner or admin (additional ownership check inside controller)
 router.post('/:id/renew',                   authMiddleware, requireOwnership, renewIndividual);
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/',    authMiddleware, requireAdmin,     getAllIndividuals);
+router.delete('/bulk', authMiddleware, requireAdmin, bulkDeleteIndividuals);
 router.get('/:id', authMiddleware, requireOwnership, getIndividualById);
 router.put('/:id', authMiddleware, requireOwnership, updateIndividual);
 router.delete('/:id', authMiddleware, requireAdmin,  deleteIndividual);

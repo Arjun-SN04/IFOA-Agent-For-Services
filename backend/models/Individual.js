@@ -21,7 +21,7 @@ const IndividualSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   middleName: { type: String },
-  dateOfBirth: { type: Date, required: true },
+  dateOfBirth: { type: Date, default: null },
 
   // Address
   addressLine1: { type: String },

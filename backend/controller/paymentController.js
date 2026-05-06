@@ -32,7 +32,11 @@ const Individual           = require('../models/Individual');
 const Airlines             = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
 const Renewal              = require('../models/Renewal');
-const { generateInvoiceNumber } = require('../services/invoiceNumberService');
+const {
+  generateInvoiceNumber,
+  isInvoiceNumberTaken,
+  normalizeInvoiceNumber,
+} = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
 const {
   sendIndividualPaymentConfirmation,
@@ -253,7 +257,10 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.subscriptionPlan        = activePlan;
     update.subscriptionDate        = base;
     if (newExpiry)  update.expirationDate        = newExpiry;
-    update.invoiceNumber           = paymentDoc.invoiceNumber;
+    // Keep current active invoice number immutable once saved.
+    if (!doc.invoiceNumber && paymentDoc.invoiceNumber) {
+      update.invoiceNumber = paymentDoc.invoiceNumber;
+    }
     update.stripePaymentIntentId   = paymentDoc.stripePaymentIntentId;
     update.paymentStatus           = 'paid';
     update.isPaid                  = true;
@@ -316,10 +323,13 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
     status:                'Active',
     subscriptionDate:      now,
     invoiceStatus:         'Paid',
-    invoiceNumber:         paymentDoc.invoiceNumber,
     stripePaymentIntentId: paymentDoc.stripePaymentIntentId,
     paymentId:             paymentDoc._id,
   };
+  // Preserve active invoice immutability: once set, never overwrite it.
+  if (!doc.invoiceNumber && paymentDoc.invoiceNumber) {
+    update.invoiceNumber = paymentDoc.invoiceNumber;
+  }
   if (expirationDate) update.expirationDate = expirationDate;
 
   if (registrationModel !== 'Individual') {
@@ -577,11 +587,24 @@ exports.confirmPayment = async (req, res) => {
     const isPurposeRenewal = piPurpose === 'renewal';
     const isPurposeHolderUpgrade = piPurpose === 'holder-upgrade';
 
-    // Renewals always get a fresh invoice number so it doesn't overlap with
-    // the original subscription's invoice.
-    const invoiceNum = isPurposeRenewal
-      ? await generateInvoiceNumber()
-      : (doc.invoiceNumber || await generateInvoiceNumber());
+    // Renewals always get a fresh invoice number.
+    // Non-renewal flows may reuse an existing invoice number only if it is not
+    // already used elsewhere in DB.
+    let invoiceNum;
+    if (isPurposeRenewal) {
+      invoiceNum = await generateInvoiceNumber();
+    } else {
+      const preferredInvoice = normalizeInvoiceNumber(doc.invoiceNumber);
+      if (preferredInvoice) {
+        const preferredTaken = await isInvoiceNumberTaken(preferredInvoice, {
+          excludeRegistrationId: doc._id,
+          excludeRegistrationModel: registrationModel,
+        });
+        invoiceNum = preferredTaken ? await generateInvoiceNumber() : preferredInvoice;
+      } else {
+        invoiceNum = await generateInvoiceNumber();
+      }
+    }
 
     let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
     try {
@@ -779,18 +802,48 @@ exports.saveInvoiceDraft = async (req, res) => {
   try {
     const { invoiceDraft, invoiceNumber } = req.body;
 
-    const update = {};
-    if (invoiceDraft !== undefined) update.invoiceDraft = invoiceDraft;
-    if (invoiceNumber)              update.invoiceNumber = invoiceNumber;
-
-    const paymentDoc = await Payment.findByIdAndUpdate(
-      req.params.id,
-      { $set: update },
-      { new: true },
-    );
+    const paymentDoc = await Payment.findById(req.params.id);
 
     if (!paymentDoc)
       return res.status(404).json({ success: false, message: 'Payment record not found.' });
+
+    const requestedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
+
+    const changingInvoiceNumber =
+      requestedInvoiceNumber &&
+      paymentDoc.invoiceNumber &&
+      requestedInvoiceNumber !== paymentDoc.invoiceNumber;
+
+    // Admin may change invoice number, but it must remain globally unique.
+    if (changingInvoiceNumber) {
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
+        excludePaymentId: paymentDoc._id,
+      });
+      if (alreadyUsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invoice number already exists. Please use a different value.',
+        });
+      }
+      paymentDoc.invoiceNumber = requestedInvoiceNumber;
+    }
+
+    // If this legacy payment has no invoice number yet, assign one only after DB uniqueness check.
+    if (requestedInvoiceNumber && !paymentDoc.invoiceNumber) {
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
+        excludePaymentId: paymentDoc._id,
+      });
+      if (alreadyUsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invoice number already exists. Please use a different value.',
+        });
+      }
+      paymentDoc.invoiceNumber = requestedInvoiceNumber;
+    }
+
+    if (invoiceDraft !== undefined) paymentDoc.invoiceDraft = invoiceDraft;
+    await paymentDoc.save();
 
     // Sync invoiceNumber + invoiceDraft back to the registration record.
     if (paymentDoc.registrationId && paymentDoc.registrationModel) {
@@ -800,12 +853,26 @@ exports.saveInvoiceDraft = async (req, res) => {
           paymentDoc.registrationModel,
         );
         if (doc && Model) {
+          // Queued renewal: payment belongs to the next plan; update only nextRenewal.invoiceNumber.
+          const isQueuedRenewal = paymentDoc.purpose === 'renewal' && doc.nextRenewal?.paidAt;
+          const registrationSet = {
+            invoiceGenerated: true,
+          };
+
+          if (isQueuedRenewal) {
+            if (paymentDoc.invoiceNumber) {
+              registrationSet['nextRenewal.invoiceNumber'] = paymentDoc.invoiceNumber;
+            }
+          } else {
+            // Admin-initiated invoice edits should sync to the active registration.
+            if (paymentDoc.invoiceNumber) {
+              registrationSet.invoiceNumber = paymentDoc.invoiceNumber;
+            }
+            registrationSet.invoiceDraft = invoiceDraft || doc.invoiceDraft || null;
+          }
+
           await Model.findByIdAndUpdate(paymentDoc.registrationId, {
-            $set: {
-              invoiceNumber,
-              invoiceGenerated: true,
-              invoiceDraft: invoiceDraft || doc.invoiceDraft || null,
-            },
+            $set: registrationSet,
           });
         }
       } catch (_) { /* Non-critical */ }
@@ -817,12 +884,12 @@ exports.saveInvoiceDraft = async (req, res) => {
       const Invoice = require('../models/Invoice');
       const existingInvoice = await Invoice.findOne({ paymentId: paymentDoc._id });
       if (existingInvoice) {
-        if (invoiceDraft)  existingInvoice.draft         = invoiceDraft;
-        if (invoiceNumber) existingInvoice.invoiceNumber  = invoiceNumber;
+        if (paymentDoc.invoiceNumber) existingInvoice.invoiceNumber = paymentDoc.invoiceNumber;
+        if (invoiceDraft) existingInvoice.draft = invoiceDraft;
         existingInvoice.adminGenerated = true;
         await existingInvoice.save();
       } else if (paymentDoc.registrationId && paymentDoc.registrationModel) {
-        // No Invoice doc yet (e.g. wire payment) — create one now.
+        // No Invoice doc yet (e.g. wire payment); create one now.
         await createOrUpdateInvoice({
           registrationId:        paymentDoc.registrationId,
           registrationModel:     paymentDoc.registrationModel,
@@ -833,7 +900,7 @@ exports.saveInvoiceDraft = async (req, res) => {
           paymentMethod:         paymentDoc.paymentMethodType || '',
           draftOverrides:        invoiceDraft || null,
           adminGenerated:        true,
-          existingInvoiceNumber: invoiceNumber || paymentDoc.invoiceNumber,
+          existingInvoiceNumber: paymentDoc.invoiceNumber,
         });
       }
     } catch (invErr) {
@@ -843,6 +910,12 @@ exports.saveInvoiceDraft = async (req, res) => {
     res.json({ success: true, data: paymentDoc });
   } catch (err) {
     console.error('[saveInvoiceDraft]', err.message);
+    if (err?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice number already exists. Please use a different value.',
+      });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -895,11 +968,23 @@ exports.stripeWebhook = async (req, res) => {
       const isPurposeHolderUpgradeWebhook = webhookPurpose === 'holder-upgrade';
 
       // Renewals always get a fresh invoice number.
-      // But if the frontend already confirmed and created an invoice number, reuse it
-      // to avoid duplicate invoices for the same payment.
-      const invoiceNum = isPurposeRenewal
-        ? (existing?.invoiceNumber || await generateInvoiceNumber())
-        : (existing?.invoiceNumber || doc.invoiceNumber || await generateInvoiceNumber());
+      // Reuse existing numbers only when they are already tied to this same record.
+      let invoiceNum;
+      if (isPurposeRenewal) {
+        invoiceNum = existing?.invoiceNumber || await generateInvoiceNumber();
+      } else {
+        const preferredInvoice = normalizeInvoiceNumber(existing?.invoiceNumber || doc.invoiceNumber);
+        if (preferredInvoice) {
+          const preferredTaken = await isInvoiceNumberTaken(preferredInvoice, {
+            excludePaymentId: existing?._id || null,
+            excludeRegistrationId: doc._id,
+            excludeRegistrationModel: registrationModel,
+          });
+          invoiceNum = preferredTaken ? await generateInvoiceNumber() : preferredInvoice;
+        } else {
+          invoiceNum = await generateInvoiceNumber();
+        }
+      }
 
       let last4 = '', cardBrand = '', paymentMethodType = '', stripeChargeId = '', stripeCustomerId = '';
       try {
@@ -1076,7 +1161,7 @@ exports.stripeWebhook = async (req, res) => {
                 holderCount: 0, pricePerCert: 0,
                 subtotal: 0, tax: 0, totalPaid: 0,
               },
-              invoiceNumber: `INV-FAILED-${Date.now()}`,
+              invoiceNumber: await generateInvoiceNumber(),
               invoiceDraft:  null,
             },
             $set: {
@@ -1345,3 +1430,4 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+

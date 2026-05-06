@@ -360,7 +360,7 @@ export default function Home() {
       </section>
 
       {/* ── WHO WE ARE ── */}
-      <section className="py-20 px-6 bg-white">
+      {/* <section className="py-20 px-6 bg-white">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-16 items-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: C.blue }}>About Our Service</p>
@@ -407,7 +407,7 @@ export default function Home() {
             ))}
           </motion.div>
         </div>
-      </section>
+      </section> */}
 
       {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
@@ -438,7 +438,7 @@ export default function Home() {
       </section>
 
       {/* ── STAMP / ABOUT ── */}
-      <section className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
+      {/* <section className="py-20 px-6" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-16">
           <div className="flex-shrink-0 w-full md:w-[420px]">
             <img src={classicStamp} alt="IFOA USA stamp" className="w-full h-auto object-contain rounded-2xl" />
@@ -457,7 +457,7 @@ export default function Home() {
             </p>
           </motion.div>
         </div>
-      </section>
+      </section> */}
 
      
 
@@ -477,7 +477,7 @@ export default function Home() {
 
  
       {/* FAQ */}
-      <FAQSection />
+      {/* <FAQSection /> */}
 
       <Footer />
     </div>
