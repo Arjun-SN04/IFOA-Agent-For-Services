@@ -130,7 +130,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
     ? `Multiple Years (${Number(nr.multiYearCount) > 1 ? Number(nr.multiYearCount) : Math.max(2, Math.round(Number(nr.price || 0) / ppu))} yrs)`
     : nr.plan === 'Unlimited Plan'
       ? 'Unlimited Plan'
-      : (nr.plan || '—')
+      : (nr.plan || 'ï¿½')
 
   const [activating, setActivating] = React.useState(false)
   const [activateErr, setActivateErr] = React.useState('')
@@ -158,7 +158,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
   const setEdit = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }))
 
   const handleActivate = async () => {
-    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n• Switch plan to: ${nrPlanLabel}\n• Set expiry to: ${fmtDate(nr.expiresAt)}\n• Use invoice: ${nr.invoiceNumber || '—'}\n\nThis cannot be undone automatically.`)) return
+    if (!window.confirm(`Activate queued plan now?\n\nThis will:\nï¿½ Switch plan to: ${nrPlanLabel}\nï¿½ Set expiry to: ${fmtDate(nr.expiresAt)}\nï¿½ Use invoice: ${nr.invoiceNumber || 'ï¿½'}\n\nThis cannot be undone automatically.`)) return
     setActivating(true)
     setActivateErr('')
     try {
@@ -232,7 +232,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
             ) : (
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             )}
-            {activating ? 'Activating…' : 'Activate Now'}
+            {activating ? 'Activatingï¿½' : 'Activate Now'}
           </button>
         </div>
       </div>
@@ -329,7 +329,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
                 disabled={savingEdit}
                 className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white"
               >
-                {savingEdit ? 'Saving…' : 'Save Queued Plan'}
+                {savingEdit ? 'Savingï¿½' : 'Save Queued Plan'}
               </button>
             </div>
           </div>
