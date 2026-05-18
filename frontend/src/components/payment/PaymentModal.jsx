@@ -18,21 +18,21 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY, {
 const ELEMENTS_APPEARANCE = {
   theme: 'stripe',
   variables: {
-    colorPrimary: '#dc2626',
+    colorPrimary: '#2563eb',
     colorBackground: '#ffffff',
     colorText: '#0f172a',
     colorDanger: '#dc2626',
     fontFamily: 'system-ui, sans-serif',
     spacingUnit: '4px',
-    borderRadius: '10px',
+    borderRadius: '16px',
   },
   rules: {
-    '.Input': { border: '1px solid #e2e8f0', boxShadow: 'none', padding: '10px 14px' },
-    '.Input:focus': { border: '1px solid #dc2626', boxShadow: '0 0 0 3px rgba(220,38,38,0.12)' },
+    '.Input': { border: '1px solid #e2e8f0', boxShadow: 'none', padding: '10px 14px', background: '#f8fafc' },
+    '.Input:focus': { border: '1px solid #2563eb', boxShadow: '0 0 0 3px rgba(37,99,235,0.12)', background: '#ffffff' },
     '.Label': { fontWeight: '700', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' },
     '.Tab': { border: '1px solid #e2e8f0', boxShadow: 'none' },
-    '.Tab:hover': { border: '1px solid #dc2626' },
-    '.Tab--selected': { border: '2px solid #dc2626', boxShadow: '0 0 0 3px rgba(220,38,38,0.12)' },
+    '.Tab:hover': { border: '1px solid #2563eb' },
+    '.Tab--selected': { border: '2px solid #2563eb', boxShadow: '0 0 0 3px rgba(37,99,235,0.12)' },
   },
 }
 
@@ -283,21 +283,25 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Card preview */}
-      <div className="rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 p-4 shadow-lg">
-        <div className="flex justify-between items-start mb-3">
+      <div className="rounded-3xl p-5 shadow-xl relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 55%, #1e3a5f 100%)' }}>
+        {/* Decorative circles */}
+        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/5" />
+        <div className="absolute -right-2 -bottom-10 w-24 h-24 rounded-full bg-blue-500/10" />
+        <div className="flex justify-between items-start mb-4 relative">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">Amount</p>
-            <p className="text-white font-black text-base">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-300 mb-1">Amount Due</p>
+            <p className="text-white font-black text-2xl tracking-tight">
               ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </p>
           </div>
-          <svg className="w-7 h-4 text-white/40" viewBox="0 0 48 30" fill="currentColor">
-            <circle cx="17" cy="15" r="13" fillOpacity=".8" />
-            <circle cx="31" cy="15" r="13" fillOpacity=".5" />
-          </svg>
+          <div className="flex gap-0.5 mt-1">
+            <div className="w-8 h-8 rounded-full bg-blue-500/60" />
+            <div className="w-8 h-8 rounded-full bg-blue-300/40 -ml-4" />
+          </div>
         </div>
-        <p className="text-white font-mono text-sm tracking-[0.16em] mb-2.5">•••• •••• •••• ••••</p>
-        <div className="flex justify-between text-white/60 text-[10px] font-semibold uppercase tracking-wider">
+        <p className="text-white/50 font-mono text-sm tracking-[0.2em] mb-3 relative">•••• •••• •••• ••••</p>
+        <div className="flex justify-between text-white/50 text-[10px] font-semibold uppercase tracking-wider relative">
           <span className="truncate max-w-[60%]">{cardholderName?.trim() || 'Cardholder Name'}</span>
           <span>MM / YY</span>
         </div>
@@ -305,7 +309,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
 
       {/* Cardholder */}
       <div>
-        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
           Cardholder Name
         </label>
         <input
@@ -313,41 +317,41 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
           value={cardholderName}
           onChange={(e) => setCardholderName(e.target.value)}
           placeholder="Name on card"
-          className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+          className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:bg-white"
         />
       </div>
 
-      {/* Card fields (card-only checkout) */}
+      {/* Card fields */}
       <div>
-        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
           Card Number
         </label>
-        <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
           <CardNumberElement options={CARD_ELEMENT_OPTIONS} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
             Expiration Date
           </label>
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
             <CardExpiryElement options={CARD_ELEMENT_OPTIONS} />
           </div>
         </div>
         <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
+          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
             Security Code
           </label>
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 focus-within:border-violet-500 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
             <CardCvcElement options={CARD_ELEMENT_OPTIONS} />
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2.5">
           <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
           </svg>
@@ -355,13 +359,13 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-1">
         <button type="button" onClick={onCancel} disabled={loading}
-          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+          className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">
           Cancel
         </button>
         <button type="submit" disabled={loading || !stripe}
-          className="flex-[2] rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-3 text-sm transition disabled:opacity-60 flex items-center justify-center gap-2">
+          className="flex-[2] rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold px-4 py-3.5 text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-200">
           {loading ? (
             <>
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -381,7 +385,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         </button>
       </div>
 
-      <p className="text-center text-[10px] text-slate-400 font-semibold flex items-center justify-center gap-1.5">
+      <p className="text-center text-[10px] text-slate-400 font-semibold flex items-center justify-center gap-1.5 pb-1">
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
@@ -402,7 +406,11 @@ export function buildInvoice(sub, registrationModel, amountCents, paymentIntent,
       return d.toISOString()
     }
     if (sub.subscriptionPlan === 'Multiple Years Subscription Plan') {
-      const years = sub.multiYearCount || 3
+      // Derive from actual charged amount (most reliable) — $55/year for Individual.
+      // Falls back to multiYearCount then default 3.
+      const fromAmount = registrationModel !== 'Individual' ? null
+        : amountCents >= 11000 ? Math.round(amountCents / 5500) : null
+      const years = fromAmount || sub.multiYearCount || 3
       d.setFullYear(d.getFullYear() + years)
       return d.toISOString()
     }
@@ -443,7 +451,8 @@ export function serverPaymentToInvoice(paymentDoc) {
     invoiceNumber:    paymentDoc.invoiceNumber || snap.invoiceNumber || '—',
     paidAt:           paymentDoc.paidAt || snap.subscriptionDate,
     subscriptionPlan: snap.subscriptionPlan || '—',
-    expirationDate:   snap.expirationDate || null,
+    multiYearCount:   snap.multiYearCount  || null,
+    expirationDate:   snap.expirationDate  || null,
     amount:           paymentDoc.amountDollars ?? snap.totalPaid ?? 0,
     currency:         paymentDoc.currency || 'USD',
     paymentId:        paymentDoc.stripePaymentIntentId || paymentDoc._id || '—',
@@ -529,25 +538,27 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount])
 
   return createPortal(
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="w-full max-w-sm max-h-[90vh] rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
+      <div className="w-full max-w-md max-h-[92vh] rounded-3xl bg-white flex flex-col overflow-hidden"
+        style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)' }}>
 
         {/* Header */}
-        <div className="flex-shrink-0 bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="2" y="5" width="20" height="14" rx="2" />
+        <div className="flex-shrink-0 px-6 py-5 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 60%, #1e3a5f 100%)' }}>
+          <div className="flex items-center gap-3.5">
+            <div className="w-9 h-9 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4.5 h-4.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="2" y="5" width="20" height="14" rx="3" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
               </svg>
             </div>
             <div>
-              <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5">Secure Checkout</p>
-              <p className="text-white font-black text-base leading-tight">Complete Your Subscription</p>
+              <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest leading-none mb-1">Secure Checkout</p>
+              <p className="text-white font-black text-[15px] leading-tight">Complete Your Subscription</p>
             </div>
           </div>
           <button onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition">
+            className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-white transition-all">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>

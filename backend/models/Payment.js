@@ -59,9 +59,10 @@ const PaymentSchema = new mongoose.Schema({
     isAirline:        { type: Boolean, default: false },
     airlineName:      { type: String, default: '' },
 
-    subscriptionPlan: { type: String, default: '' },
-    subscriptionDate: { type: Date },
-    expirationDate:   { type: Date },
+    subscriptionPlan:  { type: String, default: '' },
+    multiYearCount:    { type: Number, default: null },  // Individual + Airline multi-year year count
+    subscriptionDate:  { type: Date },
+    expirationDate:    { type: Date },
 
     primaryCertificate:    { type: String, default: '' },
     faaCertificateNumber:  { type: String, default: '' },

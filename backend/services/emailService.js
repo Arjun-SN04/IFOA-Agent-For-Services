@@ -71,7 +71,7 @@ function wrap(bodyHtml) {
 // ── Payment confirmation — Individual ─────────────────────────────────────────
 function buildIndividualConfirmationHtml(doc) {
   const name     = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member';
-  const plan     = doc.subscriptionPlan || '1 Year Subscription Plan';
+  const plan     = fmtPlan(doc.subscriptionPlan || '1 Year Subscription Plan', doc.price || doc.multiYearCount);
   const email    = doc.email || '';
   const cert     = doc.primaryCertificate  || doc.primaryAirmanCertificate || '';
   const certNum  = doc.faaCertificateNumber || '';
@@ -106,7 +106,7 @@ function buildIndividualConfirmationHtml(doc) {
 function buildAirlineConfirmationHtml(doc) {
   const contact  = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner';
   const airline  = doc.airlineName || '';
-  const plan     = doc.subscriptionPlan || '1 Year Subscription Plan';
+  const plan     = fmtPlan(doc.subscriptionPlan || '1 Year Subscription Plan', doc.multiYearCount);
   const email    = doc.email || doc.paymentEmail || '';
   const holders  = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
   const expiry   = doc.expirationDate
@@ -138,7 +138,7 @@ function buildAirlineConfirmationHtml(doc) {
 function buildIndividualRenewalHtml(doc) {
   const name    = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member';
   const renewal = doc.lastRenewal || {};
-  const plan    = renewal.plan || doc.subscriptionPlan || '';
+  const plan    = fmtPlan(renewal.plan || doc.subscriptionPlan || '', renewal.price || renewal.multiYearCount);
   const email   = doc.email || doc.paymentEmail || '';
   const cert    = doc.primaryCertificate || '';
   const faaNum  = doc.faaCertificateNumber || '';
@@ -178,7 +178,7 @@ function buildAirlineRenewalHtml(doc) {
   const contact = [doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner';
   const airline = doc.airlineName || '';
   const renewal = doc.lastRenewal || {};
-  const plan    = renewal.plan || doc.subscriptionPlan || '';
+  const plan    = fmtPlan(renewal.plan || doc.subscriptionPlan || '', renewal.multiYearCount || renewal.price);
   const email   = doc.email || doc.paymentEmail || '';
   const holders = Number(
     renewal.committedCount ||
@@ -218,7 +218,7 @@ function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
   const name     = isAirline
     ? ([doc.firstName, doc.lastName].filter(Boolean).join(' ') || doc.airlineName || 'Valued Partner')
     : ([doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Valued Member');
-  const plan     = doc.subscriptionPlan || '';
+  const plan     = fmtPlan(doc.subscriptionPlan || '', doc.price || doc.multiYearCount);
   const email    = doc.email || doc.paymentEmail || '';
   const expiry   = doc.expirationDate
     ? new Date(doc.expirationDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
@@ -242,6 +242,17 @@ function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
     <p style="margin:0 0 16px;">If you have any questions, feel free to contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</p>
     <p style="margin:0;">Warm regards,<br><strong>The IFOA USA Team</strong></p>
   `);
+}
+
+// ── Format plan name with year count for Multi-Year plans ─────────────────────
+// Uses price as authoritative source (55 × years), falls back to multiYearCount.
+function fmtPlan(plan, priceOrYears) {
+  if (plan !== 'Multiple Years Subscription Plan') return plan;
+  const n = Number(priceOrYears);
+  const years = n >= 110
+    ? Math.round(n / 55)       // price given (e.g. 110 → 2, 165 → 3)
+    : (n >= 2 ? n : null);     // already a year count
+  return years ? `Multiple Years Subscription Plan (${years} Years)` : plan;
 }
 
 // ── HTML escape ───────────────────────────────────────────────────────────────

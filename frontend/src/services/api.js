@@ -85,6 +85,10 @@ export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) 
 export const activateQueuedRenewal = (registrationId, registrationModel) =>
   API.post('/payments/admin/activate-renewal', { registrationId, registrationModel })
 
+// Admin: send renewal reminder emails to selected users
+export const sendRenewalReminders = (recipients) =>
+  API.post('/payments/admin/send-renewal-reminders', { recipients })
+
 // User: auto-activate a queued renewal whose activationDate has already passed.
 // Backend enforces ownership + date guard — safe for non-admin users.
 export const autoActivateRenewal = (registrationId, registrationModel) =>

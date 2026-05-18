@@ -98,6 +98,15 @@ function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
   return null; // Unlimited Plan — no expiry
 }
 
+// Derives year count from the stored price for Individual Multi-Year plans.
+// price is always saved correctly ($55 × years); multiYearCount DB-defaults to 3.
+// Returns null when price is insufficient, so callers can fall back to multiYearCount.
+function effectiveMultiYears(plan, price) {
+  if (plan !== 'Multiple Years Subscription Plan') return null;
+  const dollars = Number(price);
+  return dollars >= 110 ? Math.round(dollars / 55) : null;
+}
+
 /**
  * updateOriginalInvoiceAfterHolderUpgrade
  *
@@ -180,8 +189,13 @@ async function updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrat
  * DB records with the old flat-rate bug are corrected at payment-confirm time.
  */
 function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
-  const isAirline      = registrationModel !== 'Individual';
-  const expirationDate = computeExpiry(rec.subscriptionPlan, paidAt, rec.multiYearCount);
+  const isAirline = registrationModel !== 'Individual';
+  // Individual: derive from price (authoritative) with multiYearCount as fallback.
+  // Airline: multiYearCount is always set explicitly (from metadata/renewalDocObj).
+  const effectiveMultiYearCount = isAirline
+    ? rec.multiYearCount
+    : (effectiveMultiYears(rec.subscriptionPlan, rec.price) || rec.multiYearCount);
+  const expirationDate = computeExpiry(rec.subscriptionPlan, paidAt, effectiveMultiYearCount);
 
   // Airline total: always recompute from price × count to avoid legacy bug
   const pricePerCert = Number(rec.pricePerCertificate || rec.pricePerCert || 0);
@@ -193,8 +207,8 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
   if (isAirline) {
     // Airline total: recompute from pricePerCert × committedCount (× years for multi-year).
     if (pricePerCert > 0 && holderCount > 0) {
-      if (rec.subscriptionPlan === 'Multiple Years Subscription Plan' && rec.multiYearCount > 1) {
-        correctTotal = pricePerCert * holderCount * Number(rec.multiYearCount);
+      if (rec.subscriptionPlan === 'Multiple Years Subscription Plan' && effectiveMultiYearCount > 1) {
+        correctTotal = pricePerCert * holderCount * effectiveMultiYearCount;
       } else {
         correctTotal = pricePerCert * holderCount;
       }
@@ -216,6 +230,7 @@ function buildInvoiceSnapshot(rec, registrationModel, amountDollars, paidAt) {
     airlineName: rec.airlineName || '',
 
     subscriptionPlan: rec.subscriptionPlan || '',
+    multiYearCount:   effectiveMultiYearCount || null,
     subscriptionDate: paidAt,
     expirationDate:   expirationDate || null,
 
@@ -390,7 +405,12 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   if (!doc || !Model) return null;
 
   const now = paymentDoc.paidAt || new Date();
-  const expirationDate = computeExpiry(doc.subscriptionPlan, now, doc.multiYearCount);
+  // Payment doc carries the authoritative year count (stored from Stripe metadata).
+  // Fall back to price-derived value, then raw multiYearCount.
+  const effectiveMultiYearCount = paymentDoc.renewalMultiYearCount
+    || effectiveMultiYears(doc.subscriptionPlan, doc.price)
+    || doc.multiYearCount;
+  const expirationDate = computeExpiry(doc.subscriptionPlan, now, effectiveMultiYearCount);
 
   const update = {
     paymentStatus:         'paid',
@@ -487,6 +507,9 @@ exports.createPaymentIntent = async (req, res) => {
 
     // ── Determine amount ──────────────────────────────────────────────────────
     let amountDollars;
+    // computedYears: set inside each branch when plan is multi-year; used for
+    // both amount calculation and Stripe metadata — avoids re-deriving twice.
+    let computedYears = bodyRenewalYears ? Number(bodyRenewalYears) : null;
 
     // ── Holder upgrade: count-based charge for additional slots ─────────────────
     if (purpose === 'holder-upgrade') {
@@ -502,17 +525,21 @@ exports.createPaymentIntent = async (req, res) => {
       // Count-based holder-upgrade amount: tier price x added holders.
       amountDollars = newPpc * additional;
     } else if (registrationModel !== 'Individual') {
-      // Airlines: compute from pricePerCert × holder count (use renewal count if provided)
-      const ppc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+      const activePlanForAirline = newSubscriptionPlan || doc.subscriptionPlan;
       // For renewals the user may have adjusted the holder count — use that if supplied.
       const renewalCount = bodyRenewalCount ? Number(bodyRenewalCount) : null;
       const count = renewalCount ||
         Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      // Renewals: always recalculate tier-based ppc from the effective count so the
+      // backend amount matches what the frontend getRenewPpc() displayed to the user.
+      // Initial payments: use the stored pricePerCertificate set by admin at registration.
+      const ppc = purpose === 'renewal'
+        ? tierPpcForPlan(activePlanForAirline, Math.max(3, count))
+        : Number(doc.pricePerCertificate || doc.pricePerCert || 0);
       if (ppc > 0 && count > 0) {
-        const activePlanForAirline = newSubscriptionPlan || doc.subscriptionPlan;
         if (activePlanForAirline === 'Multiple Years Subscription Plan') {
-          const renewalYears = bodyRenewalYears ? Number(bodyRenewalYears) : (doc.multiYearCount || 3);
-          amountDollars = ppc * count * Math.max(2, renewalYears);
+          computedYears = computedYears || doc.multiYearCount || 3;
+          amountDollars = ppc * count * Math.max(2, computedYears);
         } else {
           amountDollars = ppc * count;  // 1 Year or Unlimited
         }
@@ -521,14 +548,14 @@ exports.createPaymentIntent = async (req, res) => {
       }
     } else {
       // Individual: use the renewal-selected plan and year count (or original doc values)
-      const activePlan  = newSubscriptionPlan || doc.subscriptionPlan;
-      // renewalYears: user-supplied at renewal time > original doc value > default 3
-      const renewalYears = bodyRenewalYears
-        ? Number(bodyRenewalYears)
-        : (doc.multiYearCount || 3);
+      const activePlan = newSubscriptionPlan || doc.subscriptionPlan;
+      if (activePlan === 'Multiple Years Subscription Plan') {
+        // user-supplied (already in computedYears) > price-derived > multiYearCount > default 3
+        computedYears = computedYears || effectiveMultiYears(activePlan, doc.price) || doc.multiYearCount || 3;
+      }
       const INDIVIDUAL_PLAN_PRICES = {
         '1 Year Subscription Plan':        69,
-        'Multiple Years Subscription Plan': 55 * Math.max(2, renewalYears),
+        'Multiple Years Subscription Plan': 55 * Math.max(2, computedYears || 3),
         'Unlimited Plan':                  299,
       };
       if (INDIVIDUAL_PLAN_PRICES[activePlan] !== undefined) {
@@ -553,9 +580,9 @@ exports.createPaymentIntent = async (req, res) => {
     };
     // Store new plan in metadata so webhook/confirm can apply plan change
     if (newSubscriptionPlan) metadata.newSubscriptionPlan = newSubscriptionPlan;
-    // Store the RENEWAL-selected year count (NOT the original doc's count)
-    const metaRenewalYears = bodyRenewalYears ? Number(bodyRenewalYears) : (doc.multiYearCount || null);
-    if (metaRenewalYears) metadata.renewalMultiYearCount = String(metaRenewalYears);
+    // computedYears was set inside the amount block; propagate to metadata so
+    // confirm/webhook can store it on the Payment doc without re-deriving.
+    if (computedYears) metadata.renewalMultiYearCount = String(computedYears);
     // Store the RENEWAL-selected holder count for airline renewals
     if (bodyRenewalCount) metadata.renewalExactCount = String(Number(bodyRenewalCount));
     // Store additional holder count for holder-upgrade purpose
@@ -719,10 +746,12 @@ exports.confirmPayment = async (req, res) => {
       const renewalBase      = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
       // Build snapshot as if subscription starts on renewalBase (not paidAt=now).
       // Override committedCount with the user-adjusted holder count for airlines.
+      // price set to amountDollars so buildInvoiceSnapshot can derive Individual years from it.
       const renewalDocObj = {
         ...doc.toObject(),
         subscriptionPlan: renewalPlan,
         multiYearCount:   renewalYears,
+        price:            amountDollars,
         ...(renewalExactCount ? { committedCount: renewalExactCount, holderCountValue: renewalExactCount } : {}),
       };
       invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
@@ -741,9 +770,9 @@ exports.confirmPayment = async (req, res) => {
       isPaid:           true,
       paidAt:           now,
       amountCents,
-      // Store the corrected amount (pricePerCert × count) not the raw Stripe amount
-      // so the invoice always shows the right total even for legacy records.
-      amountDollars:    invoiceSnapshot.totalPaid || amountDollars,
+      // Holder-upgrade: record the actual charge (newPpc × addedCount), not the full subscription total.
+      // For regular payments: use the corrected total from the snapshot (pricePerCert × count).
+      amountDollars:    isPurposeHolderUpgrade ? amountDollars : (invoiceSnapshot.totalPaid || amountDollars),
       currency:         pi.currency || 'usd',
       registrationId,
       registrationModel,
@@ -1108,10 +1137,12 @@ exports.stripeWebhook = async (req, res) => {
         const renewalYears  = webhookRenewalYears || doc.multiYearCount || null;
         const currentExpiry = doc.expirationDate ? new Date(doc.expirationDate) : null;
         const renewalBase   = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+        // price set to amountDollars so buildInvoiceSnapshot can derive Individual years from it.
         const renewalDocObj = {
           ...doc.toObject(),
           subscriptionPlan: renewalPlan,
           multiYearCount:   renewalYears,
+          price:            amountDollars,
           ...(webhookRenewalCount ? { committedCount: webhookRenewalCount, holderCountValue: webhookRenewalCount } : {}),
         };
         invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
@@ -1156,7 +1187,7 @@ exports.stripeWebhook = async (req, res) => {
         isPaid:         true,
         paidAt:         now,
         amountCents,
-        amountDollars:  invoiceSnapshot.totalPaid || amountDollars,
+        amountDollars:  isPurposeHolderUpgradeWebhook ? amountDollars : (invoiceSnapshot.totalPaid || amountDollars),
         currency:       pi.currency || 'usd',
         registrationId,
         registrationModel,
@@ -1557,6 +1588,39 @@ exports.autoActivateRenewal = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ─── POST /api/payments/admin/send-renewal-reminders (admin) ─────────────────
+exports.sendRenewalReminders = async (req, res) => {
+  try {
+    const { recipients } = req.body;
+    if (!Array.isArray(recipients) || recipients.length === 0)
+      return res.status(400).json({ success: false, message: 'recipients array required.' });
+
+    const { sendExpiryReminder } = require('../services/emailService');
+    let sent = 0, failed = 0;
+
+    for (const { registrationId, registrationModel } of recipients) {
+      try {
+        const { doc } = await findRegistration(registrationId, registrationModel);
+        if (!doc) { failed++; continue; }
+        const isAirline = registrationModel !== 'Individual';
+        const daysLeft = doc.expirationDate
+          ? Math.max(0, Math.ceil((new Date(doc.expirationDate) - new Date()) / (1000 * 60 * 60 * 24)))
+          : 30;
+        await sendExpiryReminder(doc, isAirline, daysLeft);
+        sent++;
+      } catch (e) {
+        console.warn('[sendRenewalReminders] email failed:', e.message);
+        failed++;
+      }
+    }
+
+    res.json({ success: true, sent, failed });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 
 // ─── GET /api/payments (admin) ────────────────────────────────────────────────
 exports.getAllPayments = async (req, res) => {

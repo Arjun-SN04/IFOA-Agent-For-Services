@@ -68,18 +68,13 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const [registrationId, setRegistrationId] = useState(null)
   const [wireSubmitting, setWireSubmitting] = useState(false)
   const [wireSuccess, setWireSuccess]     = useState(false)
-  /* TEST MODE — remove before production */
-  const [testPayMode, setTestPayMode] = useState(false)
-
   const holders       = data.certificateHolders || []
   const isUnlimited   = data.subscriptionPlan === 'Unlimited Plan'
   const selectedCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const pricePerCert  = data.pricePerCertificate || data.pricePerCert || 0
   // Always multiply by count — Unlimited plan is $265/certificate too
   const total         = pricePerCert * selectedCount
-  const realAmountCents = Math.round(total * 100)
-  /* TEST MODE — $1 when enabled */
-  const amountCents   = testPayMode ? 100 : realAmountCents
+  const amountCents   = Math.round(total * 100)
   const selectedPaymentMethod = data.paymentMethod || paymentMethod || 'card'
 
   useEffect(() => {
@@ -418,17 +413,6 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
           Previous
         </button>
 
-        {/* TEST MODE TOGGLE — card payments only; remove before production */}
-        {!isExistingSubmission && selectedPaymentMethod === 'card' && (
-          <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setTestPayMode(v => !v)}>
-            <div className={`w-8 h-4 rounded-full relative transition-colors ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-            </div>
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 Test: charge $1 only</span>
-          </div>
-        )}
-        {/* END TEST MODE TOGGLE */}
-
         {isExistingSubmission ? (
           <button
             type="button"
@@ -471,9 +455,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             }`}>
             {submitting
               ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path fill="currentColor" d="M4 12a8 8 0 018-8v8z" className="opacity-75" /></svg>Completing…</>
-              : testPayMode
-                ? <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>Pay $1.00 (Test)</>
-                : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>Pay with Card</>
+              : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>Pay with Card</>
             }
           </button>
         )

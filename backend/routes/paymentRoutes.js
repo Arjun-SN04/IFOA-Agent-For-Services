@@ -11,6 +11,7 @@ const {
   activateQueuedRenewal,
   autoActivateRenewal,
   refreshInvoice,
+  sendRenewalReminders,
 } = require('../controller/paymentController');
 
 const auth = require('../middleware/auth');
@@ -37,6 +38,9 @@ router.patch('/:id/save-invoice-draft', auth, adminOnly, saveInvoiceDraft);
 
 // ── Fetch all Payment docs for a registration (user dashboard / admin) ───────
 router.get('/by-registration/:id', auth, getPaymentsByRegistration);
+
+// ── Admin: send renewal reminder emails to selected users ─────────────────────
+router.post('/admin/send-renewal-reminders', auth, adminOnly, sendRenewalReminders);
 
 // ── Admin: immediately activate a queued nextRenewal on a registration ───────
 router.post('/admin/activate-renewal', auth, adminOnly, activateQueuedRenewal);

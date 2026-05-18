@@ -28,6 +28,7 @@ import {
   getInvoiceByRegistration,
   saveInvoiceDraftToDoc,
   activateQueuedRenewal,
+  sendRenewalReminders,
 } from '../services/api'
 
 const fmtDate = (v) =>
@@ -68,7 +69,7 @@ const selectCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
 
 function Badge({ value, type = 'payment', isPaid }) {
-  let cls = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] '
+  let cls = 'inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] whitespace-nowrap '
   let label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Pending'
 
   if (type === 'status') {
@@ -125,12 +126,15 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
   // Only show for genuinely queued renewals (activation is in the future).
   if (!activationDate || activationDate <= new Date()) return null
 
-  const ppu = record.pricePerCertificate || 55
+  // Airline fallback: divide by (ppc × committedCount) to get years, not just ppc
+  const ppcFallback   = Number(record.pricePerCertificate || 55)
+  const countFallback = Number(nr.committedCount || record.committedCount || 1)
+  const pricePerYear  = registrationModel !== 'Individual' ? ppcFallback * countFallback : 55
   const nrPlanLabel = nr.plan === 'Multiple Years Subscription Plan'
-    ? `Multiple Years (${Number(nr.multiYearCount) > 1 ? Number(nr.multiYearCount) : Math.max(2, Math.round(Number(nr.price || 0) / ppu))} yrs)`
+    ? `Multiple Years (${Number(nr.multiYearCount) > 1 ? Number(nr.multiYearCount) : Math.max(2, Math.round(Number(nr.price || 0) / pricePerYear))} yrs)`
     : nr.plan === 'Unlimited Plan'
       ? 'Unlimited Plan'
-      : (nr.plan || '�')
+      : (nr.plan || '—')
 
   const [activating, setActivating] = React.useState(false)
   const [activateErr, setActivateErr] = React.useState('')
@@ -1556,10 +1560,10 @@ function EmptyState({ message = 'No records found' }) {
 // ─── RowActions ────────────────────────────────────────────────────────────────
 function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGenerated, isDeleting }) {
   return (
-    <div className="flex flex-nowrap items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+    <div className="flex flex-nowrap items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
       {/* View */}
       <button onClick={onView}
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap flex-shrink-0">
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /></svg>
         View
       </button>
@@ -1568,7 +1572,6 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
       {onInvoice && (
         invoiceGenerated ? (
           <>
-            {/* Document icon — previews the existing invoice PDF */}
             <button
               onClick={onInvoicePreview}
               title="Preview Invoice PDF"
@@ -1579,11 +1582,10 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6M9 17h4" />
               </svg>
             </button>
-            {/* Edit invoice — opens edit form directly */}
             <button
               onClick={onInvoice}
               title="Edit Invoice"
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap"
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap"
             >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
@@ -1592,11 +1594,10 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
             </button>
           </>
         ) : (
-          /* Generate new invoice — opens payment method selector (step 1) */
           <button
             onClick={onInvoice}
             title="Generate Invoice"
-            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition whitespace-nowrap"
+            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition whitespace-nowrap"
           >
             <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1606,12 +1607,9 @@ function RowActions({ onView, onDelete, onInvoice, onInvoicePreview, invoiceGene
         )
       )}
 
-      {/* Divider — always centered between invoice area and Del */}
-      <div className="w-px h-5 bg-slate-200 flex-shrink-0" />
-
       {/* Delete */}
       <button onClick={onDelete} disabled={isDeleting}
-        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
+        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40 whitespace-nowrap">
         <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /></svg>
         {isDeleting ? '…' : 'Del'}
       </button>
@@ -1646,7 +1644,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[1100px] table-fixed text-sm">
+        <table className="w-full min-w-[1250px] table-fixed text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-3 py-3.5 w-10">
@@ -1658,10 +1656,11 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Price</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Status</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Sub Start</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Expiry</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Status</th>
               <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Submitted</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Actions</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-60">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1719,7 +1718,22 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                     <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs text-slate-700 font-medium">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4 font-semibold text-slate-900 text-sm whitespace-nowrap">{fmtMoney(primary.price)}</td>
-                    <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">{primary.subscriptionDate ? fmtDateMDY(primary.subscriptionDate) : (primary.isPaid ? '—' : <span className="text-slate-300">Pending</span>)}</td>
+                    <td className="px-4 py-4">
+                      {primary.subscriptionPlan === 'Unlimited Plan'
+                        ? <span className="text-xs font-semibold text-indigo-600">Never</span>
+                        : primary.expirationDate
+                          ? <span className={`text-xs font-semibold whitespace-nowrap ${new Date(primary.expirationDate) < new Date() ? 'text-red-600' : new Date(primary.expirationDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'text-amber-600' : 'text-slate-600'}`}>{fmtDateMDY(primary.expirationDate)}</span>
+                          : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col gap-0.5">
+                        <Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} />
+                        {primary.nextRenewal?.paidAt && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Renewed</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-4">
                       <Badge value={primary.paymentStatus} isPaid={primary.isPaid} />
                       {primary.wirePaymentRequested && (
@@ -1728,7 +1742,6 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
                       <RowActions
                         onView={() => onView(primary)}
@@ -1766,7 +1779,22 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                       <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
-                      <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{sub.subscriptionDate ? fmtDateMDY(sub.subscriptionDate) : '—'}</td>
+                      <td className="px-4 py-3">
+                        {sub.subscriptionPlan === 'Unlimited Plan'
+                          ? <span className="text-xs font-semibold text-indigo-600">Never</span>
+                          : sub.expirationDate
+                            ? <span className={`text-xs font-semibold whitespace-nowrap ${new Date(sub.expirationDate) < new Date() ? 'text-red-600' : 'text-slate-600'}`}>{fmtDateMDY(sub.expirationDate)}</span>
+                            : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} />
+                          {sub.nextRenewal?.paidAt && (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Renewed</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <Badge value={sub.paymentStatus} isPaid={sub.isPaid} />
                         {sub.wirePaymentRequested && (
@@ -1775,7 +1803,6 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
                       <td className="px-4 py-3">
                         <RowActions
                           onView={() => onView(sub)}
@@ -1833,22 +1860,23 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[1260px] table-fixed text-sm">
+        <table className="w-full min-w-[1220px] table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-3 py-3.5 w-10">
                 <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(allIds)}
                   className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
               </th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-52">Airline & Contact</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-40">Email</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Holders / Total</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Status</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Payment</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Submitted</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-56">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-40">Airline & Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Email</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders / Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Sub Start</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Expiry</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Status</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-60">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1910,9 +1938,23 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                         <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(primary)}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4"><Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} /></td>
+                    <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">{primary.subscriptionDate ? fmtDateMDY(primary.subscriptionDate) : <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-4">
+                      {primary.subscriptionPlan === 'Unlimited Plan'
+                        ? <span className="text-xs font-semibold text-indigo-600">Never</span>
+                        : primary.expirationDate
+                          ? <span className={`text-xs font-semibold whitespace-nowrap ${new Date(primary.expirationDate) < new Date() ? 'text-red-600' : new Date(primary.expirationDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'text-amber-600' : 'text-slate-600'}`}>{fmtDateMDY(primary.expirationDate)}</span>
+                          : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col gap-0.5">
+                        <Badge value={primary.isPaid ? 'Active' : (primary.status || 'Pending')} type="status" isPaid={primary.isPaid} />
+                        {primary.nextRenewal?.paidAt && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Renewed</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-4"><Badge value={primary.paymentStatus} isPaid={primary.isPaid} /></td>
-                    <td className="px-4 py-4 text-slate-400 text-xs whitespace-nowrap">{fmtDate(primary.createdAt)}</td>
                     <td className="px-4 py-4">
                       <RowActions
                         onView={() => onView(primary)}
@@ -1956,9 +1998,23 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(sub)}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} /></td>
+                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{sub.subscriptionDate ? fmtDateMDY(sub.subscriptionDate) : <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3">
+                        {sub.subscriptionPlan === 'Unlimited Plan'
+                          ? <span className="text-xs font-semibold text-indigo-600">Never</span>
+                          : sub.expirationDate
+                            ? <span className={`text-xs font-semibold whitespace-nowrap ${new Date(sub.expirationDate) < new Date() ? 'text-red-600' : new Date(sub.expirationDate) < new Date(Date.now() + 30*24*60*60*1000) ? 'text-amber-600' : 'text-slate-600'}`}>{fmtDateMDY(sub.expirationDate)}</span>
+                            : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          <Badge value={sub.isPaid ? 'Active' : (sub.status || 'Pending')} type="status" isPaid={sub.isPaid} />
+                          {sub.nextRenewal?.paidAt && (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Renewed</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3"><Badge value={sub.paymentStatus} isPaid={sub.isPaid} /></td>
-                      <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{fmtDate(sub.createdAt)}</td>
                       <td className="px-4 py-3">
                         <RowActions
                           onView={() => onView(sub)}
@@ -2114,6 +2170,7 @@ export default function AdminDashboard() {
   const [filterPlan, setFilterPlan] = useState('All')
   const [filterPayment, setFilterPayment] = useState('All')
   const [filterStatus, setFilterStatus]   = useState('All')
+  const [filterExpiry, setFilterExpiry]   = useState('All')
   const [sortOrder, setSortOrder]         = useState('desc')
 
   const [viewRec, setViewRec]   = useState(null)
@@ -2128,6 +2185,7 @@ export default function AdminDashboard() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   const highlightId = useMemo(() => {
     const p = new URLSearchParams(locationSearch)
@@ -2286,6 +2344,25 @@ export default function AdminDashboard() {
       showToast('Failed to generate some invoice numbers', 'error')
     } finally {
       setBulkGenerating(false)
+    }
+  }
+
+  const handleBulkSendReminder = async () => {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    setSendingReminder(true)
+    try {
+      const isAirlineTab = tab === 'airlines'
+      const recipients = ids.map(id => ({
+        registrationId: id,
+        registrationModel: isAirlineTab ? 'Airlines' : 'Individual',
+      }))
+      await sendRenewalReminders(recipients)
+      showToast(`Sent renewal reminders to ${ids.length} user(s)`)
+    } catch {
+      showToast('Failed to send some emails', 'error')
+    } finally {
+      setSendingReminder(false)
     }
   }
 
@@ -2465,23 +2542,36 @@ export default function AdminDashboard() {
 
   const src = tab === 'individuals' ? individuals : airlines
 
-  const filtered = useMemo(() => src.filter(r => {
-    const q = search.toLowerCase()
-    const matchSearch = !q || (
-      tab === 'individuals'
-        ? [`${r.firstName || ''} ${r.lastName || ''}`, r.email, r.country, r.faaCertificateNumber, r.phone].some(v => String(v || '').toLowerCase().includes(q))
-        : [r.airlineName, r.email || r.contactEmail, r.country, `${r.firstName || ''} ${r.lastName || ''}`].some(v => String(v || '').toLowerCase().includes(q))
-    )
-
-    return matchSearch
-      && (filterPlan === 'All' || r.subscriptionPlan === filterPlan)
-      && (filterPayment === 'All' || r.paymentStatus === filterPayment)
-      && (filterStatus === 'All' || r.status === filterStatus)
-  }).sort((a, b) => {
-    const aDate = new Date(a.createdAt).getTime()
-    const bDate = new Date(b.createdAt).getTime()
-    return sortOrder === 'asc' ? aDate - bDate : bDate - aDate
-  }), [src, search, filterPlan, filterPayment, filterStatus, sortOrder, tab])
+  const filtered = useMemo(() => {
+    const now = new Date()
+    const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    return src.filter(r => {
+      const q = search.toLowerCase()
+      const matchSearch = !q || (
+        tab === 'individuals'
+          ? [`${r.firstName || ''} ${r.lastName || ''}`, r.email, r.country, r.faaCertificateNumber, r.phone].some(v => String(v || '').toLowerCase().includes(q))
+          : [r.airlineName, r.email || r.contactEmail, r.country, `${r.firstName || ''} ${r.lastName || ''}`].some(v => String(v || '').toLowerCase().includes(q))
+      )
+      const expDate = r.expirationDate ? new Date(r.expirationDate) : null
+      const isUnlimited = r.subscriptionPlan === 'Unlimited Plan'
+      const matchExpiry = filterExpiry === 'All'
+        ? true
+        : filterExpiry === 'Expired'
+          ? !isUnlimited && expDate && expDate < now
+          : filterExpiry === 'ExpiringSoon'
+            ? !isUnlimited && expDate && expDate >= now && expDate <= thirtyDays
+            : true
+      return matchSearch
+        && (filterPlan === 'All' || r.subscriptionPlan === filterPlan)
+        && (filterPayment === 'All' || r.paymentStatus === filterPayment)
+        && (filterStatus === 'All' || r.status === filterStatus)
+        && matchExpiry
+    }).sort((a, b) => {
+      const aDate = new Date(a.createdAt).getTime()
+      const bDate = new Date(b.createdAt).getTime()
+      return sortOrder === 'asc' ? aDate - bDate : bDate - aDate
+    })
+  }, [src, search, filterPlan, filterPayment, filterStatus, filterExpiry, sortOrder, tab])
 
   const uniqueAccountCount = useMemo(() => {
     if (tab === 'overview') return 0
@@ -2499,8 +2589,8 @@ export default function AdminDashboard() {
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
 
-  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setSortOrder('desc') }
-  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || sortOrder !== 'desc'
+  const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterExpiry('All'); setSortOrder('desc') }
+  const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || filterExpiry !== 'All' || sortOrder !== 'desc'
 
   return (
     <DashboardLayout>
@@ -2603,6 +2693,12 @@ export default function AdminDashboard() {
               className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
+            <select value={filterExpiry} onChange={e => setFilterExpiry(e.target.value)}
+              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+              <option value="All">All Dates</option>
+              <option value="Expired">Expired</option>
+              <option value="ExpiringSoon">Expiring in 30 days</option>
+            </select>
             </>
           )}
 
@@ -2652,6 +2748,14 @@ export default function AdminDashboard() {
           {selectedIds.size > 0 && (
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">{selectedIds.size} selected</span>
+              <button
+                onClick={handleBulkSendReminder}
+                disabled={sendingReminder || bulkDeleting || bulkGenerating}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 px-3 py-1.5 text-xs font-bold text-white transition"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                {sendingReminder ? 'Sending…' : 'Send Renewal Reminder'}
+              </button>
               <button
                 onClick={handleBulkGenerateInvoice}
                 disabled={bulkGenerating || bulkDeleting}

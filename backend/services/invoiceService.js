@@ -111,16 +111,23 @@ async function createOrUpdateInvoice(opts) {
   }
 
   // ── 3. Build the full document payload ────────────────────────────────────
-  const isAirline    = registrationModel !== 'Individual';
-  const holderCount  = Number(snapshot.holderCount  || 0);
-  const pricePerCert = Number(snapshot.pricePerCert || 0);
-  const totalAmount  = isAirline && pricePerCert > 0 && holderCount > 0
-    ? pricePerCert * holderCount
+  const isAirline      = registrationModel !== 'Individual';
+  const holderCount    = Number(snapshot.holderCount    || 0);
+  const pricePerCert   = Number(snapshot.pricePerCert   || 0);
+  const multiYearCount = Number(snapshot.multiYearCount || 1);
+  const yearMultiplier = snapshot.subscriptionPlan === 'Multiple Years Subscription Plan' && multiYearCount > 1
+    ? multiYearCount
+    : 1;
+  const totalAmount = isAirline && pricePerCert > 0 && holderCount > 0
+    ? pricePerCert * holderCount * yearMultiplier
     : amountDollars;
 
-  const planLabel = (snapshot.subscriptionPlan || '1 Year Plan')
+  const planBase  = (snapshot.subscriptionPlan || '1 Year Plan')
     .replace(' Subscription Plan', '')
     .replace(' Plan', '');
+  const planLabel = snapshot.subscriptionPlan === 'Multiple Years Subscription Plan' && multiYearCount > 1
+    ? `${planBase} (${multiYearCount} Years)`
+    : planBase;
 
   const lineItems = [{
     description: `Agent For Service - ${planLabel}`,

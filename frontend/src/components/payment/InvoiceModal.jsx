@@ -46,7 +46,10 @@ export function resolveAirlineTotal(inv) {
   const pricePerCert = Number(inv.pricePerCert) || 0
   const holderCount  = Number(inv.holderCount)  || 0
   if (pricePerCert > 0 && holderCount > 0) {
-    return pricePerCert * holderCount
+    const years = inv.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(inv.multiYearCount) > 1
+      ? Number(inv.multiYearCount)
+      : 1
+    return pricePerCert * holderCount * years
   }
   return Number(inv.amount) || 0
 }
@@ -79,12 +82,17 @@ export function buildPDFPayload(inv) {
     ? (Number(inv.pricePerCert) || Number(inv.amount) || 0)
     : (Number(inv.amount) || 0)
 
-  // Always recompute airline total from pricePerCert × holderCount
+  // Always recompute airline total from pricePerCert × holderCount (× years for multi-year)
   const totalPrice  = inv.isAirline ? resolveAirlineTotal(inv) : (Number(inv.amount) || 0)
 
-  const planDesc = `Agent For Service - ${(inv.subscriptionPlan || '1 Year Plan')
+  const planBase = (inv.subscriptionPlan || '1 Year Plan')
     .replace(' Subscription Plan', '')
-    .replace(' Plan', '')}`
+    .replace(' Plan', '')
+  const planDesc = `Agent For Service - ${
+    inv.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(inv.multiYearCount) > 1
+      ? `${planBase} (${Number(inv.multiYearCount)} Years)`
+      : planBase
+  }`
 
   return {
     invoiceNumber:     inv.invoiceNumber || `INV-${Date.now()}`,

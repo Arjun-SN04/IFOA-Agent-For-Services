@@ -100,13 +100,8 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
   const [errors, setErrors]                 = useState({})
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
-  /* TEST MODE — remove before production */
-  const [testPayMode, setTestPayMode] = useState(false)
-
-  // Amount in cents for the PaymentModal (backend recomputes from DB for actual charge)
-  const realAmountCents = Math.round(Number(data.price || 0) * 100)
-  /* TEST MODE — $1 when enabled */
-  const amountCents = testPayMode ? 100 : realAmountCents
+  // Amount in cents for display in PaymentModal (backend independently recomputes from DB for actual charge)
+  const amountCents = Math.round(Number(data.price || 0) * 100)
 
   // For the plan label, prefer the live DB record (existingRecord) over formData
   // because formData may still be in its INIT state when the component first renders.
@@ -293,17 +288,6 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
           Back
         </button>
 
-        {/* TEST MODE TOGGLE — remove this block before production */}
-        {!hasExistingRegistration && (
-          <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setTestPayMode(v => !v)}>
-            <div className={`w-8 h-4 rounded-full relative transition-colors ${testPayMode ? 'bg-amber-400' : 'bg-slate-300'}`}>
-              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${testPayMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-            </div>
-            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">🧪 Test: charge $1 only</span>
-          </div>
-        )}
-        {/* END TEST MODE TOGGLE */}
-
         {/* Only show pay button if no existing registration */}
         {!hasExistingRegistration && (
           <button
@@ -327,11 +311,6 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
                   <path fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8Z" className="opacity-75" />
                 </svg>
                 Submitting...
-              </>
-            ) : testPayMode ? (
-              <>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4"><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>
-                Pay $1.00 (Test)
               </>
             ) : (
               <>
