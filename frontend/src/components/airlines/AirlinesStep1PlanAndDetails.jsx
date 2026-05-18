@@ -157,7 +157,9 @@ function scrollToField(id) {
 export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
   const { user } = useAuth()
   const [errors, setErrors] = useState({})
-  const [phoneCountry, setPhoneCountry] = useState('us')
+  const [phoneCountry, setPhoneCountry] = useState(
+    (data.country && COUNTRY_TO_ISO2[data.country]) || 'us'
+  )
 
   useEffect(() => {
     if (user?.airlineName && !data.airlineName) {
@@ -469,7 +471,10 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
       {/* ── Next button ── */}
       <div className="flex justify-end pt-6 border-t border-gray-100">
         <button onClick={() => { if (validate()) onNext() }}
-          className="inline-flex items-center gap-2 px-8 py-3 bg-blue-700 hover:bg-blue-800 active:scale-95 text-white font-bold rounded-xl transition-all duration-150 shadow-sm hover:shadow-md hover:-translate-y-px">
+          className="inline-flex items-center gap-2 px-8 py-3 active:scale-95 text-white font-bold rounded-xl transition-all duration-150 shadow-sm hover:-translate-y-px"
+          style={{ background: '#0000ff' }}
+          onMouseEnter={e => e.currentTarget.style.background='#0000e6'}
+          onMouseLeave={e => e.currentTarget.style.background='#0000ff'}>
           Next
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />

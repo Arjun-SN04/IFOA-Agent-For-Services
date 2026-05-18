@@ -132,14 +132,15 @@ export async function generateIFOAInvoicePDF(inv) {
   txt('Thank you for your Business. Your invoice is as follows:', ML, Y, { size: 9 })
   Y -= 28
 
-  const C = { pos: ML, desc: ML + 28, qty: ML + W - 170, unit: ML + W - 100, total: ML + W }
+  // Column right-edges for numeric cols; left-edges for text cols
+  const C = { pos: ML, desc: ML + 28, qtyR: ML + W - 160, unitR: ML + W - 70, total: ML + W }
   const TH_Y = Y
   const TH_H = 16
   rect(ML, TH_Y - TH_H + 4, W, TH_H, LGRAY)
   txt('Pos.', C.pos, TH_Y - 8, { size: 8, font: fontBold })
   txt('Description', C.desc, TH_Y - 8, { size: 8, font: fontBold })
-  txt('Quantity', C.qty, TH_Y - 8, { size: 8, font: fontBold })
-  txt('Unit Price', C.unit, TH_Y - 8, { size: 8, font: fontBold })
+  txtR('Quantity', C.qtyR, TH_Y - 8, { size: 8, font: fontBold })
+  txtR('Unit Price', C.unitR, TH_Y - 8, { size: 8, font: fontBold })
   txtR('Total Price USD', C.total, TH_Y - 8, { size: 8, font: fontBold })
   Y = TH_Y - TH_H - 2
   line(ML, Y, ML + W, Y, BORDER, 0.4)
@@ -148,9 +149,9 @@ export async function generateIFOAInvoicePDF(inv) {
   const items = inv.lineItems || []
   items.forEach((item, i) => {
     txt(String(i + 1), C.pos, Y, { size: 9 })
-    txt(item.description || '', C.desc, Y, { size: 9, maxWidth: C.qty - C.desc - 10 })
-    txt(String(item.quantity || 0), C.qty, Y, { size: 9 })
-    txtR(fmtM(item.unitPrice), C.unit + 50, Y, { size: 9 })
+    txt(item.description || '', C.desc, Y, { size: 9, maxWidth: C.qtyR - C.desc - 30 })
+    txtR(String(item.quantity || 0), C.qtyR, Y, { size: 9 })
+    txtR(fmtM(item.unitPrice), C.unitR, Y, { size: 9 })
     txtR(fmtM(item.totalPrice), C.total, Y, { size: 9 })
     Y -= 18
   })

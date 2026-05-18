@@ -21,7 +21,7 @@ function AlreadySubmittedBanner({ paymentStatus }) {
     return (
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #bfdbfe' }}>
         {/* Blue header */}
-        <div className="flex items-center gap-3 px-5 py-4" style={{ background: '#2563eb' }}>
+        <div className="flex items-center gap-3 px-5 py-4" style={{ background: '#0000ff' }}>
           <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.18)' }}>
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -42,9 +42,9 @@ function AlreadySubmittedBanner({ paymentStatus }) {
           <Link
             to="/dashboard/subscription"
             className="inline-flex items-center gap-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all"
-            style={{ background: '#2563eb' }}
+            style={{ background: '#0000ff' }}
             onMouseEnter={e => e.currentTarget.style.background = '#1d4ed8'}
-            onMouseLeave={e => e.currentTarget.style.background = '#2563eb'}
+            onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -300,9 +300,9 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
                 ? 'cursor-not-allowed opacity-60'
                 : 'hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none'
             }`}
-            style={{ background: isBlocked ? '#d1d5db' : '#2563eb' }}
-            onMouseEnter={e => { if (!isBlocked && !submitting) e.currentTarget.style.background = '#1d4ed8' }}
-            onMouseLeave={e => { if (!isBlocked) e.currentTarget.style.background = '#2563eb' }}
+            style={{ background: isBlocked ? '#d1d5db' : '#0000ff' }}
+            onMouseEnter={e => { if (!isBlocked && !submitting) e.currentTarget.style.background = '#0000e6' }}
+            onMouseLeave={e => { if (!isBlocked) e.currentTarget.style.background = '#0000ff' }}
           >
             {submitting ? (
               <>

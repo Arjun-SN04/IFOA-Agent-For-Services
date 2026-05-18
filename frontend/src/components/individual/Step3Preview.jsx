@@ -19,7 +19,7 @@ function ReviewSection({ title, rows }) {
   )
 }
 
-export default function Step3Preview({ data, onNext, onBack }) {
+export default function Step3Preview({ data, onNext, onBack, onEdit }) {
   const sections = [
     {
       title: 'Subscription',
@@ -74,6 +74,17 @@ export default function Step3Preview({ data, onNext, onBack }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2 text-sm font-bold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Edit
+        </button>
+      </div>
       <div className="rounded-[26px] border border-amber-200 bg-amber-50/80 p-5 text-sm leading-6 text-amber-900">
         Review each section before continuing. This screen is a final check for your registration details before invoice and submission.
       </div>

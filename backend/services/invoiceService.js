@@ -84,12 +84,22 @@ async function createOrUpdateInvoice(opts) {
     existingInvoiceNumber = null,
   } = opts;
 
-  // ── 1. Check if an Invoice already exists for this registration/payment ────
-  const query = paymentId
-    ? { paymentId }
-    : { registrationId, registrationModel };
-
-  let existing = await Invoice.findOne(query);
+  // ── 1. Locate existing Invoice — strategy depends on how the payment was made ─
+  //
+  // Stripe card payments:  upsert by paymentId (idempotent per Stripe intent)
+  // Wire / manual:         upsert ONLY if an Invoice with exactly this
+  //                        existingInvoiceNumber already exists for this
+  //                        registration — otherwise ALWAYS create a new Invoice
+  //                        so every wire/renewal payment gets its own unique doc.
+  let existing = null;
+  if (paymentId) {
+    existing = await Invoice.findOne({ paymentId });
+  } else if (existingInvoiceNumber) {
+    const norm = normalizeInvoiceNumber(existingInvoiceNumber);
+    if (norm) {
+      existing = await Invoice.findOne({ registrationId, invoiceNumber: norm });
+    }
+  }
 
   // ── 2. Determine invoice number ───────────────────────────────────────────
   let invoiceNumber = existing?.invoiceNumber || null;

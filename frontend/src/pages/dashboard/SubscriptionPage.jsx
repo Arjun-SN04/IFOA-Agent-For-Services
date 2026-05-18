@@ -59,38 +59,22 @@ async function fetchPaymentRecord(registrationId, token, preferredInvoiceNumber,
 }
 
 function PlanBadge({ plan }) {
-  // Normalize: match by substring so minor backend variations still resolve
   const p = (plan || '').toLowerCase()
-  const cls = p.includes('unlimited')
-    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-    : p.includes('multiple') || p.includes('multi')
-    ? 'bg-slate-100 border-slate-300 text-slate-700'
-    : p.includes('1 year') || p.includes('one year') || p.length > 0
-    ? 'bg-blue-50 border-blue-200 text-blue-700'
-    : 'bg-slate-50 border-slate-200 text-slate-600'
-  return <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${cls}`}>{plan || 'Unknown Plan'}</span>
+  const color = p.includes('unlimited') ? '#6ee7b7' : '#f1f5f9'
+  return <span className='text-sm font-bold' style={{ color }}>{plan || 'Unknown Plan'}</span>
 }
 
 function PayBadge({ status }) {
-  // Normalize to lowercase so 'Paid', 'PAID', 'paid' all map correctly
   const s = (status || '').toLowerCase()
-  const cls = (s === 'paid' || s === 'active')
-    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-    : (s === 'failed' || s === 'inactive')
-    ? 'bg-red-50 border-red-200 text-red-700'
-    : 'bg-blue-50 border-blue-200 text-blue-700' // pending / unknown = blue
+  const color = (s === 'paid' || s === 'active') ? '#047857' : (s === 'failed' || s === 'inactive') ? '#dc2626' : '#b45309'
   const label = (s === 'paid' || s === 'active') ? 'Paid' : (s === 'failed' || s === 'inactive') ? status : 'Pending'
-  return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${cls}`}>
-      {label}
-    </span>
-  )
+  return <span className='text-sm font-semibold' style={{ color }}>{label}</span>
 }
 
 function Row({ label, value }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-1 py-3 border-b border-slate-100 last:border-0">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-52 flex-shrink-0 pt-0.5">{label}</span>
+    <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 py-3 border-b border-slate-100 last:border-0">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-52 flex-shrink-0">{label}</span>
       <span className="text-sm font-medium text-slate-800 break-words min-w-0">{value ?? '—'}</span>
     </div>
   )
@@ -1651,11 +1635,7 @@ export default function SubscriptionPage() {
   return (
     <DashboardLayout>
       <div className="max-w-3xl mx-auto px-0 sm:px-0">
-        <div className="mb-6 sm:mb-8 text-center">
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">My Account</p>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Subscription</h1>
-          <p className="text-slate-500 text-sm mt-1">Your current plan and subscription details.</p>
-        </div>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">Subscription</h1>
 
         {loading ? (
           <div className="flex items-center gap-3 py-16 justify-center">
@@ -1974,10 +1954,10 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
     : active
     ? 'bg-gradient-to-r from-slate-900 to-slate-700'
     : inactive
-    ? 'bg-gradient-to-r from-slate-700 to-slate-600'
+    ? 'bg-gradient-to-r from-slate-600 to-slate-700'
     : s.status === 'Active'
     ? 'bg-gradient-to-r from-slate-800 to-slate-600'
-    : 'bg-gradient-to-r from-blue-700 to-blue-600'
+    : 'bg-gradient-to-br from-slate-500 to-slate-600'
 
   return (
     <div className="space-y-5">
@@ -2037,22 +2017,24 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
       )}
 
       {pending && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5 flex flex-col gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5 flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-bold text-blue-900">Payment pending</p>
-                <p className="text-xs text-blue-700 leading-relaxed">Complete your payment to activate this subscription.</p>
+                <p className="text-sm font-bold text-slate-800">Payment pending</p>
+                <p className="text-xs text-slate-500 leading-relaxed">Complete your payment to activate this subscription.</p>
               </div>
             </div>
             <button
               onClick={onPay}
-              className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200 w-full sm:w-auto"
+              className="flex-shrink-0 inline-flex items-center justify-center gap-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-all w-full sm:w-auto" style={{ background: '#0000ff' }}
+              onMouseEnter={e => e.currentTarget.style.background='#0000e6'}
+              onMouseLeave={e => e.currentTarget.style.background='#0000ff'}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
@@ -2138,7 +2120,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 Invoice
               </button>
             )}
-            <PayBadge status={s.paymentStatus || s.status} />
           </div>
         </div>
         <div className="px-4 sm:px-6 py-2">
@@ -2206,9 +2187,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                           {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
                           {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
                         </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border flex-shrink-0 self-start ${
-                          h.certificateStatus === 'EXISTING' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-300 text-slate-600'
-                        }`}>{h.certificateStatus}</span>
+                        <span className='text-[10px] font-bold uppercase tracking-widest flex-shrink-0 self-start' style={{ color: h.certificateStatus === 'EXISTING' ? '#047857' : '#64748b' }}>{h.certificateStatus}</span>
                       </div>
                     ))}
                   </div>

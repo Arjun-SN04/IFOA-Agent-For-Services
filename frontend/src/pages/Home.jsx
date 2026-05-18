@@ -127,16 +127,16 @@ function PlanCard({ plan, index }) {
       className="relative flex flex-col rounded-2xl overflow-hidden hover:-translate-y-1 transition-all duration-300"
       style={{
         background: C.white,
-        border: plan.bestValue ? `2px solid ${C.blue}` : `1px solid ${C.gray200}`,
-        boxShadow: plan.bestValue ? '0 8px 40px rgba(0,0,255,0.12)' : '0 1px 6px rgba(15,23,42,0.06)',
+        border: plan.bestValue ? `2px solid ${C.dark}` : `1px solid ${C.gray200}`,
+        boxShadow: plan.bestValue ? '0 8px 40px rgba(15,23,42,0.12)' : '0 1px 6px rgba(15,23,42,0.06)',
       }}
     >
       {plan.bestValue && (
-        <div className="absolute top-3 right-3 z-10 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: C.blue }}>
+        <div className="absolute top-3 right-3 z-10 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: C.dark }}>
           Best Value
         </div>
       )}
-      <div className="relative h-52 overflow-hidden flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.blueMuted} 0%, ${C.gray50} 100%)` }}>
+      <div className="relative h-52 overflow-hidden flex items-center justify-center" style={{ background: C.gray50 }}>
         {/* SVG airplane placeholder always rendered behind the photo */}
         <svg viewBox="0 0 200 120" className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
           <path d="M20 60 L100 20 L180 60 L140 60 L130 90 L100 80 L70 90 L60 60 Z" fill="#0000ff" />
@@ -153,17 +153,17 @@ function PlanCard({ plan, index }) {
       <div className="flex flex-col flex-1 p-6">
         <h3 className="text-xl font-black mb-1" style={{ color: C.dark }}>{plan.name}</h3>
         <p className="text-2xl font-black mb-1" style={{ color: C.dark }}>{plan.price}</p>
-        <p className="text-sm font-semibold mb-4" style={{ color: C.blue }}>{plan.subtitle}</p>
+        <p className="text-sm font-semibold mb-4" style={{ color: C.gray600 }}>{plan.subtitle}</p>
         {plan.bestValue && (
-          <p className="text-xs rounded-lg px-3 py-2 mb-4 font-semibold" style={{ color: C.blue, background: C.blueMuted, border: `1px solid ${C.blueXLight}` }}>
+          <p className="text-xs rounded-lg px-3 py-2 mb-4 font-semibold" style={{ color: C.gray700, background: C.gray100, border: `1px solid ${C.gray200}` }}>
             Pay once, covered for life — no renewals!
           </p>
         )}
         <ul className="space-y-2 mb-6 flex-1">
           {plan.features.map(f => (
             <li key={f} className="text-sm flex items-center gap-2" style={{ color: C.gray600 }}>
-              <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: C.blueMuted }}>
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ color: C.blue }}>
+              <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: C.gray100 }}>
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ color: C.gray700 }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </span>
@@ -172,9 +172,9 @@ function PlanCard({ plan, index }) {
           ))}
         </ul>
         <Link to={plan.to} className="block text-center py-3 px-6 font-bold rounded-xl text-sm transition-all duration-200 text-white"
-          style={{ background: plan.bestValue ? C.blue : C.dark }}
-          onMouseEnter={e => { e.currentTarget.style.background = plan.bestValue ? C.blueDark : C.darkSoft }}
-          onMouseLeave={e => { e.currentTarget.style.background = plan.bestValue ? C.blue : C.dark }}>
+          style={{ background: C.dark }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.darkSoft }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.dark }}>
           {plan.cta}
         </Link>
       </div>
@@ -288,7 +288,7 @@ export default function Home() {
             className="mx-auto"
           >
             <div className="inline-flex items-center rounded-full px-4 py-1.5 mb-7 text-xs font-bold uppercase tracking-widest"
-              style={{ background: C.blueMuted, border: `1px solid ${C.blueXLight}`, color: C.blue }}>
+              style={{ background: C.white, border: `1px solid ${C.gray200}`, color: C.gray600 }}>
               FAA U.S. Agent for Service
             </div>
 

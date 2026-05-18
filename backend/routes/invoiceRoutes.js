@@ -14,6 +14,7 @@ const express  = require('express');
 const router   = express.Router();
 const Invoice  = require('../models/Invoice');
 const Payment  = require('../models/Payment');
+const Renewal  = require('../models/Renewal');
 const auth     = require('../middleware/auth');
 const {
   generateInvoiceNumber,
@@ -70,16 +71,12 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
 
     // Non-admin ownership check
     if (req.user.role !== 'admin') {
-      // Primary check: JWT-embedded IDs (fast path)
       const jwtIds = [
         ...(req.user.subscriptionIds || []).map(String),
         req.user.registrationId ? String(req.user.registrationId) : null,
       ].filter(Boolean);
 
       if (!jwtIds.includes(String(regId))) {
-        // Fallback: verify ownership via DB — covers cases where the JWT was
-        // issued before a holder-upgrade or link-registration call updated the
-        // user record. Check both Airlines and Individual collections by email.
         let ownsReg = false;
         if (req.user.email) {
           const Airlines    = require('../models/Airlines');
@@ -91,16 +88,72 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
           ownsReg = !!(airlineDoc || individualDoc);
         }
         if (!ownsReg) {
-          return res.json({ success: true, data: [] }); // not theirs — silent empty
+          return res.json({ success: true, data: [] });
         }
       }
     }
 
-    // Sort by updatedAt desc so the most recently edited invoice comes first.
-    // This is critical for airlines that have had admin edits after a holder
-    // upgrade: the latest invoice doc reflects the current holder count and amount.
-    const invoices = await Invoice.find({ registrationId: regId }).sort({ updatedAt: -1 });
-    res.json({ success: true, data: invoices });
+    // Fetch Invoice docs + Renewal docs + Payment docs (legacy invoiceDraft) in parallel.
+    const [invoices, renewals, payments] = await Promise.all([
+      Invoice.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
+      Renewal.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
+      Payment.find({ registrationId: regId, isPaid: true })
+        .select('_id invoiceNumber invoiceDraft amountDollars paidAt paymentMethodType createdAt updatedAt purpose')
+        .sort({ createdAt: -1 }).lean(),
+    ]);
+
+    // Index Invoice docs to detect duplicates across sources.
+    const invoicePaymentIds = new Set(invoices.map(i => String(i.paymentId)).filter(Boolean));
+    const invoiceNumbers    = new Set(invoices.map(i => i.invoiceNumber).filter(Boolean));
+
+    // Renewal docs that have no matching Invoice doc (wire/manual renewals).
+    const renewalItems = renewals
+      .filter(r => {
+        if (r.paymentId && invoicePaymentIds.has(String(r.paymentId))) return false;
+        if (r.invoiceNumber && invoiceNumbers.has(r.invoiceNumber)) return false;
+        return true;
+      })
+      .map(r => ({
+        _id:               r._id,
+        _source:           'renewal',
+        invoiceNumber:     r.invoiceNumber || '',
+        status:            r.status,
+        totalAmount:       r.price || 0,
+        createdAt:         r.createdAt,
+        paidAt:            r.paidAt,
+        registrationId:    r.registrationId,
+        registrationModel: r.registrationModel,
+        plan:              r.plan,
+        activationDate:    r.activationDate,
+        expiresAt:         r.expiresAt,
+        draft:             null,
+      }));
+
+    // Payment docs with no canonical Invoice doc — covers legacy payments made
+    // before the Invoice collection was implemented, and any gaps in createOrUpdateInvoice calls.
+    const paymentItems = payments
+      .filter(p => {
+        // Skip if already represented by an Invoice doc (by paymentId or invoiceNumber)
+        if (invoicePaymentIds.has(String(p._id))) return false;
+        if (p.invoiceNumber && invoiceNumbers.has(p.invoiceNumber)) return false;
+        return true;
+      })
+      .map(p => ({
+        _id:           p._id,
+        _source:       'payment',
+        invoiceNumber: p.invoiceNumber || p.invoiceDraft?.invoiceNumber || '',
+        totalAmount:   p.amountDollars || 0,
+        createdAt:     p.createdAt,
+        paidAt:        p.paidAt,
+        paymentMethod: p.paymentMethodType || '',
+        purpose:       p.purpose || '',
+        draft:         p.invoiceDraft || null,
+      }));
+
+    const all = [...invoices, ...renewalItems, ...paymentItems]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, data: all });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -245,7 +245,7 @@ export default function HeaderNav() {
               <span className={`hidden sm:inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider border ${
                 user.role === 'admin'
                   ? 'bg-slate-900 text-white border-slate-800'
-                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-white text-slate-600 border-slate-200'
               }`}>
                 {user.role}
               </span>
@@ -425,7 +425,7 @@ export default function HeaderNav() {
                     <span className={`inline-flex items-center mt-2.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border ${
                       user?.role === 'admin'
                         ? 'bg-slate-900 text-white border-slate-800'
-                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-white text-slate-600 border-slate-200'
                     }`}>
                       {user?.role ?? 'user'}
                     </span>

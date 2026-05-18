@@ -15,6 +15,7 @@ function StatCard({ label, value, icon, accent = 'slate', sub }) {
     slate:   { wrap: 'bg-white border-slate-200',           icon: 'bg-slate-100 text-slate-600',   badge: 'text-slate-800' },
     emerald: { wrap: 'bg-white border-emerald-100',         icon: 'bg-emerald-50 text-emerald-600', badge: 'text-emerald-700' },
     blue:    { wrap: 'bg-white border-blue-100',            icon: 'bg-blue-50 text-blue-600',       badge: 'text-blue-700' },
+    amber:   { wrap: 'bg-white border-amber-100',           icon: 'bg-amber-50 text-amber-600',     badge: 'text-amber-700' },
     sky:     { wrap: 'bg-white border-sky-100',             icon: 'bg-sky-50 text-sky-600',         badge: 'text-sky-700' },
   }
   const c = configs[accent] || configs.slate
@@ -96,12 +97,12 @@ export default function UserDashboard() {
 
   const getSubStatus = () => {
     if (subLoading) return { label: 'Loading…', accent: 'sky', sub: 'Checking subscription' }
-    if (!sub) return { label: 'No Plan', accent: 'blue', sub: 'Register to activate' }
+    if (!sub) return { label: 'No Plan', accent: 'slate', sub: 'Register to activate' }
     const paid   = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
     const failed = sub.paymentStatus === 'failed' || sub.status === 'Inactive'
     if (paid)   return { label: 'Active',   accent: 'emerald', sub: sub.subscriptionPlan }
     if (failed) return { label: 'Inactive', accent: 'slate',   sub: sub.subscriptionPlan }
-    return { label: 'Pending', accent: 'blue', sub: sub.subscriptionPlan }
+    return { label: 'Pending', accent: 'amber', sub: sub.subscriptionPlan }
   }
   const subStatus = getSubStatus()
 
@@ -160,7 +161,7 @@ export default function UserDashboard() {
                 : sub.subscriptionPlan?.includes('Multiple') ? `Multi-Year`
                 : '1 Year'
               : 'None'}
-            accent={sub ? 'sky' : 'blue'}
+            accent={sub ? 'sky' : 'slate'}
             sub={sub ? `$${isAirline ? getAirlineTotal(sub).toFixed(2) : (sub.price ?? sub.totalAmount ?? 0)}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
@@ -216,15 +217,15 @@ export default function UserDashboard() {
 
         {/* ── No subscription notice ── */}
         {!subLoading && !sub && (
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-5 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-bold text-blue-900 mb-1">Complete your FAA registration</p>
-              <p className="text-xs text-blue-700 leading-relaxed">
+              <p className="text-sm font-bold text-slate-800 mb-1">Complete your FAA registration</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 Submit your FAA certificate details to activate your U.S. Agent for Service.
               </p>
             </div>
@@ -235,15 +236,15 @@ export default function UserDashboard() {
         {!subLoading && sub && (
           <div className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4 ${
             sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-              ? 'border-emerald-100 bg-emerald-50' : 'border-blue-100 bg-blue-50'
+              ? 'border-emerald-100 bg-emerald-50' : 'border-slate-200 bg-slate-50'
           }`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
               sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                ? 'bg-emerald-100' : 'bg-blue-100'
+                ? 'bg-emerald-100' : 'bg-slate-100'
             }`}>
               <svg className={`w-5 h-5 ${
                 sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-600' : 'text-blue-600'
+                  ? 'text-emerald-600' : 'text-slate-400'
               }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -253,7 +254,7 @@ export default function UserDashboard() {
             <div className="flex-1">
               <p className={`text-sm font-bold mb-1 ${
                 sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-900' : 'text-blue-900'
+                  ? 'text-emerald-900' : 'text-slate-800'
               }`}>
                 {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'Your subscription is active'
@@ -261,7 +262,7 @@ export default function UserDashboard() {
               </p>
               <p className={`text-xs leading-relaxed ${
                 sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-700' : 'text-blue-700'
+                  ? 'text-emerald-700' : 'text-slate-500'
               }`}>
                 Plan: <strong>{sub.subscriptionPlan}</strong>.
                 {sub.isPaid !== true && sub.paymentStatus !== 'paid' && sub.status !== 'Active'
@@ -274,7 +275,7 @@ export default function UserDashboard() {
               className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
                 sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
                   ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-blue-200 text-blue-700 hover:bg-blue-100'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-100'
               }`}
             >
               View Details →

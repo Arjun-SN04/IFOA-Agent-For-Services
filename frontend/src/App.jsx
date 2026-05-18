@@ -86,7 +86,7 @@ function RequireAuth({ roles }) {
 // Only the <main> content swaps — no header remount, no layout flicker.
 function DashboardShell() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <HeaderNav />
       <main className="mx-auto w-full max-w-7xl px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:mb-14 lg:px-10">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
@@ -102,7 +102,7 @@ function AdminShell() {
   return (
     <div className="min-h-screen bg-slate-50">
       <HeaderNav />
-      <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-hidden">
+      <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-clip">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
           <Outlet />
         </Suspense>

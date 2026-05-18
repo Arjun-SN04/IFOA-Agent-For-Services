@@ -576,7 +576,7 @@ export default function IndividualForm() {
       {/* ═══════════════════════════════════════════════════════════
           REGISTRATION FORM
       ═══════════════════════════════════════════════════════════ */}
-      <section ref={formRef} id="registration-form" style={{ background: C.gray50, borderTop: `1px solid ${C.gray100}` }}>
+      <section ref={formRef} id="registration-form" style={{ background: C.white, borderTop: `1px solid ${C.gray100}` }}>
         <div className="max-w-3xl mx-auto px-6 py-16">
           <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center mb-10">
             <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.blue }}>Secure Registration</p>
@@ -651,7 +651,7 @@ export default function IndividualForm() {
                 <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.22 }}>
                   {step === 1 && <Step1PersonalInfo data={formData} update={update} onNext={handleNextToStep2} />}
                   {step === 2 && <Step2Certificates data={formData} update={update} onNext={handleNextToStep3} onBack={() => goToStep(1)} />}
-                  {step === 3 && <Step3Preview data={formData} onNext={handleNextToStep4} onBack={() => goToStep(2)} />}
+                  {step === 3 && <Step3Preview data={formData} onNext={handleNextToStep4} onBack={() => goToStep(2)} onEdit={() => goToStep(1)} />}
                   {step === 4 && (
                     <Step4Payment
                       data={formData}

@@ -605,7 +605,7 @@ export default function AirlinesForm() {
             className="relative rounded-3xl border border-gray-200 bg-white shadow-[0_24px_80px_-30px_rgba(15,23,42,0.15)] overflow-hidden">
             {isBlocked && <WrongRoleBanner />}
 
-            <div className="bg-gradient-to-b from-white to-gray-50/80 border-b border-gray-100 px-7 py-7">
+            <div className="bg-white border-b border-gray-100 px-7 py-7">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.22em] text-red-600 mb-1.5">Airlines Registration</p>
@@ -642,7 +642,7 @@ export default function AirlinesForm() {
                 <motion.div key={step} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.22 }}>
                   {step === 1 && <AirlinesStep1PlanAndDetails data={formData} update={update} onNext={handleNextToStep2} />}
                   {step === 2 && <AirlinesStep2Holders data={formData} update={update} onNext={handleNextToStep3} onBack={() => goToStep(1)} />}
-                  {step === 3 && <AirlinesStep3Preview data={formData} update={update} onNext={handleNextToStep4} onBack={() => goToStep(2)} />}
+                  {step === 3 && <AirlinesStep3Preview data={formData} update={update} onNext={handleNextToStep4} onBack={() => goToStep(2)} onEdit={() => goToStep(1)} />}
                   {step === 4 && <AirlinesStep4Payment data={formData} update={update} onBack={() => goToStep(3)} onSubmit={handleSubmit} onMarkPaidAndFinish={handleMarkPaidAndFinish} submitting={submitting} error={error} isBlocked={isBlocked} />}
                 </motion.div>
               </AnimatePresence>

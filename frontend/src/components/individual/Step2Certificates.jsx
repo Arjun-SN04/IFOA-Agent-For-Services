@@ -69,7 +69,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
   return (
     <div className="space-y-6">
       <section className={sectionClass}>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">Primary Certificate</p>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Primary Certificate</p>
         <h3 className="mt-2 text-xl font-bold tracking-[-0.03em] text-slate-950">Enter the primary FAA certificate details.</h3>
 
         <div className="mt-5 space-y-5">
@@ -104,8 +104,8 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                     key={value}
                     className={`cursor-pointer rounded-3xl border p-5 transition-all ${
                       selected
-                        ? 'border-blue-600 bg-white'
-                        : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
                     }`}
                   >
                     <input
@@ -168,15 +168,15 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
       </section>
 
       <section className={sectionClass}>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">Additional Certificate</p>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-600">Additional Certificate</p>
         <h3 className="mt-2 text-xl font-bold tracking-[-0.03em] text-slate-950">Add a secondary FAA certificate if you hold one.</h3>
 
-        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-3xl border border-slate-200 bg-white p-4 transition-colors hover:border-blue-200 hover:bg-blue-50/40">
+        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-3xl border border-slate-200 bg-white p-4 transition-colors hover:border-slate-400 hover:bg-slate-50">
           <input
             type="checkbox"
             checked={data.hasSecondaryCertificate}
             onChange={(e) => update({ hasSecondaryCertificate: e.target.checked })}
-            className="mt-1 h-4 w-4 accent-blue-600"
+            className="mt-1 h-4 w-4 accent-slate-700"
           />
           <div>
             <p className="text-sm font-semibold text-slate-900">I hold an additional FAA certificate.</p>
@@ -187,7 +187,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
         </label>
 
         {data.hasSecondaryCertificate && (
-          <div className="mt-5 space-y-4 rounded-3xl border border-blue-100 bg-white p-5">
+          <div className="mt-5 space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
             <Field label="Secondary Certificate Type" required error={errors.secondaryCertificate}>
               <select
                 id="field-secondaryCertificate"
@@ -229,7 +229,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
         )}
       </section>
 
-      <div className="rounded-[26px] border border-blue-100 bg-blue-50/80 p-5 text-sm leading-6 text-blue-900">
+      <div className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-5 text-sm leading-6 text-slate-700">
         If you already have an FAA certificate number, you can usually confirm it on your existing certificate documents or FAA records before proceeding.
       </div>
 

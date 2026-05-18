@@ -281,9 +281,9 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
 
   // ── Payment form ─────────────────────────────────────────────────────────────
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {/* Card preview */}
-      <div className="rounded-3xl p-5 shadow-xl relative overflow-hidden"
+      <div className="rounded-3xl p-4 shadow-xl relative overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 55%, #1e3a5f 100%)' }}>
         {/* Decorative circles */}
         <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/5" />
@@ -539,33 +539,29 @@ export default function PaymentModal({ registrationId, registrationModel, amount
 
   return createPortal(
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="w-full max-w-md max-h-[92vh] rounded-3xl bg-white flex flex-col overflow-hidden"
+      <div className="w-full max-w-md max-h-[96vh] rounded-3xl bg-white flex flex-col overflow-hidden"
         style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)' }}>
 
         {/* Header */}
-        <div className="flex-shrink-0 px-6 py-5 flex items-center justify-between"
-          style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 60%, #1e3a5f 100%)' }}>
-          <div className="flex items-center gap-3.5">
-            <div className="w-9 h-9 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
-              <svg className="w-4.5 h-4.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <rect x="2" y="5" width="20" height="14" rx="3" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" />
-              </svg>
-            </div>
+        <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <svg className="w-5 h-5 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
             <div>
-              <p className="text-blue-300 text-[10px] font-black uppercase tracking-widest leading-none mb-1">Secure Checkout</p>
-              <p className="text-white font-black text-[15px] leading-tight">Complete Your Subscription</p>
+              <div className="flex items-center gap-1.5 mb-0.5"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Checkout</p></div>
+              <p className="text-slate-900 font-black text-[14px] leading-tight">Complete Your Subscription</p>
             </div>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 text-white transition-all">
+            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-3">
           {loading && (
             <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
               <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">

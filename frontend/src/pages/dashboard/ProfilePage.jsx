@@ -12,8 +12,8 @@ const API = axios.create({ baseURL: BASE_URL })
 
 function InfoRow({ label, value }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-1 py-3 border-b border-slate-100 last:border-0">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-48 flex-shrink-0 pt-0.5">{label}</span>
+    <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 py-3 border-b border-slate-100 last:border-0">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-48 flex-shrink-0">{label}</span>
       <span className="text-sm font-medium text-slate-800 break-words min-w-0">{value || '—'}</span>
     </div>
   )
@@ -21,12 +21,12 @@ function InfoRow({ label, value }) {
 
 function PlanBadge({ plan }) {
   const colors = {
-    '1 Year Subscription Plan': 'bg-red-50 border-red-200 text-red-700',
-    'Multiple Years Subscription Plan': 'bg-slate-100 border-slate-300 text-slate-700',
-    'Unlimited Plan': 'bg-emerald-50 border-emerald-200 text-emerald-700',
+    '1 Year Subscription Plan': '#0f172a',
+    'Multiple Years Subscription Plan': '#0f172a',
+    'Unlimited Plan': '#047857',
   }
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${colors[plan] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+    <span className='text-sm font-bold' style={{ color: colors[plan] || '#0f172a' }}>
       {plan}
     </span>
   )
@@ -34,16 +34,17 @@ function PlanBadge({ plan }) {
 
 function StatusBadge({ status }) {
   const map = {
-    paid:     'bg-emerald-50 border-emerald-200 text-emerald-700',
-    Active:   'bg-emerald-50 border-emerald-200 text-emerald-700',
-    pending:  'bg-blue-50 border-blue-200 text-blue-700',
-    Pending:  'bg-blue-50 border-blue-200 text-blue-700',
-    failed:   'bg-red-50 border-red-200 text-red-700',
-    Inactive: 'bg-slate-100 border-slate-200 text-slate-600',
+    paid:     '#047857',
+    Active:   '#047857',
+    pending:  '#b45309',
+    Pending:  '#b45309',
+    failed:   '#dc2626',
+    Inactive: '#64748b',
   }
+  const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : '—'
   return (
-    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${map[status] || 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-      {status}
+    <span className='text-sm font-semibold' style={{ color: map[status] || '#64748b' }}>
+      {label}
     </span>
   )
 }
@@ -244,34 +245,23 @@ export default function ProfilePage() {
       )}
 
       <div className="max-w-3xl mx-auto">
-        {/* Page header */}
-        <div className="mb-6 sm:mb-8 text-center">
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Account</p>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900">My Profile</h1>
-          <p className="text-slate-500 text-sm mt-1">Your account information and active subscription plan.</p>
-        </div>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">My Profile</h1>
 
         {/* ── Avatar card ── */}
-        <div
-          className="rounded-2xl border border-blue-100 p-4 sm:p-6 mb-6 relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)' }}
-        >
-          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-20 pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #3333ff, transparent 70%)' }} />
-
-          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 mb-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             {/* Avatar + info row */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl text-white text-xl sm:text-2xl font-black flex items-center justify-center flex-shrink-0 shadow-md"
-                style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)', boxShadow: '0 4px 16px rgba(0,0,255,0.30)' }}
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl text-white text-xl sm:text-2xl font-black flex items-center justify-center flex-shrink-0"
+                style={{ background: '#0000ff' }}
               >
                 {initials}
               </div>
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">{fullName}</h2>
                 <p className="text-slate-500 text-sm truncate">{user?.email}</p>
-                <span className="inline-flex items-center mt-1.5 rounded-full bg-white/70 border border-blue-200 px-3 py-1 text-[10px] font-bold tracking-widest text-blue-700 capitalize">
+                <span className="inline-flex items-center mt-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-[10px] font-bold tracking-widest text-slate-600 capitalize">
                   {user?.role}
                 </span>
               </div>
@@ -280,7 +270,7 @@ export default function ProfilePage() {
             {/* Edit button */}
             <button
               onClick={() => setEditOpen(true)}
-              className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-white transition-all shadow-sm"
+              className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
@@ -448,9 +438,7 @@ export default function ProfilePage() {
                                       {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
                                       {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
                                     </div>
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-1 border self-start flex-shrink-0 ${
-                                      h.certificateStatus === 'EXISTING' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-100 border-slate-300 text-slate-600'
-                                    }`}>{h.certificateStatus}</span>
+                                    <span className='text-[10px] font-bold uppercase tracking-widest flex-shrink-0' style={{ color: h.certificateStatus === 'EXISTING' ? '#047857' : '#64748b' }}>{h.certificateStatus}</span>
                                   </div>
                                 </div>
                               ))}

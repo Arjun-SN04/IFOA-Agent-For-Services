@@ -91,6 +91,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
   const validate = () => {
     const nextErrors = {}
 
+    if (!data.subscriptionPlan) nextErrors.subscriptionPlan = 'Select a subscription plan.'
     if (!data.firstName.trim()) nextErrors.firstName = 'First name is required.'
     if (!data.lastName.trim()) nextErrors.lastName = 'Last name is required.'
     if (!data.dateOfBirth) nextErrors.dateOfBirth = 'Date of birth is required.'
@@ -127,11 +128,12 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600 mb-1">Service Plan</p>
             <h3 className="text-lg font-bold text-slate-900">Select your registration term</h3>
           </div>
-          <span className="rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-bold text-blue-600">USD</span>
+          <span className="rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600">USD</span>
         </div>
 
         <Field label="Subscription Plan" required error={errors.subscriptionPlan}>
           <select
+            id="field-subscriptionPlan"
             value={data.subscriptionPlan || ''}
             onChange={(e) => {
               const val = e.target.value
@@ -360,7 +362,10 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
           onClick={() => {
             if (validate()) onNext()
           }}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 px-7 py-3 text-sm font-bold text-white transition-all duration-150 shadow-sm hover:shadow-md hover:shadow-blue-200"
+          className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-sm font-bold text-white transition-all duration-150 shadow-sm active:scale-95"
+          style={{ background: '#0000ff' }}
+          onMouseEnter={e => e.currentTarget.style.background='#0000e6'}
+          onMouseLeave={e => e.currentTarget.style.background='#0000ff'}
         >
           Continue to certificates
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">

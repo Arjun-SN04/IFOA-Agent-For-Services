@@ -682,14 +682,16 @@ export default function RegisterPage() {
 
   const scrollToTop = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' })
       return
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: 'instant' })
   }
 
-  const goIndStep = (n) => { setTransitionMode('step'); setIndStep(n); scrollToTop() }
-  const goAirStep = (n) => { setTransitionMode('step'); setAirStep(n); scrollToTop() }
+  useEffect(() => { scrollToTop() }, [indStep, airStep])
+
+  const goIndStep = (n) => { setTransitionMode('step'); setIndStep(n) }
+  const goAirStep = (n) => { setTransitionMode('step'); setAirStep(n) }
   const requireAuth = () => { if (!user) { setShowAuthModal(true); return false }; return true }
   const updateInd = (fields) => setIndData(prev => ({ ...prev, ...fields }))
   const updateAir = (fields) => setAirData(prev => ({ ...prev, ...fields }))
@@ -887,7 +889,7 @@ export default function RegisterPage() {
           height: '100dvh',
           maxHeight: '100dvh',
           overflow: 'hidden',
-          background: '#f8fafc',
+          background: '#ffffff',
         }}
       >
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
@@ -1088,7 +1090,7 @@ export default function RegisterPage() {
                           <>
                             {indStep === 1 && <Step1PersonalInfo data={indData} update={updateInd} onNext={handleNextToStep2} />}
                             {indStep === 2 && <Step2Certificates data={indData} update={updateInd} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                            {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                            {indStep === 3 && <Step3Preview data={indData} onNext={handleNextToStep4} onBack={() => handleBack(2)} onEdit={() => handleBack(1)} />}
                             {indStep === 4 && (
                               <Step4Payment data={indData} update={updateInd} onBack={() => handleBack(3)}
                                 onSubmit={handleIndSubmit} onMarkPaidAndFinish={handleIndMarkPaid}
@@ -1100,7 +1102,7 @@ export default function RegisterPage() {
                           <>
                             {airStep === 1 && <AirlinesStep1PlanAndDetails data={airData} update={updateAir} onNext={handleNextToStep2} />}
                             {airStep === 2 && <AirlinesStep2Holders data={airData} update={updateAir} onNext={handleNextToStep3} onBack={() => handleBack(1)} />}
-                            {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} />}
+                            {airStep === 3 && <AirlinesStep3Preview data={airData} update={updateAir} onNext={handleNextToStep4} onBack={() => handleBack(2)} onEdit={() => handleBack(1)} />}
                             {airStep === 4 && (
                               <AirlinesStep4Payment data={airData} update={updateAir} onBack={() => handleBack(3)}
                                 onSubmit={handleAirSubmit} onMarkPaidAndFinish={handleAirMarkPaid}
