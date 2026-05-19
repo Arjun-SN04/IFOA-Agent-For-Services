@@ -25,11 +25,11 @@ import logo from '../assets/IFOA_USA_white.png'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const B   = '#0000ff'
-const BD  = '#0000e6'
-const BL  = '#3333ff'
-const BXL = '#dbeafe'
-const BM  = '#eff6ff'
+const B   = '#2563eb'
+const BD  = '#1d4ed8'
+const BL  = '#3b82f6'
+const BXL = '#e2e8f0'
+const BM  = '#f8fafc'
 const R   = '#dc2626'
 const RD  = '#b91c1c'
 const RL  = '#ef4444'
@@ -349,7 +349,7 @@ function ExistingFormBanner({ regType, data }) {
           <p className="text-sm font-black mb-0.5" style={{ color: BD }}>
             {isIndividual ? 'Individual registration already submitted' : 'Company registration already submitted'}
           </p>
-          <p className="text-xs leading-relaxed" style={{ color: '#1e40af' }}>
+          <p className="text-xs leading-relaxed" style={{ color: '#374151' }}>
             {isPaid
               ? 'Your subscription is active. Manage your plan and details from the Subscription page.'
               : 'Only one subscription is allowed per account. Your form is already on file. Complete your pending payment from the Subscription page.'}
@@ -358,7 +358,7 @@ function ExistingFormBanner({ regType, data }) {
       </div>
 
       {/* CTA row */}
-      <div className="flex items-center gap-3 px-5 py-3.5" style={{ background: '#eff6ff' }}>
+      <div className="flex items-center gap-3 px-5 py-3.5" style={{ background: '#f1f5f9' }}>
         <div className="flex-1">
           <p className="text-[11px] font-semibold" style={{ color: BD }}>
             {isPaid
@@ -369,9 +369,9 @@ function ExistingFormBanner({ regType, data }) {
         <Link
           to="/dashboard/subscription"
           className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl text-white transition-all"
-          style={{ background: B }}
-          onMouseEnter={e => e.currentTarget.style.background = BD}
-          onMouseLeave={e => e.currentTarget.style.background = B}
+          style={{ background: '#0000ff' }}
+          onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
+          onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0-5 5m5-5H6" />
@@ -388,7 +388,7 @@ function SummaryRow({ label, value, mono = false, highlight = false }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-100 last:border-0">
       <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex-shrink-0 pt-0.5 min-w-[120px]">{label}</span>
-      <span className={`text-sm text-right break-all ${mono ? 'font-mono text-slate-700' : 'font-semibold text-slate-800'} ${highlight ? 'text-blue-700' : ''}`}>{value}</span>
+      <span className={`text-sm text-right break-all ${mono ? 'font-mono text-slate-700' : 'font-semibold text-slate-800'} ${highlight ? 'text-slate-900 font-bold' : ''}`}>{value}</span>
     </div>
   )
 }
@@ -921,7 +921,7 @@ export default function RegisterPage() {
             <div className="flex items-center gap-2 sm:gap-3">
               {user ? (
                 <Link to="/dashboard"
-                  className="text-xs sm:text-sm font-semibold text-gray-700 hover:text-blue-600 transition-colors truncate max-w-[120px] sm:max-w-none">
+                  className="text-xs sm:text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors truncate max-w-[120px] sm:max-w-none">
                   👋 {user.firstName || user.email}
                 </Link>
               ) : (
@@ -967,7 +967,7 @@ export default function RegisterPage() {
                 <button
                   onClick={() => { setTransitionMode('type'); setSwitchDirection(1); setRegType('airline'); setAirStep(1); scrollToTop() }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
-                  style={{ borderColor: regType === 'airline' ? B : '#e5e7eb', background: regType === 'airline' ? BM : '#fff' }}>
+                  style={{ borderColor: regType === 'airline' ? B : '#e5e7eb', background: regType === 'airline' ? '#f0f4ff' : '#fff' }}>
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <div className="flex items-center gap-2">
@@ -989,7 +989,7 @@ export default function RegisterPage() {
                 <button
                   onClick={() => { setTransitionMode('type'); setSwitchDirection(-1); setRegType('individual'); setIndStep(1); scrollToTop() }}
                   className="flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all duration-200 text-left"
-                  style={{ borderColor: regType === 'individual' ? B : '#e5e7eb', background: regType === 'individual' ? BM : '#fff' }}>
+                  style={{ borderColor: regType === 'individual' ? B : '#e5e7eb', background: regType === 'individual' ? '#f0f4ff' : '#fff' }}>
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <div className="flex items-center gap-2">
