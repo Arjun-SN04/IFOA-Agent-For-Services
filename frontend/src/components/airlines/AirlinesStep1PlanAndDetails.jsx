@@ -110,7 +110,7 @@ function CountrySelect({ value, onChange, error }) {
         type="button"
         onClick={() => { setOpen(v => !v); setSearch('') }}
         className={`w-full text-left px-3.5 py-2.5 border rounded-xl text-sm bg-white outline-none transition-all duration-150 flex items-center justify-between ${
-          error ? 'border-red-300' : open ? 'border-blue-600 ring-2 ring-blue-600/15' : 'border-gray-200 hover:border-gray-300'
+          error ? 'border-red-300' : open ? 'border-slate-400 ring-2 ring-slate-200' : 'border-gray-200 hover:border-gray-300'
         } ${value ? 'text-gray-900' : 'text-gray-400'}`}
       >
         <span>{value || '--- Select country ---'}</span>
@@ -119,16 +119,16 @@ function CountrySelect({ value, onChange, error }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-blue-600 rounded-xl shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-gray-100 bg-gray-50">
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100 bg-white">
             <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-600 bg-white text-gray-800 placeholder:text-gray-400" />
+              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-gray-800 placeholder:text-gray-400" />
           </div>
           <div className="max-h-52 overflow-y-auto">
             {filtered.length === 0 && <div className="px-4 py-3 text-sm text-gray-400">No results</div>}
             {filtered.map(c => (
               <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
-                className={`px-4 py-2 text-sm cursor-pointer transition-colors duration-100 border-l-2 ${c === value ? 'bg-blue-50 text-blue-700 font-semibold border-l-blue-600' : 'text-gray-800 hover:bg-gray-50 border-l-transparent'}`}>
+                className={`px-4 py-2 text-sm cursor-pointer transition-colors duration-100 ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-gray-700 hover:bg-slate-50'}`}>
                 {c}
               </div>
             ))}
@@ -182,11 +182,15 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
         : 'border-gray-200 focus:border-blue-600 hover:border-gray-300'
     }`
 
-  const serviceLabel = data.holderCount && data.subscriptionPlan === '1 Year Subscription Plan'
-    ? `Agent for Service — ${data.holderCount === '3 to 5' ? 'Up to 5' : data.holderCount === '5 to 10' ? 'Up to 10' : 'More than 10'} — 1 Year Subscription`
-    : data.holderCount && data.subscriptionPlan === 'Unlimited Plan'
-    ? `Agent for Service — ${data.holderCount === '3 to 5' ? 'Up to 5' : data.holderCount === '5 to 10' ? 'Up to 10' : 'More than 10'} — Unlimited Plan`
+  const holderLabel = data.holderCount
+    ? `Agent for Service — ${data.holderCount === '3 to 5' ? 'Up to 5' : data.holderCount === '5 to 10' ? 'Up to 10' : 'More than 10'}`
     : null
+  const planLabel = data.subscriptionPlan === '1 Year Subscription Plan'
+    ? '1 Year Subscription'
+    : data.subscriptionPlan === 'Unlimited Plan'
+    ? 'Unlimited Plan'
+    : null
+  const serviceLabel = data.holderCount && data.subscriptionPlan ? { left: holderLabel, right: planLabel } : null
 
   const selectedCount = Number(data.holderCountValue || 0)
   const pricePerCertificate = Number(data.pricePerCertificate || 0)
@@ -290,7 +294,10 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
         </div>
         {serviceLabel && (
           <div className="mt-3 px-4 py-3.5 rounded-xl border border-blue-100 bg-blue-50/40">
-            <p className="text-sm font-semibold text-gray-700 mb-1">{serviceLabel}</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold text-gray-700">{serviceLabel.left}</p>
+              <p className="text-sm font-semibold text-gray-700">{serviceLabel.right}</p>
+            </div>
             <p className="text-sm font-bold text-gray-900">
               Price:{' '}
               <span className="text-green-600 text-base">
@@ -422,30 +429,33 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                     background: transparent !important; border-radius: 0.75rem 0 0 0.75rem !important; padding-left: 10px !important;
                   }
                   .airlines-phone .react-tel-input .country-list {
-                    background: #ffffff !important; border: 1.5px solid #1a1aff !important;
-                    border-radius: 0.875rem !important; box-shadow: 0 32px 80px rgba(15,23,42,0.22) !important;
-                    max-height: 420px !important; min-width: 360px !important; width: 360px !important;
+                    background: #ffffff !important; border: 1px solid #e2e8f0 !important;
+                    border-radius: 10px !important; box-shadow: 0 4px 16px rgba(15,23,42,0.10), 0 1px 4px rgba(15,23,42,0.06) !important;
+                    max-height: 340px !important; min-width: 300px !important; width: 300px !important;
                     margin-top: 4px !important; overflow-y: auto !important; z-index: 9999 !important;
                   }
                   .airlines-phone .react-tel-input .country-list .country {
-                    color: #1f2937 !important; padding: 10px 14px !important;
-                    display: flex !important; align-items: center !important; gap: 10px !important; font-size: 13.5px !important;
+                    color: #1e293b !important; padding: 8px 12px !important;
+                    display: flex !important; align-items: center !important; gap: 9px !important; font-size: 13px !important;
                   }
                   .airlines-phone .react-tel-input .country-list .country:hover,
-                  .airlines-phone .react-tel-input .country-list .country.highlight { background: #eff6ff !important; }
-                  .airlines-phone .react-tel-input .country-list .country-name { color: #1f2937 !important; font-size: 13.5px !important; }
-                  .airlines-phone .react-tel-input .country-list .dial-code { color: #64748b !important; font-size: 12.5px !important; }
+                  .airlines-phone .react-tel-input .country-list .country.highlight { background: #f8fafc !important; }
+                  .airlines-phone .react-tel-input .country-list .country-name,
+                  .airlines-phone .react-tel-input .country-list .country:hover .country-name,
+                  .airlines-phone .react-tel-input .country-list .country.highlight .country-name { color: #1e293b !important; font-size: 13px !important; font-weight: 400 !important; }
+                  .airlines-phone .react-tel-input .country-list .dial-code { color: #94a3b8 !important; font-size: 12px !important; }
                   .airlines-phone .react-tel-input .country-list .search {
-                    padding: 10px 10px 6px !important; position: sticky !important; top: 0 !important;
+                    padding: 10px 10px 8px !important; position: sticky !important; top: 0 !important;
                     background: #fff !important; border-bottom: 1px solid #f1f5f9 !important; z-index: 1 !important;
                   }
                   .airlines-phone .react-tel-input .search-box {
-                    background: #f8fafc !important; border: 1.5px solid #e2e8f0 !important;
-                    color: #1f2937 !important; border-radius: 0.5rem !important;
-                    padding: 8px 12px !important; width: 100% !important; font-size: 13px !important;
+                    background: #f8fafc !important; border: 1px solid #e2e8f0 !important;
+                    color: #1e293b !important; border-radius: 7px !important;
+                    padding: 7px 11px !important; width: 100% !important; font-size: 13px !important;
                     outline: none !important; box-sizing: border-box !important;
                   }
-                  .airlines-phone .react-tel-input .search-box:focus { border-color: #1a1aff !important; background: #ffffff !important; }
+                  .airlines-phone .react-tel-input .search-box:focus,
+                  .airlines-phone .react-tel-input .country-list .form-control:focus { border-color: #94a3b8 !important; background: #ffffff !important; box-shadow: none !important; outline: none !important; }
                   .airlines-phone .react-tel-input .search-emoji { display: none !important; }
                 `}</style>
                 <div className="airlines-phone">

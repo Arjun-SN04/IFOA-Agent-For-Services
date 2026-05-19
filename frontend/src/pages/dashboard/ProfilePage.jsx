@@ -230,7 +230,7 @@ export default function ProfilePage() {
     const dt = new Date(d)
     return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
   }
-  const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
+  const money = (n) => n != null ? `$${Number(n).toFixed(2)}` : '—'
 
   return (
     <DashboardLayout>
@@ -350,11 +350,11 @@ export default function ProfilePage() {
                     {/* Plan banner */}
                     <div className={`rounded-xl p-4 mb-3 border ${
                       active ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100'
-                             : 'bg-gradient-to-r from-blue-50 to-sky-50 border-blue-100'
+                             : 'bg-white border-slate-200 shadow-sm'
                     }`}>
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div>
-                          <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${active ? 'text-emerald-600' : 'text-blue-600'}`}>
+                          <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${active ? 'text-emerald-600' : 'text-amber-500'}`}>
                             {active ? 'Active Plan' : 'Pending Plan'}
                           </p>
                           <PlanBadge plan={s.subscriptionPlan} />

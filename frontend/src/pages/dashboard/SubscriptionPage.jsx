@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
@@ -86,7 +86,7 @@ const fmtYMD = (d) => {
   const dt = new Date(d)
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
-const money = (n) => n != null ? `${Number(n).toFixed(2)}` : '—'
+const money = (n) => n != null ? `$${Number(n).toFixed(2)}` : '—'
 
 const INDIVIDUAL_CERT_TYPES = [
   'Part 65 - Aircraft Dispatcher',
@@ -110,6 +110,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [limitWarning, setLimitWarning] = useState('')
+  const modalRef = useRef(null)
 
   // Pre-payment count state (airline only)
   const [exactCount, setExactCount] = useState(Number(sub.holderCountValue || sub.committedCount || sub.certificateHolders?.length || 1))
@@ -198,8 +199,9 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   const addHolder = () => {
     const current = form.certificateHolders?.length || 0
     if (effectiveMax > 0 && current >= effectiveMax) {
-      setLimitWarning(`You cannot add more than ${effectiveMax} holder${effectiveMax !== 1 ? 's' : ''} for the selected count.`)
+      setLimitWarning(`Holder limit reached — you have used all ${effectiveMax} committed slot${effectiveMax !== 1 ? 's' : ''}. To add more certificate holders, increase your committed count first using "Expand Holder Count".`)
       setError('')
+      modalRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     setError('')
@@ -269,10 +271,12 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             pointOfContact: form.pointOfContact,
             pointOfContactEmail: form.pointOfContactEmail,
             pointOfContactPhone: form.pointOfContactPhone,
-            certificateHolders: (form.certificateHolders || []).map((h) => ({
-              ...h,
-              dateOfBirth: h.dateOfBirth || null,
-            })),
+            certificateHolders: (form.certificateHolders || [])
+              .filter((h) => h.fullName?.trim())
+              .map((h) => ({
+                ...h,
+                dateOfBirth: h.dateOfBirth || null,
+              })),
           }
       const individualBase = {
             firstName: form.firstName,
@@ -341,7 +345,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal card — scrollable internally */}
-      <div className="relative z-10 w-full max-w-4xl my-8 rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto">
+      <div ref={modalRef} className="relative z-10 w-full max-w-4xl my-8 rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto">
 
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between rounded-t-2xl sticky top-0 z-10">
@@ -351,12 +355,25 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
               {isAirline ? 'Airline Registration Data' : 'Individual Registration Data'}
             </h3>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isAirline && (
+              <button
+                onClick={addHolder}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Certificate Holder
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -364,11 +381,27 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           )}
+          {limitWarning && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+              </svg>
+              <div>
+                <p className="text-xs font-bold text-amber-800">Holder limit reached</p>
+                <p className="text-xs text-amber-700 mt-0.5">All {effectiveMax} committed slot{effectiveMax !== 1 ? 's' : ''} are used. To add more certificate holders, close this form and click <span className="font-bold">"Expand Holder Count"</span> to increase your committed count first.</p>
+              </div>
+              <button onClick={() => setLimitWarning('')} className="ml-auto text-amber-400 hover:text-amber-600 flex-shrink-0">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           {/* ── Pre-payment: plan / count selection ── */}
           {!isPaid && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Subscription Plan {isAirline ? '& Holder Count' : ''}</p>
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Subscription Plan {isAirline ? '& Holder Count' : ''}</p>
               {isAirline ? (
                 <div className="space-y-3">
                   {/* Current plan — read-only, changed via registration form */}
@@ -396,9 +429,9 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                     />
                     <p className="text-xs text-slate-500">Price per cert: ${pricePerCert > 0 ? pricePerCert.toFixed(2) : '—'} &nbsp;·&nbsp; {exactCount} holder{exactCount !== 1 ? 's' : ''}</p>
                   </div>
-                  <div className="rounded-lg border border-blue-300 bg-white px-4 py-2.5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-600">New total amount</span>
-                    <span className="text-sm font-black text-blue-700">${computedAirlineTotal.toFixed(2)}</span>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500">New total amount</span>
+                    <span className="text-sm font-black text-indigo-600">${computedAirlineTotal.toFixed(2)}</span>
                   </div>
                 </div>
               ) : (
@@ -416,9 +449,9 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                       Change plan ↗
                     </button>
                   </div>
-                  <div className="rounded-lg border border-blue-300 bg-white px-4 py-2.5 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-600">Plan price</span>
-                    <span className="text-sm font-black text-blue-700">${Number(sub.price || sub.totalServiceFees || 0).toFixed(2)}</span>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500">Plan price</span>
+                    <span className="text-sm font-black text-indigo-600">${Number(sub.price || sub.totalServiceFees || 0).toFixed(2)}</span>
                   </div>
                 </div>
               )}
@@ -493,15 +526,11 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Holders</p>
-                  <button onClick={addHolder} className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline">+ Add Holder</button>
                 </div>
                 {maxHolders > 0 && (
                   <p className="text-[11px] text-slate-500">
                     Committed slots: <span className="font-bold text-slate-700">{maxHolders}</span>&nbsp;·&nbsp;Currently filled: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
                   </p>
-                )}
-                {limitWarning && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{limitWarning}</div>
                 )}
                 <div className="space-y-4">
                   {(form.certificateHolders || []).map((h, i) => (
@@ -554,67 +583,69 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                           </div>
                         </div>
 
-                        {/* Secondary certificate toggle */}
-                        <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-lg border select-none transition-all ${
-                          h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
-                        }`}>
-                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                            h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
+                        {/* Secondary certificate toggle + collapsible fields — wrapped together so space-y-3 doesn't add gap when collapsed */}
+                        <div className="flex flex-col gap-2">
+                          <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-lg border select-none transition-all ${
+                            h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
                           }`}>
-                            {h.hasSecondaryCertificate && (
-                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </div>
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={!!h.hasSecondaryCertificate}
-                            onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
-                          />
-                          <span className="text-xs font-semibold text-slate-700">This holder has a secondary FAA certificate</span>
-                        </label>
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                              h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
+                            }`}>
+                              {h.hasSecondaryCertificate && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={!!h.hasSecondaryCertificate}
+                              onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
+                            />
+                            <span className="text-xs font-semibold text-slate-700">This holder has a secondary FAA certificate</span>
+                          </label>
 
-                        {/* Secondary fields — rendered BELOW toggle, outside any overflow container */}
-                        {h.hasSecondaryCertificate && (
-                          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3 mt-2">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate</p>
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type <span className="text-red-400">*</span></label>
-                              <select
-                                className={inpSm + ' cursor-pointer'}
-                                value={h.secondaryCertificateType || ''}
-                                onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}
-                              >
-                                <option value="">Select secondary type…</option>
-                                {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => (
-                                  <option key={t} value={t}>{t}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Smooth collapse — max-h-0 when hidden so no gap leaks into space-y-3 */}
+                          <div className={`overflow-hidden transition-all duration-200 ease-in-out ${h.hasSecondaryCertificate ? 'max-h-[800px]' : 'max-h-0'}`}>
+                            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate Details</p>
                               <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Cert #</label>
-                                <input
-                                  className={inpSm}
-                                  placeholder="Secondary FAA Cert #"
-                                  value={h.secondaryFaaCertificateNumber || ''}
-                                  onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)}
-                                />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type <span className="text-red-400">*</span></label>
+                                <select
+                                  className={inpSm + ' cursor-pointer'}
+                                  value={h.secondaryCertificateType || ''}
+                                  onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}
+                                >
+                                  <option value="">Select secondary type…</option>
+                                  {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
                               </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
-                                <input
-                                  className={inpSm}
-                                  placeholder="FTN-XXXXXXXX"
-                                  value={h.secondaryIacraFtnNumber || ''}
-                                  onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)}
-                                />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Cert #</label>
+                                  <input
+                                    className={inpSm}
+                                    placeholder="Secondary FAA Cert #"
+                                    value={h.secondaryFaaCertificateNumber || ''}
+                                    onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)}
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
+                                  <input
+                                    className={inpSm}
+                                    placeholder="FTN-XXXXXXXX"
+                                    value={h.secondaryIacraFtnNumber || ''}
+                                    onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)}
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -879,7 +910,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-base font-black text-gray-900">Add Team Members</h2>
+            <h2 className="text-base font-black text-gray-900">Certificate Holders</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {remainingSlots} slot{remainingSlots !== 1 ? 's' : ''} remaining · already covered by your committed plan
             </p>
@@ -890,8 +921,8 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
         </div>
 
         {/* Cost banner */}
-        <div className="mx-4 sm:mx-6 mt-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm flex items-center justify-between">
-          <span className="text-blue-700 font-semibold">
+        <div className="mx-4 sm:mx-6 mt-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm flex items-center justify-between">
+          <span className="text-slate-700 font-semibold">
             {existingCount > 0
               ? `Editing ${existingCount} existing member${existingCount !== 1 ? 's' : ''}${newMembersCount > 0 ? ` + adding ${newMembersCount}` : ''}`
               : `Adding ${holders.length} member${holders.length !== 1 ? 's' : ''}`}
@@ -1013,7 +1044,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
             className={`w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold transition-all ${
               atLimit ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400'
             }`}>
-            + Add Another Member {atLimit ? `(max ${remainingSlots})` : `(${newMembersCount}/${remainingSlots})`}
+            + Add Certificate Holder {atLimit ? `(max ${remainingSlots})` : `(${newMembersCount}/${remainingSlots})`}
           </button>
 
           {apiError && (
@@ -1026,7 +1057,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
           <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm transition-all">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting}
             className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl text-sm transition-all disabled:opacity-50">
-            {submitting ? 'Saving…' : 'Add Members'}
+            {submitting ? 'Saving…' : 'Add Certificate Holder'}
           </button>
         </div>
       </div>
@@ -1140,77 +1171,97 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+
+        {/* Accent bar */}
+        <div className="h-0.5 w-full bg-slate-200" />
+
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between rounded-t-2xl">
+        <div className="px-6 pt-5 pb-4 flex items-start justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Expand Team</p>
-            <h3 className="text-base font-black text-slate-900">Add More Certificate Holders</h3>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Certificate Holders</p>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Expand Holder Count</h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition mt-0.5">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <div className="p-5 space-y-4">
-          {/* Current state */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Current committed slots</span>
-              <span className="font-bold text-slate-900">{currentCount}</span>
+        <div className="px-6 pb-6 space-y-4">
+
+          {/* Current snapshot */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Slots</p>
+              <p className="text-2xl font-black text-slate-900">{currentCount}</p>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Current rate ({airlineHolderRange(currentCount)})</span>
-              <span className="font-bold text-slate-900">${currentPpc}/holder</span>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Rate</p>
+              <p className="text-2xl font-black text-slate-900">${currentPpc}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">per certificate</p>
             </div>
           </div>
 
-          {/* Additional count selector */}
-          <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Additional Holders to Add</label>
-            <div className="flex items-center gap-3">
+          {/* Selector */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 space-y-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Holders to Add</p>
+            <div className="flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setAdditionalCount(c => Math.max(minAdditional, c - 1))}
-                className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+                className="w-10 h-10 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xl flex items-center justify-center transition"
               >−</button>
-              <span className="text-2xl font-black text-slate-900 w-12 text-center">{additionalCount}</span>
+              <div className="text-center">
+                <span className="text-4xl font-black text-slate-900">{additionalCount}</span>
+                <p className="text-[10px] text-slate-400 mt-1">holders</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setAdditionalCount(c => c + 1)}
-                className="w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-lg flex items-center justify-center transition"
+                className="w-10 h-10 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xl flex items-center justify-center transition"
               >+</button>
             </div>
-            <p className="text-xs text-slate-500">
-              New total: <strong>{totalCount} holders</strong>
-              {' '}— rate: <strong>${newPpc}/cert</strong>
-              {' '}({airlineHolderRange(totalCount)})
-              {newPpc !== currentPpc && (
-                <span className="ml-1 text-blue-600">(tier updated)</span>
-              )}
-            </p>
-            <p className="text-[10px] text-blue-600">Minimum additional holders per upgrade: 3</p>
-          </div>
-
-          {/* Cost summary */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between text-sm">
-            <div>
-              <span className="text-slate-500">Amount due:</span>
-              <p className="text-[10px] text-slate-400 mt-0.5">{dueLabel}</p>
+            <div className="border-t border-slate-100 pt-3 space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">New total</span>
+                <span className="font-bold text-slate-800">{totalCount} holders</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">New rate</span>
+                <span className="font-bold text-slate-800">
+                  ${newPpc}/cert
+                  {newPpc !== currentPpc && <span className="ml-1.5 text-[10px] font-black text-emerald-600 uppercase tracking-wider">Tier updated</span>}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 pt-0.5">Minimum {minAdditional} holders per upgrade</p>
             </div>
-            <span className="font-black text-xl text-slate-900">${dueAmount.toFixed(2)}</span>
           </div>
-        </div>
 
-        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex items-center justify-end gap-3">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Cancel
-          </button>
-          <button
-            onClick={() => setShowPayment(true)}
-            className="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-bold text-white transition"
-          >
-            Proceed to Payment
-          </button>
+          {/* Amount due */}
+          <div className="rounded-xl bg-slate-900 px-5 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount Due</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{dueLabel}</p>
+            </div>
+            <span className="text-2xl font-black text-white">${dueAmount.toFixed(2)}</span>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2.5 pt-1">
+            <button onClick={onClose}
+              className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+              Cancel
+            </button>
+            <button
+              onClick={() => setShowPayment(true)}
+              className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 py-3 text-sm font-bold text-white transition"
+            >
+              Proceed to Payment
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1503,7 +1554,8 @@ export default function SubscriptionPage() {
   const [payTarget,     setPayTarget]     = useState(null)
   const [payingId,      setPayingId]      = useState(null)
   const [showAddHolders, setShowAddHolders] = useState(false)
-  const [viewInvoice,   setViewInvoice]   = useState(null)
+  const [viewInvoice,     setViewInvoice]     = useState(null)
+  const [viewAllInvoices, setViewAllInvoices] = useState(null) // array of invoice docs
   const [editTarget, setEditTarget] = useState(null)
   const [renewTarget, setRenewTarget] = useState(null)
   const [upgradeTarget, setUpgradeTarget] = useState(null)
@@ -1519,6 +1571,7 @@ export default function SubscriptionPage() {
       showPayModal ||
       showAddHolders ||
       viewInvoice ||
+      viewAllInvoices ||
       editTarget ||
       renewTarget ||
       upgradeTarget
@@ -1527,7 +1580,7 @@ export default function SubscriptionPage() {
       document.body.style.overflow = ''
       document.documentElement.style.overflow = ''
     }
-  }, [showPayModal, showAddHolders, viewInvoice, editTarget, renewTarget, upgradeTarget])
+  }, [showPayModal, showAddHolders, viewInvoice, viewAllInvoices, editTarget, renewTarget, upgradeTarget])
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -1710,6 +1763,7 @@ export default function SubscriptionPage() {
                 onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
                 onUpgrade={() => setUpgradeTarget(s)}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
+                onViewAllInvoices={(docs, reg) => setViewAllInvoices({ docs, reg })}
                 onEditForm={() => setEditTarget(s)}
                 onRenew={() => setRenewTarget(s)}
               />
@@ -1758,6 +1812,16 @@ export default function SubscriptionPage() {
 
       {viewInvoice && (
         <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
+      )}
+
+      {viewAllInvoices && (
+        <AllInvoicesModal
+          docs={viewAllInvoices.docs}
+          reg={viewAllInvoices.reg}
+          token={token}
+          onClose={() => setViewAllInvoices(null)}
+          onViewSingle={(inv) => { setViewAllInvoices(null); setViewInvoice(inv) }}
+        />
       )}
 
       {showAddHolders && sub && (
@@ -1838,9 +1902,121 @@ export default function SubscriptionPage() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/*  AllInvoicesModal                                                             */
+/* ─────────────────────────────────────────────────────────────────────────── */
+function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
+  const [selectedDoc, setSelectedDoc] = useState(null)
+
+  const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmt   = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+
+  const isHolderUpgrade = (doc) =>
+    doc.purpose === 'holder-upgrade' ||
+    (doc.lineItems || doc.draft?.lineItems || []).some(
+      li => String(li.description || '').toLowerCase().includes('upgrade') ||
+            String(li.description || '').toLowerCase().includes('holder')
+    )
+
+  const purposeLabel = (doc) => {
+    if (doc._source === 'renewal' || doc.plan) return 'Renewal'
+    if (isHolderUpgrade(doc)) return 'Holder Upgrade'
+    return 'Subscription'
+  }
+
+  const purposeColor = (doc) => {
+    if (doc._source === 'renewal' || doc.plan) return 'bg-amber-50 text-amber-700 border-amber-200'
+    if (isHolderUpgrade(doc)) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    return 'bg-slate-100 text-slate-600 border-slate-200'
+  }
+
+  const handleView = (doc) => {
+    const invoice = {
+      invoiceNumber:    doc.invoiceNumber,
+      paidAt:           doc.paidAt || doc.issueDate || doc.createdAt,
+      subscriptionPlan: doc.subscriptionPlan || reg?.subscriptionPlan,
+      expirationDate:   doc.expirationDate || null,
+      amount:           doc.totalAmount,
+      name:             doc.recipientName || doc.recipientCompany || `${reg?.firstName || ''} ${reg?.lastName || ''}`.trim(),
+      email:            doc.recipientEmail || reg?.email || '',
+      address:          doc.recipientAddress1 || reg?.addressLine1 || '',
+      isAirline:        doc.isAirline ?? (reg?.airlineName ? true : false),
+      airlineName:      doc.recipientCompany || reg?.airlineName || '',
+      pricePerCert:     doc.lineItems?.[0]?.unitPrice || null,
+      holderCount:      doc.lineItems?.[0]?.quantity || null,
+      invoiceDraft:     doc.draft || null,
+      _invoiceDocId:    doc._id,
+    }
+    onViewSingle(invoice)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment History</p>
+            <h3 className="text-base font-black text-slate-900">All Invoices</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Invoice list */}
+        <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          {docs.map((doc, i) => (
+            <button
+              key={String(doc._id || i)}
+              onClick={() => handleView(doc)}
+              className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 hover:shadow-sm px-4 py-3 transition-all duration-150 group"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <p className="text-sm font-bold text-slate-800">
+                      {doc.invoiceNumber || '(no number)'}
+                    </p>
+                    <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${purposeColor(doc)}`}>
+                      {purposeLabel(doc)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">{fmt(doc.paidAt || doc.issueDate || doc.createdAt)}</p>
+                  {doc.subscriptionPlan && (
+                    <p className="text-[11px] text-slate-400 mt-0.5">{doc.subscriptionPlan}</p>
+                  )}
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-sm font-black text-slate-900">{money(doc.totalAmount)}</p>
+                  <p className="text-[10px] text-blue-600 font-semibold mt-1 group-hover:underline">View →</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onUpgrade, onViewInvoice, onEditForm, onRenew }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew }) {
+  const navigate  = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid   = s.isPaid === true || s.paymentStatus === 'paid'
   const pending  = !isPaid
@@ -1868,36 +2044,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
       })
       const docs = invRes.data?.data || []
 
-      // Backend now sorts by updatedAt desc — docs[0] is the most recently
-      // updated invoice, which reflects any admin edits after a holder upgrade.
-      // Skip the queued-renewal invoice if present so the current plan invoice
-      // is always shown first.
-      let invDoc = null
       if (docs.length > 0) {
-        // Prefer a non-queued invoice (i.e. the active subscription's invoice)
-        invDoc = queuedInvoice
-          ? (docs.find((d) => String(d?.invoiceNumber || '').trim() !== queuedInvoice) || docs[0])
-          : docs[0]
-      }
-
-      if (invDoc) {
-        const invoiceDraft = invDoc.draft || null
-        onViewInvoice?.({
-          invoiceNumber:    invDoc.invoiceNumber,
-          paidAt:           invDoc.paidAt || invDoc.issueDate,
-          subscriptionPlan: invDoc.subscriptionPlan,
-          expirationDate:   invDoc.expirationDate  || null,
-          amount:           invDoc.totalAmount,
-          name:             invDoc.recipientName   || invDoc.recipientCompany || '',
-          email:            invDoc.recipientEmail  || '',
-          address:          invDoc.recipientAddress1 || '',
-          isAirline:        invDoc.isAirline,
-          airlineName:      invDoc.recipientCompany || '',
-          pricePerCert:     invDoc.lineItems?.[0]?.unitPrice  || null,
-          holderCount:      invDoc.lineItems?.[0]?.quantity   || null,
-          invoiceDraft,
-          _invoiceDocId:    invDoc._id,
-        })
+        // Pass all docs to parent for list view
+        onViewAllInvoices?.(docs, s)
         return
       }
     } catch (_) { /* fall through */ }
@@ -2028,6 +2177,17 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               <div>
                 <p className="text-sm font-bold text-slate-800">Payment pending</p>
                 <p className="text-xs text-slate-500 leading-relaxed">Complete your payment to activate this subscription.</p>
+                <button
+                  onClick={() => navigate('/register', {
+                    state: {
+                      forcePlanChangeStart: true,
+                      forceRegType: isAirline ? 'airline' : 'individual',
+                    },
+                  })}
+                  className="text-xs font-semibold text-blue-600 hover:underline mt-1 inline-block"
+                >
+                  Change plan ↗
+                </button>
               </div>
             </div>
             <button
@@ -2086,12 +2246,12 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
             {isAirline && active && !isExpired && (
               <button
                 onClick={onUpgrade}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition"
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition"
               >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                Add Holders
+                Expand Holder Count
               </button>
             )}
             {showRenew && (
@@ -2117,7 +2277,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Invoice
+                Invoices
               </button>
             )}
           </div>
@@ -2158,15 +2318,15 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
                 if (remaining > 0) return (
                   <div className="py-3 border-b border-slate-100">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <div>
-                        <p className="text-xs font-bold text-blue-800">{remaining} slot{remaining !== 1 ? 's' : ''} not yet filled</p>
-                        <p className="text-xs text-blue-600 mt-0.5">Total payment covers all committed slots.</p>
+                        <p className="text-xs font-bold text-slate-700">{remaining} slot{remaining !== 1 ? 's' : ''} not yet filled</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Total payment covers all committed slots.</p>
                       </div>
                       <button onClick={onAddHolders}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition-all w-full sm:w-auto">
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-all w-full sm:w-auto">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                        Add Members
+                        Add Certificate Holder
                       </button>
                     </div>
                   </div>

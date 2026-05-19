@@ -82,6 +82,7 @@ async function createOrUpdateInvoice(opts) {
     draftOverrides  = null,
     adminGenerated  = false,
     existingInvoiceNumber = null,
+    purpose         = 'payment',
   } = opts;
 
   // ── 1. Locate existing Invoice — strategy depends on how the payment was made ─
@@ -139,8 +140,12 @@ async function createOrUpdateInvoice(opts) {
     ? `${planBase} (${multiYearCount} Years)`
     : planBase;
 
+  const lineDescription = purpose === 'holder-upgrade'
+    ? `Agent For Service - Holder Upgrade`
+    : `Agent For Service - ${planLabel}`;
+
   const lineItems = [{
-    description: `Agent For Service - ${planLabel}`,
+    description: lineDescription,
     quantity:    isAirline ? holderCount || 1 : 1,
     unitPrice:   isAirline ? pricePerCert || amountDollars : amountDollars,
     totalPrice:  totalAmount,
@@ -189,7 +194,8 @@ async function createOrUpdateInvoice(opts) {
     ? { ...baseDraft, ...draftOverrides }
     : (existing?.draft || baseDraft);
 
-  // Mark as admin-generated if flagged
+  // Mark purpose and admin-generated flag
+  docPayload.purpose = purpose;
   if (adminGenerated) docPayload.adminGenerated = true;
 
   // ── 5. Upsert ─────────────────────────────────────────────────────────────

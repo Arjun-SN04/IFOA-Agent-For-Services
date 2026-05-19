@@ -154,15 +154,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             <div className="min-w-0 flex-1">
               <p className="text-sm font-black text-slate-900 truncate leading-tight">{fullName}</p>
               <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{user?.email}</p>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider mt-1 border ${
-                  user?.role === 'admin'
-                    ? 'bg-slate-900 text-white border-slate-700'
-                    : 'bg-slate-100 text-slate-600 border-slate-200'
-                }`}
-              >
-                {user?.role ?? 'user'}
-              </span>
             </div>
           </div>
         )}

@@ -685,7 +685,15 @@ exports.updateAirlinesSubscription = async (req, res) => {
           .select('isPaid subscriptionPlan holderCount holderCountValue committedCount');
       }
       if (existingForPlan && !existingForPlan.isPaid) {
-        const currentCount = Number(existingForPlan.holderCountValue || existingForPlan.committedCount || 0);
+        // Prefer the count already set by condition 1 (user changed count + plan together).
+        // Falling back to DB value only when count wasn't part of this request.
+        const currentCount = Number(
+          payload.committedCount ??
+          payload.holderCountValue ??
+          existingForPlan.holderCountValue ??
+          existingForPlan.committedCount ??
+          0
+        );
         if (currentCount > 0) {
           const range = payload.holderCount || existingForPlan.holderCount || holderRangeFromCount(currentCount);
           const plan = payload.subscriptionPlan || existingForPlan.subscriptionPlan || '1 Year Subscription Plan';
@@ -1458,6 +1466,10 @@ exports.adminCreateAirlineForm = async (req, res) => {
       },
       message: 'Airline form created successfully. Login credentials have been set.',
     });
+
+    sendAirlinePaymentConfirmation(airline).catch((e) =>
+      console.warn('[adminCreateAirlineForm] Email failed:', e.message)
+    );
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }

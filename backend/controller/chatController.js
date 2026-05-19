@@ -1,3 +1,7 @@
+'use strict';
+
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 const SYSTEM_PROMPT = `You are IFOA Assistant — a helpful, friendly support chatbot for the IFOA Agent for Service website. Your job is to guide users through the registration process and help them fill out the IFOA forms correctly.
 
 == REGISTRATION PROCESS OVERVIEW ==
@@ -95,10 +99,10 @@ Whenever a user asks HOW to fill the form, WHERE to start, or WHAT are the steps
 
 "Before filling the IFOA form, complete these TWO FAA steps first:
 
-1. FAA IACRA → https://iacra.faa.gov
+1. FAA IACRA -> https://iacra.faa.gov
    Retrieve your FTN Number as a NEW or EXISTING certificate holder.
 
-2. FAA USAS → https://usas.faa.gov
+2. FAA USAS -> https://usas.faa.gov
    Register IFOA as your official U.S. Agent for Service. (Available since April 2, 2025)
 
 Once both are done, you're ready to fill the IFOA form!"
@@ -108,9 +112,22 @@ Once both are done, you're ready to fill the IFOA form!"
 - Keep ALL responses SHORT — maximum 80 words for simple questions
 - For step-by-step answers, maximum 120 words total
 - Get STRAIGHT to the answer — no lengthy introductions
-- Use bullet points ONLY when listing 3 or more items
+- Use plain text only — NO markdown, NO asterisks, NO hashtags, NO bold, NO italics, NO symbols
+- Use numbered lists or plain dashes for bullet points only when listing 3 or more items
 - End with ONE short encouraging line only when it feels natural
 - NEVER repeat yourself or pad answers — be concise and direct`;
+
+// Strip markdown symbols from Gemini output
+function stripMarkdown(text) {
+  return text
+    .replace(/\*{1,3}([^*]*)\*{1,3}/g, '$1') // bold/italic
+    .replace(/#{1,6}\s*/g, '')                 // headings
+    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, '')) // inline/block code backticks
+    .replace(/_{1,2}([^_]*)_{1,2}/g, '$1')    // underline/italic
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // [text](url) -> text
+    .replace(/^\s*[-–—]{3,}\s*$/gm, '')       // horizontal rules
+    .trim();
+}
 
 exports.chat = async (req, res) => {
   const { messages, systemContext } = req.body;
@@ -119,54 +136,53 @@ exports.chat = async (req, res) => {
     return res.status(400).json({ error: 'messages array is required' });
   }
 
-  const apiKey = process.env.GROQ_API;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Groq API key not configured on server' });
+    return res.status(500).json({ error: 'Gemini API key not configured on server' });
   }
 
-  // Merge any extra plan/context info sent from the frontend into the system prompt
+  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
   const finalSystemPrompt = systemContext
     ? `${SYSTEM_PROMPT}\n\n== CURRENT PLAN DETAILS (authoritative) ==\n${systemContext}`
     : SYSTEM_PROMPT;
 
-  const groqMessages = [
-    { role: 'system', content: finalSystemPrompt },
-    ...messages.map(m => ({ role: m.role, content: m.content })),
-  ];
-
-  const groqPayload = {
-    model: 'llama-3.1-8b-instant',
-    messages: groqMessages,
-    max_tokens: 350,
-    temperature: 0.65,
-  };
-
   try {
-    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(groqPayload),
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: finalSystemPrompt,
     });
 
-    const data = await groqRes.json();
+    // Split history (all but last) and last user message.
+    // Gemini requires history to start with 'user' — drop any leading model turns.
+    const rawHistory = messages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+    let firstUserIdx = rawHistory.findIndex(m => m.role === 'user');
+    const history = firstUserIdx === -1 ? [] : rawHistory.slice(firstUserIdx);
 
-    if (!groqRes.ok) {
-      console.error('Groq API error response:', data);
-      return res.status(groqRes.status).json({
-        error: data?.error?.message || 'Groq API error',
-      });
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'user') {
+      return res.status(400).json({ error: 'Last message must be from user' });
     }
 
-    const text =
-      data?.choices?.[0]?.message?.content ||
-      "Sorry, I couldn't process that. Please try again.";
+    const chat = model.startChat({
+      history,
+      generationConfig: {
+        maxOutputTokens: 350,
+        temperature: 0.65,
+      },
+    });
+
+    const result = await chat.sendMessage(lastMessage.content);
+    const raw = result.response.text();
+    const text = stripMarkdown(raw) || "Sorry, I couldn't process that. Please try again.";
 
     return res.json({ reply: text });
   } catch (err) {
     console.error('Chat controller error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 };

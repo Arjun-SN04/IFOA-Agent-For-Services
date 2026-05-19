@@ -238,12 +238,23 @@ function ChatView({ messages, setMessages, loading, setLoading, initialQuestion 
 
   const renderText = (text) =>
     text.split('\n').map((line, i, arr) => {
-      const parts = line.split(/\*\*(.*?)\*\*/g)
+      const segments = line.split(/(https?:\/\/[^\s]+)/g)
       return (
         <span key={i}>
-          {parts.map((p, j) =>
-            j % 2 === 1 ? <strong key={j} className="font-semibold">{p}</strong> : p
-          )}
+          {segments.map((seg, j) => {
+            if (/^https?:\/\//.test(seg)) {
+              return (
+                <a key={j} href={seg} target="_blank" rel="noopener noreferrer"
+                   className="text-blue-500 underline hover:text-blue-700 break-all font-medium">
+                  {seg}
+                </a>
+              )
+            }
+            const parts = seg.split(/\*\*(.*?)\*\*/g)
+            return parts.map((p, k) =>
+              k % 2 === 1 ? <strong key={k} className="font-semibold">{p}</strong> : p
+            )
+          })}
           {i < arr.length - 1 && <br />}
         </span>
       )
@@ -588,13 +599,16 @@ export default function ChatBot() {
                     onClick={() => {
                       if (tab.id === 'home') setView('home')
                       else if (tab.id === 'chat') { setInitialQuestion(null); setView('chat') }
-                      else if (tab.id === 'help') { setInitialQuestion(null); setView('chat') }
+                      else if (tab.id === 'help') { setView('home') }
                     }}
-                    className="flex-1 flex flex-col items-center gap-1 py-3 transition-colors"
-                    style={{ color: (view === tab.id || (tab.id === 'help' && view === 'article')) ? '#000' : '#9ca3af' }}
+                    className="flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors relative"
+                    style={{ color: (view === tab.id || (tab.id === 'help' && view === 'article') || (tab.id === 'home' && view === 'home')) ? '#111827' : '#9ca3af' }}
                   >
+                    {(view === tab.id || (tab.id === 'help' && view === 'article') || (tab.id === 'home' && view === 'home')) && (
+                      <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-gray-900" />
+                    )}
                     {tab.icon}
-                    <span className="text-[10px] font-bold">{tab.label}</span>
+                    <span className="text-[10px] font-bold tracking-wide">{tab.label}</span>
                   </button>
                 ))}
               </div>

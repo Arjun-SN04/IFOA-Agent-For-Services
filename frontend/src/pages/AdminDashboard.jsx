@@ -470,19 +470,29 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
   }, [invoices, record, registrationId, registrationModel])
 
   const buildPdfPayload = (inv) => {
-    const d = inv.draft || {}
+    const d  = inv.draft || {}
+    const sn = inv.invoiceSnapshot || {}
+    // Build fallback lineItems from invoiceSnapshot when no draft/lineItems exist (legacy payment records)
+    const snapshotLineItems = (!d.lineItems?.length && !inv.lineItems?.length && (sn.totalPaid > 0 || inv.totalAmount > 0))
+      ? [{
+          description: `Agent For Service${sn.subscriptionPlan ? ' - ' + sn.subscriptionPlan.replace(' Subscription Plan','').replace(' Plan','') : ''}`,
+          quantity:    sn.holderCount || 1,
+          unitPrice:   sn.pricePerCert || sn.totalPaid || inv.totalAmount || 0,
+          totalPrice:  sn.totalPaid || inv.totalAmount || 0,
+        }]
+      : null
     return {
       invoiceNumber:     d.invoiceNumber     || inv.invoiceNumber || '',
       issueDate:         d.issueDate         || inv.issueDate     || inv.paidAt,
       payableBy:         d.payableBy         || inv.payableBy,
-      recipientCompany:  d.recipientCompany  || inv.recipientCompany || '',
-      recipientName:     d.recipientName     || inv.recipientName || '',
-      recipientContact:  d.recipientContact  || inv.recipientContact || d.recipientName || inv.recipientName || '',
-      recipientAddress1: d.recipientAddress1 || inv.recipientAddress1 || '',
+      recipientCompany:  d.recipientCompany  || inv.recipientCompany || sn.airlineName || '',
+      recipientName:     d.recipientName     || inv.recipientName || sn.name || '',
+      recipientContact:  d.recipientContact  || inv.recipientContact || d.recipientName || inv.recipientName || sn.name || '',
+      recipientAddress1: d.recipientAddress1 || inv.recipientAddress1 || sn.address || '',
       recipientAddress2: d.recipientAddress2 || inv.recipientAddress2 || '',
       recipientCountry:  d.recipientCountry  || inv.recipientCountry || '',
       paymentMethod:     d.paymentMethod     || inv.paymentMethod || '',
-      lineItems:         d.lineItems?.length ? d.lineItems : (inv.lineItems || []),
+      lineItems:         d.lineItems?.length ? d.lineItems : (inv.lineItems?.length ? inv.lineItems : (snapshotLineItems || [])),
     }
   }
 
@@ -579,7 +589,12 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
     return '#64748b'
   }
 
-  const hasPdf = (inv) => !!(inv.draft?.lineItems?.length || inv.lineItems?.length)
+  const hasPdf = (inv) => !!(
+    inv.draft?.lineItems?.length ||
+    inv.lineItems?.length ||
+    inv.invoiceSnapshot?.totalPaid > 0 ||
+    inv.totalAmount > 0
+  )
 
   return (
     <div className="border-t border-slate-100 pt-5">
@@ -1757,7 +1772,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                         <input className="col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500" value={item.description} onChange={e => setItem(i, 'description', e.target.value)} placeholder="Service description" />
                         <input className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500 text-center" type="number" min="1" value={item.quantity} onChange={e => setItem(i, 'quantity', e.target.value)} />
                         <input className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500 text-right" type="number" step="0.01" min="0" value={item.unitPrice} onChange={e => setItem(i, 'unitPrice', e.target.value)} />
-                        <div className="col-span-2 text-xs font-bold text-slate-900 text-right">{Number(item.totalPrice).toFixed(2)}</div>
+                        <div className="col-span-2 text-xs font-bold text-slate-900 text-right">${Number(item.totalPrice).toFixed(2)}</div>
                         <button onClick={() => removeItem(i)} disabled={inv.lineItems.length <= 1}
                           className="col-span-1 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20 mx-auto">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -1910,7 +1925,6 @@ function EmptyState({ message = 'No records found' }) {
 function InvoiceCell({ onInvoice, onInvoicePreview, invoiceGenerated }) {
   return (
     <div className="flex flex-col items-center gap-2" onClick={e => e.stopPropagation()}>
-      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap">Invoice Preview</span>
       <div className="flex flex-nowrap items-center justify-center gap-1.5">
         {/* Preview icon — always present; greyed for pending */}
         <button
@@ -3122,7 +3136,7 @@ export default function AdminDashboard() {
               <button
                 onClick={handleBulkSendReminder}
                 disabled={sendingReminder || bulkDeleting || bulkGenerating}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-60 px-3 py-1.5 text-xs font-bold text-white transition"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-600 hover:bg-slate-700 disabled:opacity-50 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 {sendingReminder ? 'Sending…' : 'Send Renewal Reminder'}

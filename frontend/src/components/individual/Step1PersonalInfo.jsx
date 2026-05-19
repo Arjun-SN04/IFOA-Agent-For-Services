@@ -61,6 +61,45 @@ const COUNTRIES = [
   'Uzbekistan', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe',
 ]
 
+function CountrySelect({ value, onChange, error }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const filtered = COUNTRIES.filter(c => c.toLowerCase().includes(search.toLowerCase()))
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch('') }}
+        className={`w-full text-left px-3.5 py-2.5 border rounded-xl text-sm bg-white outline-none transition-all duration-150 flex items-center justify-between ${
+          error ? 'border-red-300' : open ? 'border-slate-400 ring-2 ring-slate-200' : 'border-gray-200 hover:border-gray-300'
+        } ${value ? 'text-gray-900' : 'text-gray-400'}`}
+      >
+        <span>{value || '--- Select country ---'}</span>
+        <svg className={`w-4 h-4 text-gray-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100 bg-white">
+            <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-gray-800 placeholder:text-gray-400" />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-gray-400">No results</div>}
+            {filtered.map(c => (
+              <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
+                className={`px-4 py-2 text-sm cursor-pointer transition-colors duration-100 ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-gray-700 hover:bg-slate-50'}`}>
+                {c}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Field({ label, required, error, helper, children }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -299,24 +338,16 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
             </Field>
           </div>
 
-          <Field label="Country">
-            <select
+          <Field label="Country" error={errors.country}>
+            <CountrySelect
               value={data.country}
-              onChange={(e) => {
-                const country = e.target.value
-                update({ country })
-                const iso2 = COUNTRY_TO_ISO2[country]
+              onChange={(val) => {
+                update({ country: val })
+                const iso2 = COUNTRY_TO_ISO2[val]
                 if (iso2) setPhoneCountry(iso2)
               }}
-              className={`${inputCls('country')} appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M2.22%204.47a.75.75%200%20011.06%200L6%207.19l2.72-2.72a.75.75%200%20011.06%201.06l-3.25%203.25a.75.75%200%2001-1.06%200L2.22%205.53a.75.75%200%20010-1.06z%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_1rem_center] pr-10 cursor-pointer`}
-            >
-              <option value="">Select country</option>
-              {COUNTRIES.map((country) => (
-                <option key={country} value={country}>
-                  {country}
-                </option>
-              ))}
-            </select>
+              error={errors.country}
+            />
           </Field>
         </div>
       </section>

@@ -98,9 +98,25 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
       Invoice.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
       Renewal.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
       Payment.find({ registrationId: regId, isPaid: true })
-        .select('_id invoiceNumber invoiceDraft amountDollars paidAt paymentMethodType createdAt updatedAt purpose')
+        .select('_id invoiceNumber invoiceDraft invoiceSnapshot amountDollars paidAt paymentMethodType createdAt updatedAt purpose')
         .sort({ createdAt: -1 }).lean(),
     ]);
+
+    // Build a paymentId → purpose map so Invoice docs created before the `purpose`
+    // field existed can inherit the correct purpose from their linked Payment doc.
+    const paymentPurposeMap = {};
+    for (const p of payments) {
+      if (p.purpose) paymentPurposeMap[String(p._id)] = p.purpose;
+    }
+
+    // Enrich Invoice docs: if purpose is missing/default and a linked Payment has
+    // a more specific purpose (e.g. 'holder-upgrade'), inherit it.
+    for (const inv of invoices) {
+      if ((!inv.purpose || inv.purpose === 'payment') && inv.paymentId) {
+        const inherited = paymentPurposeMap[String(inv.paymentId)];
+        if (inherited && inherited !== 'payment') inv.purpose = inherited;
+      }
+    }
 
     // Index Invoice docs to detect duplicates across sources.
     const invoicePaymentIds = new Set(invoices.map(i => String(i.paymentId)).filter(Boolean));
@@ -139,15 +155,16 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
         return true;
       })
       .map(p => ({
-        _id:           p._id,
-        _source:       'payment',
-        invoiceNumber: p.invoiceNumber || p.invoiceDraft?.invoiceNumber || '',
-        totalAmount:   p.amountDollars || 0,
-        createdAt:     p.createdAt,
-        paidAt:        p.paidAt,
-        paymentMethod: p.paymentMethodType || '',
-        purpose:       p.purpose || '',
-        draft:         p.invoiceDraft || null,
+        _id:              p._id,
+        _source:          'payment',
+        invoiceNumber:    p.invoiceNumber || p.invoiceDraft?.invoiceNumber || '',
+        totalAmount:      p.amountDollars || 0,
+        createdAt:        p.createdAt,
+        paidAt:           p.paidAt,
+        paymentMethod:    p.paymentMethodType || '',
+        purpose:          p.purpose || '',
+        draft:            p.invoiceDraft || null,
+        invoiceSnapshot:  p.invoiceSnapshot || null,
       }));
 
     const all = [...invoices, ...renewalItems, ...paymentItems]

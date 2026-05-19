@@ -184,9 +184,6 @@ function RightSidebar({ regType }) {
         background: 'linear-gradient(170deg, #020617 0%, #0f172a 60%, #111827 100%)',
         overflow: 'hidden',
         flexShrink: 0,
-        alignSelf: 'flex-start',
-        position: 'sticky',
-        top: 0,
       }}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -507,6 +504,14 @@ export default function RegisterPage() {
       else if (user.role === 'individual') setRegType('individual')
     }
   }, [user])
+
+  // Lock document scroll while RegisterPage is mounted — prevents the right sidebar
+  // from scrolling with the page when the two-column layout fills the full viewport.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   // Pre-fill email from user account so link-registration ownership check always passes
   useEffect(() => {
@@ -939,7 +944,7 @@ export default function RegisterPage() {
           {/* Form content — natural height, no flex-1 stretch */}
           <div
             ref={formRef}
-            className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8 max-w-2xl mx-auto w-full"
+            className="px-4 sm:px-6 lg:px-10 pt-6 pb-4 sm:pt-8 sm:pb-6 max-w-2xl mx-auto w-full"
           >
             {/* Page heading */}
             <div className="mb-5">
@@ -1027,7 +1032,7 @@ export default function RegisterPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="rounded-3xl bg-white mb-6"
+              className="rounded-3xl bg-white mb-4"
               style={{ border: '1.5px solid #e5e7eb', boxShadow: '0 8px 40px -12px rgba(15,23,42,0.10)', overflow: 'visible' }}>
               {(regType === 'individual' ? isIndBlocked : isAirBlocked) && (
                 <div className="rounded-t-3xl overflow-hidden">
@@ -1119,7 +1124,7 @@ export default function RegisterPage() {
             </Motion.div>
 
             {/* Bottom trust badges */}
-            <div className="flex flex-wrap gap-2 justify-center pb-8">
+            <div className="flex flex-wrap gap-2 justify-center pb-4">
               {[
                 { icon: <Lock className="w-3 h-3" />, text: 'Secure & Encrypted' },
                 { icon: <ShieldCheck className="w-3 h-3" />, text: 'FAA Compliant' },

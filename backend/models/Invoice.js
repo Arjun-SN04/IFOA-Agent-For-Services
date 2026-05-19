@@ -103,6 +103,11 @@ const InvoiceSchema = new mongoose.Schema({
     default: null,
   },
 
+  // ── Payment purpose ─────────────────────────────────────────────────────────
+  // 'payment' = initial subscription, 'renewal' = plan renewal,
+  // 'holder-upgrade' = additional holder purchase
+  purpose: { type: String, default: 'payment' },
+
   // ── Generation flag ─────────────────────────────────────────────────────────
   // true  = admin has explicitly generated / downloaded this invoice at least once
   // false = auto-generated from payment data (user can still download it)

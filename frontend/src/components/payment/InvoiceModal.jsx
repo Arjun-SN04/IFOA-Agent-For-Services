@@ -173,72 +173,81 @@ export default function InvoiceModal({ invoice, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+
+        {/* Accent bar */}
+        <div className="h-0.5 w-full bg-slate-200" />
 
         {/* Header */}
-        <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
+        <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Payment Successful</p>
-            <h2 className="text-lg font-extrabold text-slate-900">Your Invoice</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Payment Confirmed</p>
+            <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Your Invoice</h2>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">
-            ✕
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {/* Invoice Preview */}
         <div className="px-6 py-5 space-y-4">
 
-          {/* Paid badge + invoice number */}
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-              
+          {/* Paid status + invoice number */}
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
               Paid
             </span>
-            <span className="text-xs text-slate-400">{invoice.invoiceNumber}</span>
+            <span className="text-xs text-slate-300">·</span>
+            <span className="text-xs font-medium text-slate-400 tracking-wide">{invoice.invoiceNumber}</span>
           </div>
 
           {/* Summary card */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-100 overflow-hidden">
-            <div className="px-4 py-3 flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription Plan</span>
-              <span className="text-sm font-bold text-slate-900">{invoice.subscriptionPlan}</span>
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <div className="divide-y divide-slate-100">
+              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription Plan</span>
+                <span className="text-sm font-semibold text-slate-800">{invoice.subscriptionPlan}</span>
+              </div>
+              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Billed To</span>
+                <span className="text-sm font-semibold text-slate-800">{invoice.name}</span>
+              </div>
+              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Start Date</span>
+                <span className="text-sm font-semibold text-slate-800">{fmt(invoice.paidAt)}</span>
+              </div>
+              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Expiration</span>
+                <span className={`text-sm font-semibold ${expiry === 'Never (Unlimited)' ? 'text-emerald-600' : 'text-slate-800'}`}>{expiry}</span>
+              </div>
             </div>
-            <div className="px-4 py-3 flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Billed To</span>
-              <span className="text-sm font-bold text-slate-900">{invoice.name}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Start Date</span>
-              <span className="text-sm font-bold text-slate-900">{fmt(invoice.paidAt)}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Expiration</span>
-              <span className={`text-sm font-bold ${expiry === 'Never (Unlimited)' ? 'text-emerald-600' : 'text-slate-900'}`}>{expiry}</span>
-            </div>
-            <div className="px-4 py-3 flex justify-between items-center bg-slate-900 rounded-b-xl">
+            {/* Total row */}
+            <div className="px-4 py-4 flex justify-between items-center bg-slate-900">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Paid</span>
-              {/* Uses draft total when admin has edited, otherwise pricePerCert × holderCount */}
               <span className="text-xl font-black text-white">
                 ${displayTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-400 text-center">
-            Payment ID: <span className="font-mono">{invoice.paymentId}</span>
-          </p>
+          {invoice.paymentId && (
+            <p className="text-[11px] text-slate-400 text-center">
+              Payment ID: <span className="font-mono text-slate-500">{invoice.paymentId}</span>
+            </p>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="px-6 pb-6 space-y-3">
-          <div className="flex gap-3">
+        <div className="px-6 pb-6 space-y-2.5">
+          <div className="flex gap-2.5">
             <button
               onClick={handlePreview}
               disabled={previewing || downloading}
-              className="flex-1 inline-flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
+              className="flex-1 inline-flex items-center justify-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
             >
               {previewing ? (
                 <>
@@ -261,7 +270,7 @@ export default function InvoiceModal({ invoice, onClose }) {
             <button
               onClick={handleDownload}
               disabled={downloading || previewing}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md shadow-red-200 disabled:opacity-60"
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
             >
               {downloading ? (
                 <>
@@ -274,7 +283,7 @@ export default function InvoiceModal({ invoice, onClose }) {
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                   </svg>
                   Download PDF
                 </>
@@ -282,7 +291,7 @@ export default function InvoiceModal({ invoice, onClose }) {
             </button>
           </div>
           <button onClick={onClose}
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+            className="w-full rounded-xl py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition">
             Close
           </button>
         </div>

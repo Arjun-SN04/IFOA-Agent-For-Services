@@ -240,16 +240,6 @@ export default function HeaderNav() {
               Home
             </Link>
 
-            {/* Role pill */}
-            {user?.role && (
-              <span className={`hidden sm:inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider border ${
-                user.role === 'admin'
-                  ? 'bg-slate-900 text-white border-slate-800'
-                  : 'bg-white text-slate-600 border-slate-200'
-              }`}>
-                {user.role}
-              </span>
-            )}
 
             {/* Notifications */}
             <div className="relative" ref={notifRef}>
@@ -422,13 +412,6 @@ export default function HeaderNav() {
                         <p className="text-xs text-slate-400 truncate">{user?.email}</p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center mt-2.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border ${
-                      user?.role === 'admin'
-                        ? 'bg-slate-900 text-white border-slate-800'
-                        : 'bg-white text-slate-600 border-slate-200'
-                    }`}>
-                      {user?.role ?? 'user'}
-                    </span>
                   </div>
 
                   {/* Nav items */}

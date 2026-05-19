@@ -668,7 +668,7 @@ export default function AdminAirlineForm() {
                 cursor: formData.certificateHolders.length >= parseInt(formData.holderCountValue) ? 'not-allowed' : 'pointer',
               }}
             >
-              + Add Holder
+              + Add Certificate Holder
             </button>
           </div>
 

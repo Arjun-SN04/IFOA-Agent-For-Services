@@ -22,7 +22,7 @@ const CERTIFICATE_TYPES = [
 
 export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
   const [errors, setErrors] = useState([])
-  const [expandedSecondary, setExpandedSecondary] = useState({})
+  const [_expandedSecondary, setExpandedSecondary] = useState({})
 
   const holders = data.certificateHolders?.length > 0
     ? data.certificateHolders
@@ -31,7 +31,6 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
   const maxHolders = data.holderCountValue ? parseInt(data.holderCountValue) : null
   const atLimit = maxHolders !== null && holders.length >= maxHolders
 
-  const isUnlimited = data.subscriptionPlan === 'Unlimited Plan'
   const payableCount = Number(data.holderCountValue || data.committedCount || holders.length || 0)
   const numericTotal = (data.pricePerCertificate || 0) * payableCount
 
@@ -118,7 +117,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
     }`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h3 className="text-xl font-bold text-gray-900 mb-1">Register Your Team Members</h3>
         <p className="text-sm text-gray-500">
@@ -150,7 +149,8 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
         </div>
       )}
 
-      {/* Holder cards */}
+      {/* Holder cards + actions wrapped together to control spacing precisely */}
+      <div>
       <div className="space-y-5">
         {holders.map((h, i) => (
           <div key={i} id={`holder-card-${i}`} className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden scroll-mt-6">
@@ -169,7 +169,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
             </div>
 
             {/* Card body */}
-            <div className="px-5 py-5 space-y-4">
+            <div className={`px-5 pt-5 space-y-4 ${h.hasSecondaryCertificate ? 'pb-0' : 'pb-4'}`}>
               {/* Row 1: Full Name + DOB */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -249,9 +249,9 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                 {errors[i]?.email && <p className="text-red-500 text-xs">{errors[i].email}</p>}
               </div>
 
-              {/* Secondary Certificate toggle */}
-              <div className="pt-1">
-                <label className={`flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 select-none ${h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:border-blue-300 bg-white'}`}>
+              {/* Secondary Certificate toggle + collapsible details */}
+              <div className="flex flex-col">
+                <label className={`relative flex items-center gap-3 cursor-pointer p-3.5 rounded-xl border transition-all duration-150 select-none ${h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:border-blue-300 bg-white'}`}>
                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 flex-shrink-0 ${h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}`}>
                     {h.hasSecondaryCertificate && (
                       <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -260,12 +260,12 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                     )}
                   </div>
                   <input type="checkbox" checked={h.hasSecondaryCertificate || false}
-                    onChange={e => toggleSecondary(i, e.target.checked)} className="sr-only" />
+                    onChange={e => toggleSecondary(i, e.target.checked)} className="absolute inset-0 opacity-0 cursor-pointer" />
                   <span className="text-sm font-semibold text-gray-700">This holder has a secondary FAA certificate</span>
                 </label>
 
                 {h.hasSecondaryCertificate && (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 pt-3 px-3 pb-4 space-y-3">
                     <p className="text-[11px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate Details</p>
 
                     <div className="space-y-1">
@@ -305,7 +305,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
       </div>
 
       {/* Actions */}
-      <div className="flex gap-3 justify-between pt-6 border-t border-gray-100">
+      <div className="flex gap-3 justify-between mt-0 pt-3 border-t border-gray-100">
         <button type="button" onClick={addHolder} disabled={atLimit}
           title={atLimit ? `Limit of ${maxHolders} holders reached — go back to Step 1 to change` : 'Add a team member'}
           className={`inline-flex items-center gap-1.5 px-4 py-2.5 font-semibold rounded-lg transition-all ${atLimit ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
@@ -330,6 +330,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
             </svg>
           </button>
         </div>
+      </div>
       </div>
     </div>
   )

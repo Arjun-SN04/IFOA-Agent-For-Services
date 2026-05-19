@@ -162,7 +162,7 @@ export default function UserDashboard() {
                 : '1 Year'
               : 'None'}
             accent={sub ? 'sky' : 'slate'}
-            sub={sub ? `$${isAirline ? getAirlineTotal(sub).toFixed(2) : (sub.price ?? sub.totalAmount ?? 0)}` : 'No plan selected'}
+            sub={sub ? `$${isAirline ? getAirlineTotal(sub).toFixed(2) : Number(sub.price ?? sub.totalAmount ?? 0).toFixed(2)}` : 'No plan selected'}
             icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>}
           />
         </div>
@@ -233,55 +233,71 @@ export default function UserDashboard() {
         )}
 
         {/* ── Subscription summary ── */}
-        {!subLoading && sub && (
-          <div className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4 ${
-            sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-              ? 'border-emerald-100 bg-emerald-50' : 'border-slate-200 bg-slate-50'
-          }`}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                ? 'bg-emerald-100' : 'bg-slate-100'
+        {!subLoading && sub && (() => {
+          const isPaid = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+          const isUnlimited = sub.subscriptionPlan === 'Unlimited Plan'
+          const daysToExpiry = sub.expirationDate
+            ? Math.ceil((new Date(sub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
+            : null
+          const isExpired = isPaid && !isUnlimited && daysToExpiry !== null && daysToExpiry <= 0
+
+          if (isExpired) {
+            return (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-red-900 mb-1">Subscription expired</p>
+                  <p className="text-xs text-red-700 leading-relaxed">
+                    Plan: <strong>{sub.subscriptionPlan}</strong>. Renew now to restore FAA compliance coverage.
+                  </p>
+                </div>
+                <Link
+                  to="/dashboard/subscription"
+                  className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-100 transition-all"
+                >
+                  Renew Now →
+                </Link>
+              </div>
+            )
+          }
+
+          return (
+            <div className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4 ${
+              isPaid ? 'border-emerald-100 bg-emerald-50' : 'border-slate-200 bg-slate-50'
             }`}>
-              <svg className={`w-5 h-5 ${
-                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-600' : 'text-slate-400'
-              }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  : <><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></>}
-              </svg>
-            </div>
-            <div className="flex-1">
-              <p className={`text-sm font-bold mb-1 ${
-                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-900' : 'text-slate-800'
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                isPaid ? 'bg-emerald-100' : 'bg-slate-100'
               }`}>
-                {sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'Your subscription is active'
-                  : 'Payment pending — your plan is awaiting confirmation'}
-              </p>
-              <p className={`text-xs leading-relaxed ${
-                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'text-emerald-700' : 'text-slate-500'
-              }`}>
-                Plan: <strong>{sub.subscriptionPlan}</strong>.
-                {sub.isPaid !== true && sub.paymentStatus !== 'paid' && sub.status !== 'Active'
-                  ? ' Complete payment to activate your subscription.'
-                  : ' Your U.S. Agent for Service is active and ready.'}
-              </p>
+                <svg className={`w-5 h-5 ${isPaid ? 'text-emerald-600' : 'text-slate-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  {isPaid
+                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    : <><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></>}
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className={`text-sm font-bold mb-1 ${isPaid ? 'text-emerald-900' : 'text-slate-800'}`}>
+                  {isPaid ? 'Your subscription is active' : 'Payment pending — your plan is awaiting confirmation'}
+                </p>
+                <p className={`text-xs leading-relaxed ${isPaid ? 'text-emerald-700' : 'text-slate-500'}`}>
+                  Plan: <strong>{sub.subscriptionPlan}</strong>.
+                  {!isPaid ? ' Complete payment to activate your subscription.' : ' Your U.S. Agent for Service is active and ready.'}
+                </p>
+              </div>
+              <Link
+                to="/dashboard/subscription"
+                className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                  isPaid ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                View Details →
+              </Link>
             </div>
-            <Link
-              to="/dashboard/subscription"
-              className={`flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-                  ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              View Details →
-            </Link>
-          </div>
-        )}
+          )
+        })()}
       </div>
     </DashboardLayout>
   )

@@ -372,6 +372,12 @@ exports.adminCreateIndividualForm = async (req, res) => {
         loginCredentials: linked.loginCredentials,
       },
     });
+
+    if (individual.isPaid) {
+      sendIndividualPaymentConfirmation(individual).catch((e) =>
+        console.warn('[adminCreateIndividualForm] Email failed:', e.message)
+      );
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }

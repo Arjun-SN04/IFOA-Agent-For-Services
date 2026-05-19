@@ -850,33 +850,38 @@ exports.confirmPayment = async (req, res) => {
         updatedReg = doc;
       }
 
-      // After a holder-upgrade, update the ORIGINAL subscription invoice so it
-      // reflects the new total (pricePerCert × new committedCount).
-      if (updatedReg) {
-        await updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, updatedReg);
-      }
     } else {
       updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
     }
 
-    // Create / update the canonical Invoice document (single source of truth).
-    // This is what both the admin dashboard and the user SubscriptionPage read.
-    // For holder-upgrades this is already handled inside updateOriginalInvoiceAfterHolderUpgrade.
+    // Create the canonical Invoice document for this payment.
+    // Holder-upgrades get their OWN new Invoice doc (not replacing the original).
+    // The original subscription invoice is left untouched so both are preserved.
     try {
-      if (!isPurposeHolderUpgrade) {
-        await createOrUpdateInvoice({
-          registrationId,
-          registrationModel,
-          paymentId:      paymentDoc._id,
-          snapshot:       paymentDoc.invoiceSnapshot || {},
-          amountDollars:  paymentDoc.amountDollars,
-          paidAt:         paymentDoc.paidAt,
-          paymentMethod:  paymentDoc.paymentMethodType || 'card',
-          existingInvoiceNumber: paymentDoc.invoiceNumber,
-        });
+      let upgradeSnapshot = paymentDoc.invoiceSnapshot || {};
+      if (isPurposeHolderUpgrade) {
+        // Build a snapshot scoped to just the additional charge so the invoice
+        // shows additionalCount × newPpc = amountDollars (not the full plan total).
+        const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
+        const newPpc = Number(pi.metadata?.newPricePerCertificate || 0);
+        upgradeSnapshot = {
+          ...upgradeSnapshot,
+          holderCount:  additionalCount || upgradeSnapshot.holderCount,
+          pricePerCert: newPpc || upgradeSnapshot.pricePerCert,
+        };
       }
+      await createOrUpdateInvoice({
+        registrationId,
+        registrationModel,
+        paymentId:      paymentDoc._id,
+        snapshot:       upgradeSnapshot,
+        amountDollars:  paymentDoc.amountDollars,
+        paidAt:         paymentDoc.paidAt,
+        paymentMethod:  paymentDoc.paymentMethodType || 'card',
+        existingInvoiceNumber: paymentDoc.invoiceNumber,
+        purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : 'payment',
+      });
     } catch (invoiceErr) {
-      // Non-critical — log but don't fail the payment response
       console.warn('[confirmPayment] Invoice doc creation failed:', invoiceErr.message);
     }
 
@@ -1203,6 +1208,7 @@ exports.stripeWebhook = async (req, res) => {
       };
 
       let paymentDoc;
+      const alreadyConfirmedByFrontend = existing?.confirmedVia === 'frontend';
       if (existing) {
         Object.assign(existing, paymentData);
         paymentDoc = await existing.save();
@@ -1245,38 +1251,41 @@ exports.stripeWebhook = async (req, res) => {
           updatedRegWebhook = doc;
         }
 
-        // After a holder-upgrade, update the ORIGINAL subscription invoice so it
-        // reflects the new total (pricePerCert × new committedCount).
-        if (updatedRegWebhook) {
-          await updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrationModel, updatedRegWebhook);
-        }
       } else {
         updatedRegWebhook = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
       }
 
-      // Create / update canonical Invoice document so admin and user see same invoice.
-      // For holder-upgrades this is already handled inside updateOriginalInvoiceAfterHolderUpgrade.
+      // Create canonical Invoice doc for this payment.
+      // Holder-upgrades get their own new Invoice doc — original subscription invoice untouched.
       try {
-        if (!isPurposeHolderUpgradeWebhook) {
-          await createOrUpdateInvoice({
-            registrationId,
-            registrationModel,
-            paymentId:      paymentDoc._id,
-            snapshot:       paymentDoc.invoiceSnapshot || {},
-            amountDollars:  paymentDoc.amountDollars,
-            paidAt:         paymentDoc.paidAt,
-            paymentMethod:  paymentDoc.paymentMethodType || 'card',
-            existingInvoiceNumber: paymentDoc.invoiceNumber,
-          });
+        let upgradeSnapshotWebhook = paymentDoc.invoiceSnapshot || {};
+        if (isPurposeHolderUpgradeWebhook) {
+          const additionalCountW = Number(pi.metadata?.additionalHolderCount || 0);
+          const newPpcW = Number(pi.metadata?.newPricePerCertificate || 0);
+          upgradeSnapshotWebhook = {
+            ...upgradeSnapshotWebhook,
+            holderCount:  additionalCountW || upgradeSnapshotWebhook.holderCount,
+            pricePerCert: newPpcW || upgradeSnapshotWebhook.pricePerCert,
+          };
         }
+        await createOrUpdateInvoice({
+          registrationId,
+          registrationModel,
+          paymentId:      paymentDoc._id,
+          snapshot:       upgradeSnapshotWebhook,
+          amountDollars:  paymentDoc.amountDollars,
+          paidAt:         paymentDoc.paidAt,
+          paymentMethod:  paymentDoc.paymentMethodType || 'card',
+          existingInvoiceNumber: paymentDoc.invoiceNumber,
+          purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : 'payment',
+        });
       } catch (invoiceErr) {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
       }
 
       // Send confirmation email — renewal vs first payment (non-blocking).
-      // Only send if the frontend confirmation hasn't already sent it
-      // (confirmedVia would be 'frontend' if frontend confirm already ran).
-      if (updatedRegWebhook) {
+      // Skip if frontend confirmPayment already sent it (avoid duplicate).
+      if (updatedRegWebhook && !alreadyConfirmedByFrontend) {
         const sendFn = isPurposeRenewal
           ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
           : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
