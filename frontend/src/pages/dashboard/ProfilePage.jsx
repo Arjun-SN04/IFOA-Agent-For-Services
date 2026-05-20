@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import InvoiceModal from '../../components/payment/InvoiceModal'
 import { buildInvoice } from '../../components/payment/PaymentModal'
+import { getAirlineTotal } from '../../utils/airlineTotal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
@@ -154,6 +155,111 @@ function EditProfileModal({ user, isAirline, onClose, onSaveName, onSaveAirlineN
   )
 }
 
+/* ── AllInvoicesModal ─────────────────────────────────────────────────────── */
+function AllInvoicesModal({ docs, reg, onClose, onViewSingle }) {
+  const moneyFmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmtDate  = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+
+  const isHolderUpgrade = (doc) =>
+    doc.purpose === 'holder-upgrade' ||
+    (doc.lineItems || doc.draft?.lineItems || []).some(
+      li => String(li.description || '').toLowerCase().includes('upgrade') ||
+            String(li.description || '').toLowerCase().includes('holder')
+    )
+
+  const purposeLabel = (doc) => {
+    if (doc._source === 'renewal' || doc.plan) return 'Renewal'
+    if (isHolderUpgrade(doc)) return 'Holder Upgrade'
+    return 'Subscription'
+  }
+
+  const purposeColor = (doc) => {
+    if (doc._source === 'renewal' || doc.plan) return 'bg-amber-50 text-amber-700 border-amber-200'
+    if (isHolderUpgrade(doc)) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    return 'bg-slate-100 text-slate-600 border-slate-200'
+  }
+
+  const handleView = (doc) => {
+    const invoice = {
+      invoiceNumber:    doc.invoiceNumber,
+      paidAt:           doc.paidAt || doc.issueDate || doc.createdAt,
+      subscriptionPlan: doc.subscriptionPlan || reg?.subscriptionPlan,
+      expirationDate:   doc.expirationDate || null,
+      amount:           doc.totalAmount,
+      name:             doc.recipientName || doc.recipientCompany || `${reg?.firstName || ''} ${reg?.lastName || ''}`.trim(),
+      email:            doc.recipientEmail || reg?.email || '',
+      address:          doc.recipientAddress1 || reg?.addressLine1 || '',
+      isAirline:        doc.isAirline ?? (reg?.airlineName ? true : false),
+      airlineName:      doc.recipientCompany || reg?.airlineName || '',
+      pricePerCert:     doc.lineItems?.[0]?.unitPrice || null,
+      holderCount:      doc.lineItems?.[0]?.quantity || null,
+      invoiceDraft:     doc.draft || null,
+      _invoiceDocId:    doc._id,
+    }
+    onViewSingle(invoice)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment History</p>
+            <h3 className="text-base font-black text-slate-900">All Invoices</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          {docs.map((doc, i) => (
+            <button
+              key={String(doc._id || i)}
+              onClick={() => handleView(doc)}
+              className="w-full text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 hover:shadow-sm px-4 py-3 transition-all duration-150 group"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <p className="text-sm font-bold text-slate-800">
+                      {doc.invoiceNumber || '(no number)'}
+                    </p>
+                    <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${purposeColor(doc)}`}>
+                      {purposeLabel(doc)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">{fmtDate(doc.paidAt || doc.issueDate || doc.createdAt)}</p>
+                  {doc.subscriptionPlan && (
+                    <p className="text-[11px] text-slate-400 mt-0.5">{doc.subscriptionPlan}</p>
+                  )}
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-sm font-black text-slate-900">{moneyFmt(doc.totalAmount)}</p>
+                  <p className="text-[10px] text-blue-600 font-semibold mt-1 group-hover:underline">View →</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── ProfilePage ──────────────────────────────────────────────────────────── */
 export default function ProfilePage() {
   const { user, token, updateProfile, updateAirlineName } = useAuth()
@@ -163,6 +269,8 @@ export default function ProfilePage() {
   const [subLoading, setSubLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
   const [viewInvoice, setViewInvoice] = useState(null)
+  const [allInvoicesMap, setAllInvoicesMap] = useState({})
+  const [viewAllInvoices, setViewAllInvoices] = useState(null)
 
   const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User'
@@ -214,6 +322,20 @@ export default function ProfilePage() {
         })
         setSubs(merged)
         setSub(merged[0] || null)
+
+        // Fetch invoices for each sub to get real totals
+        const invoiceMap = {}
+        await Promise.allSettled(
+          merged.map(async (s) => {
+            try {
+              const res = await API.get(`/invoices/by-registration/${s._id}`, { headers })
+              invoiceMap[s._id] = res.data?.data || []
+            } catch {
+              invoiceMap[s._id] = []
+            }
+          })
+        )
+        setAllInvoicesMap(invoiceMap)
       } catch {
         setSubs([])
         setSub(null)
@@ -300,6 +422,14 @@ export default function ProfilePage() {
 
         {/* ── Subscription Plan ── */}
         {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+        {viewAllInvoices && (
+          <AllInvoicesModal
+            docs={viewAllInvoices.docs}
+            reg={viewAllInvoices.reg}
+            onClose={() => setViewAllInvoices(null)}
+            onViewSingle={(inv) => { setViewAllInvoices(null); setViewInvoice(inv) }}
+          />
+        )}
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
           <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
@@ -338,6 +468,11 @@ export default function ProfilePage() {
               {subs.map((s, idx) => {
                 const isAirline = user?.role === 'airline'
                 const active = s.isPaid === true || s.paymentStatus === 'paid' || s.status === 'Active'
+                const invoiceDocs = allInvoicesMap[s._id] || []
+                const invoiceTotal = invoiceDocs.reduce((sum, doc) => sum + (Number(doc.totalAmount) || 0), 0)
+                const displayTotal = isAirline
+                  ? (invoiceTotal > 0 ? invoiceTotal : getAirlineTotal(s))
+                  : (s.price || s.totalServiceFees)
                 return (
                   <div key={s._id || idx}>
                     {subs.length > 1 && (
@@ -364,7 +499,7 @@ export default function ProfilePage() {
                             {isAirline ? 'Total Amount' : 'Plan Price'}
                           </p>
                           <p className="text-xl sm:text-2xl font-black text-slate-900">
-                            {isAirline ? money(s.totalAmount) : money(s.price || s.totalServiceFees)}
+                            {money(displayTotal)}
                           </p>
                         </div>
                       </div>
@@ -386,20 +521,24 @@ export default function ProfilePage() {
                         {active && (
                           <button
                             onClick={() => {
-                              const inv = buildInvoice(
-                                s, isAirline ? 'Airlines' : 'Individual',
-                                Math.round((s.price || s.totalAmount || s.totalServiceFees || 0) * 100),
-                                { id: s.invoiceNumber || '—' },
-                                s.subscriptionDate || s.updatedAt || s.createdAt
-                              )
-                              setViewInvoice(inv)
+                              if (invoiceDocs.length > 0) {
+                                setViewAllInvoices({ docs: invoiceDocs, reg: s })
+                              } else {
+                                const inv = buildInvoice(
+                                  s, isAirline ? 'Airlines' : 'Individual',
+                                  Math.round((displayTotal || 0) * 100),
+                                  { id: s.invoiceNumber || '—' },
+                                  s.subscriptionDate || s.updatedAt || s.createdAt
+                                )
+                                setViewInvoice(inv)
+                              }
                             }}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-white hover:border-red-300 hover:text-red-600 transition flex-shrink-0 self-start sm:self-auto"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                             </svg>
-                            Invoice PDF
+                            Invoices
                           </button>
                         )}
                       </div>

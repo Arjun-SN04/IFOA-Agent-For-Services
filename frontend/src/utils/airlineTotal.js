@@ -35,8 +35,8 @@ export function getAirlineTotal(record) {
   )
 
   const count = Number(
-    record.committedCount ??
     record.holderCountValue ??
+    record.committedCount ??
     record.certificateHolders?.length ??
     0
   )

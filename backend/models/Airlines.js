@@ -119,14 +119,15 @@ const AirlinesSchema = new mongoose.Schema({
   // The plan is NOT yet active; it activates automatically when activationDate is reached.
   // Cleared once activated (or admin can clear manually).
   nextRenewal: {
-    plan:           { type: String },
-    multiYearCount: { type: Number },
-    committedCount: { type: Number, default: null }, // holder count user selected at renewal time
-    paidAt:         { type: Date },   // when payment was made
-    activationDate: { type: Date },   // = current expirationDate at time of payment
-    expiresAt:      { type: Date },   // activationDate + plan years
-    price:          { type: Number },
-    invoiceNumber:  { type: String },
+    plan:             { type: String },
+    multiYearCount:   { type: Number },
+    committedCount:   { type: Number, default: null }, // holder count user selected at renewal time
+    holdersToRemove:  { type: [String], default: null }, // holder _ids to remove on activation
+    paidAt:           { type: Date },   // when payment was made
+    activationDate:   { type: Date },   // = current expirationDate at time of payment
+    expiresAt:        { type: Date },   // activationDate + plan years
+    price:            { type: Number },
+    invoiceNumber:    { type: String },
   },
 
   // Invoice request tracking — set to true when airline user requests an invoice

@@ -279,6 +279,10 @@ function collectRecipients(...addresses) {
 
 // ── Core send helper ──────────────────────────────────────────────────────────
 async function sendMail({ to, subject, html }) {
+  if (process.env.DISABLE_EMAIL === 'true') {
+    console.warn('[email] DISABLE_EMAIL=true — skipping email to', to);
+    return;
+  }
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.warn('[email] SMTP_USER/SMTP_PASS not set — skipping email to', to);
     return;

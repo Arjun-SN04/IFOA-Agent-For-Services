@@ -39,6 +39,11 @@ export async function generateIFOAInvoicePDF(inv) {
     page.drawText(String(str ?? ''), { x: rx - tw, y, size, font, color })
   }
 
+  const txtC = (str, cx, y, { size = 9, font = fontReg, color = DARK } = {}) => {
+    const tw = font.widthOfTextAtSize(String(str ?? ''), size)
+    page.drawText(String(str ?? ''), { x: cx - tw / 2, y, size, font, color })
+  }
+
   const line = (x1, y1, x2, y2, color = BORDER, thickness = 0.5) =>
     page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color })
 
@@ -132,16 +137,25 @@ export async function generateIFOAInvoicePDF(inv) {
   txt('Thank you for your Business. Your invoice is as follows:', ML, Y, { size: 9 })
   Y -= 28
 
-  // Column right-edges for numeric cols; left-edges for text cols
-  const C = { pos: ML, desc: ML + 28, qtyR: ML + W - 160, unitR: ML + W - 70, total: ML + W }
+  // Column right-edges for numeric cols; left-edges for text cols; centers for centered cols
+  const C = {
+    pos:    ML,
+    desc:   ML + 28,
+    qtyR:   ML + W - 160,
+    qtyC:   ML + W - 175,  // center of ~30pt qty column
+    unitR:  ML + W - 70,
+    unitC:  ML + W - 115,  // center of 90pt unit price column
+    total:  ML + W,
+    totalC: ML + W - 35,   // center of 70pt total column
+  }
   const TH_Y = Y
   const TH_H = 16
   rect(ML, TH_Y - TH_H + 4, W, TH_H, LGRAY)
   txt('Pos.', C.pos, TH_Y - 8, { size: 8, font: fontBold })
   txt('Description', C.desc, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Quantity', C.qtyR, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Unit Price', C.unitR, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Total Price USD', C.total, TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Quantity', C.qtyC, TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Unit Price', C.unitC, TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Total Price USD', C.totalC, TH_Y - 8, { size: 8, font: fontBold })
   Y = TH_Y - TH_H - 2
   line(ML, Y, ML + W, Y, BORDER, 0.4)
   Y -= 12
@@ -150,9 +164,9 @@ export async function generateIFOAInvoicePDF(inv) {
   items.forEach((item, i) => {
     txt(String(i + 1), C.pos, Y, { size: 9 })
     txt(item.description || '', C.desc, Y, { size: 9, maxWidth: C.qtyR - C.desc - 30 })
-    txtR(String(item.quantity || 0), C.qtyR, Y, { size: 9 })
-    txtR(fmtM(item.unitPrice), C.unitR, Y, { size: 9 })
-    txtR(fmtM(item.totalPrice), C.total, Y, { size: 9 })
+    txtC(String(item.quantity || 0), C.qtyC, Y, { size: 9 })
+    txtC(fmtM(item.unitPrice), C.unitC, Y, { size: 9 })
+    txtC(fmtM(item.totalPrice), C.totalC, Y, { size: 9 })
     Y -= 18
   })
 
@@ -162,7 +176,7 @@ export async function generateIFOAInvoicePDF(inv) {
 
   const totalAmt = items.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0)
   txt('Invoice Sum Tax-Exempt', C.desc, Y, { size: 9, font: fontBold })
-  txtR(fmtM(totalAmt), C.total, Y, { size: 9, font: fontBold })
+  txtC(fmtM(totalAmt), C.totalC, Y, { size: 9, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 30

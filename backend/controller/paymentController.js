@@ -24,6 +24,7 @@
  * SubscriptionPage always prefers the Payment doc when one is present.
  */
 
+const mongoose = require('mongoose');
 const Stripe = require('stripe');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -282,6 +283,10 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     : null;
   const effectiveCount = renewalExactCount ||
     Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1);
+  // Holder IDs to remove when this queued renewal activates (airline downgrade scenario)
+  const renewalHoldersToRemove = Array.isArray(paymentDoc.renewalHoldersToRemove) && paymentDoc.renewalHoldersToRemove.length
+    ? paymentDoc.renewalHoldersToRemove
+    : null;
 
   // Year count: from Payment doc (user-selected at renewal) > original doc > derive from amount
   const ppc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
@@ -306,28 +311,30 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
   const renewalDoc = await Renewal.create({
     registrationId,
     registrationModel,
-    paymentId:      paymentDoc._id,
-    invoiceNumber:  paymentDoc.invoiceNumber || '',
-    plan:           activePlan,
-    multiYearCount: renewalMultiYearCount || null,
-    committedCount: renewalExactCount || null,  // airline: holder count at renewal time
-    price:          paymentDoc.amountDollars || 0,
-    paidAt:         paymentDoc.paidAt || now,
-    activationDate: base,
-    expiresAt:      newExpiry || null,
-    status:         isQueued ? 'queued' : 'active',
+    paymentId:       paymentDoc._id,
+    invoiceNumber:   paymentDoc.invoiceNumber || '',
+    plan:            activePlan,
+    multiYearCount:  renewalMultiYearCount || null,
+    committedCount:  renewalExactCount || null,  // airline: holder count at renewal time
+    holdersToRemove: renewalHoldersToRemove,     // airline: holder _ids to remove on activation
+    price:           paymentDoc.amountDollars || 0,
+    paidAt:          paymentDoc.paidAt || now,
+    activationDate:  base,
+    expiresAt:       newExpiry || null,
+    status:          isQueued ? 'queued' : 'active',
   });
 
   // ── Build the embedded snapshot for fast dashboard display ───────────────────
   const renewalSnapshot = {
-    plan:           activePlan,
-    multiYearCount: renewalMultiYearCount || null,
-    committedCount: renewalExactCount || null,  // airline: user-selected count
-    paidAt:         paymentDoc.paidAt || now,
-    activationDate: base,
-    expiresAt:      newExpiry || null,
-    price:          paymentDoc.amountDollars || null,
-    invoiceNumber:  paymentDoc.invoiceNumber || null,
+    plan:             activePlan,
+    multiYearCount:   renewalMultiYearCount || null,
+    committedCount:   renewalExactCount || null,  // airline: user-selected count
+    holdersToRemove:  renewalHoldersToRemove,     // airline: holder _ids to remove on activation
+    paidAt:           paymentDoc.paidAt || now,
+    activationDate:   base,
+    expiresAt:        newExpiry || null,
+    price:            paymentDoc.amountDollars || null,
+    invoiceNumber:    paymentDoc.invoiceNumber || null,
   };
 
   const update = {
@@ -395,6 +402,19 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
           'nextRenewal.price':          null,
         },
         $unset: { nextRenewalId: 1 },
+        // For immediate activations (expired plan): trim holders now.
+        // Queued activations trim via performQueuedRenewalActivation.
+        ...(renewalHoldersToRemove ? {
+          $pull: {
+            certificateHolders: {
+              _id: {
+                $in: renewalHoldersToRemove.map(id => {
+                  try { return new mongoose.Types.ObjectId(id); } catch { return id; }
+                }),
+              },
+            },
+          },
+        } : {}),
       };
 
   return Model.findByIdAndUpdate(registrationId, mongoOp, { new: true });
@@ -448,6 +468,7 @@ exports.createPaymentIntent = async (req, res) => {
       renewalMultiYearCount: bodyRenewalYears,  // optional: years user selected (Multi-Year renewal)
       renewalExactCount: bodyRenewalCount,       // optional: holder count user selected (airline renewal)
       additionalHolderCount: bodyAdditionalCount, // optional: extra holders being added (holder-upgrade)
+      renewalHoldersToRemove: bodyHoldersToRemove, // optional: holder _ids to remove on activation (airline downgrade)
     } = req.body;
 
     if (!registrationId || !registrationModel)
@@ -585,6 +606,10 @@ exports.createPaymentIntent = async (req, res) => {
     if (computedYears) metadata.renewalMultiYearCount = String(computedYears);
     // Store the RENEWAL-selected holder count for airline renewals
     if (bodyRenewalCount) metadata.renewalExactCount = String(Number(bodyRenewalCount));
+    // Store holder IDs to remove on activation (airline downgrade: user reduced count)
+    if (bodyHoldersToRemove && Array.isArray(bodyHoldersToRemove) && bodyHoldersToRemove.length) {
+      metadata.renewalHoldersToRemove = JSON.stringify(bodyHoldersToRemove);
+    }
     // Store additional holder count for holder-upgrade purpose
     if (bodyAdditionalCount) metadata.additionalHolderCount = String(Number(bodyAdditionalCount));
     // Store tier ppc so confirm/webhook can update pricePerCertificate on the record
@@ -737,6 +762,12 @@ exports.confirmPayment = async (req, res) => {
     const renewalExactCount = pi.metadata?.renewalExactCount
       ? Number(pi.metadata.renewalExactCount)
       : null;
+    let renewalHoldersToRemove = null;
+    try {
+      if (pi.metadata?.renewalHoldersToRemove) {
+        renewalHoldersToRemove = JSON.parse(pi.metadata.renewalHoldersToRemove);
+      }
+    } catch (_) { /* non-critical */ }
 
     let invoiceSnapshot;
     if (isPurposeRenewal) {
@@ -747,12 +778,18 @@ exports.confirmPayment = async (req, res) => {
       // Build snapshot as if subscription starts on renewalBase (not paidAt=now).
       // Override committedCount with the user-adjusted holder count for airlines.
       // price set to amountDollars so buildInvoiceSnapshot can derive Individual years from it.
+      // For airline renewals: use renewal-tier PPC so buildInvoiceSnapshot totalPaid
+      // matches what Stripe actually charged (not the original admin-set pricePerCertificate).
+      const renewalPpcForSnapshot = registrationModel !== 'Individual' && renewalExactCount
+        ? tierPpcForPlan(renewalPlan, Math.max(3, renewalExactCount))
+        : null;
       const renewalDocObj = {
         ...doc.toObject(),
         subscriptionPlan: renewalPlan,
         multiYearCount:   renewalYears,
         price:            amountDollars,
         ...(renewalExactCount ? { committedCount: renewalExactCount, holderCountValue: renewalExactCount } : {}),
+        ...(renewalPpcForSnapshot ? { pricePerCertificate: renewalPpcForSnapshot, pricePerCert: renewalPpcForSnapshot } : {}),
       };
       invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
     } else {
@@ -789,6 +826,7 @@ exports.confirmPayment = async (req, res) => {
       newSubscriptionPlan:    pi.metadata?.newSubscriptionPlan || null,
       renewalMultiYearCount,
       renewalExactCount,
+      renewalHoldersToRemove,
     };
 
     // Use findOneAndUpdate with upsert to prevent duplicate Payment docs under
@@ -870,7 +908,7 @@ exports.confirmPayment = async (req, res) => {
           pricePerCert: newPpc || upgradeSnapshot.pricePerCert,
         };
       }
-      await createOrUpdateInvoice({
+      const invoiceDoc = await createOrUpdateInvoice({
         registrationId,
         registrationModel,
         paymentId:      paymentDoc._id,
@@ -881,6 +919,27 @@ exports.confirmPayment = async (req, res) => {
         existingInvoiceNumber: paymentDoc.invoiceNumber,
         purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : 'payment',
       });
+
+      // For renewals: if createOrUpdateInvoice generated a different invoice number
+      // (because the preferred one was already taken), sync the canonical number back
+      // to the Payment doc, Registration nextRenewal, and Renewal collection doc.
+      if (isPurposeRenewal && invoiceDoc && invoiceDoc.invoiceNumber && invoiceDoc.invoiceNumber !== paymentDoc.invoiceNumber) {
+        const canonicalNum = invoiceDoc.invoiceNumber;
+        await Promise.all([
+          Payment.findByIdAndUpdate(paymentDoc._id, { $set: { invoiceNumber: canonicalNum } }),
+          Renewal.findOneAndUpdate({ paymentId: paymentDoc._id }, { $set: { invoiceNumber: canonicalNum } }),
+          (async () => {
+            const { doc: freshReg, Model: freshModel } = await findRegistration(registrationId, registrationModel);
+            if (freshReg && freshModel) {
+              if (freshReg.nextRenewal?.paidAt) {
+                await freshModel.findByIdAndUpdate(registrationId, { $set: { 'nextRenewal.invoiceNumber': canonicalNum } });
+              } else if (!freshReg.nextRenewal?.paidAt) {
+                await freshModel.findByIdAndUpdate(registrationId, { $set: { 'lastRenewal.invoiceNumber': canonicalNum } });
+              }
+            }
+          })(),
+        ]);
+      }
     } catch (invoiceErr) {
       console.warn('[confirmPayment] Invoice doc creation failed:', invoiceErr.message);
     }
@@ -981,6 +1040,11 @@ exports.saveInvoiceDraft = async (req, res) => {
           if (isQueuedRenewal) {
             if (paymentDoc.invoiceNumber) {
               registrationSet['nextRenewal.invoiceNumber'] = paymentDoc.invoiceNumber;
+              // Keep Renewal collection doc in sync with the canonical invoice number.
+              Renewal.findOneAndUpdate(
+                { paymentId: paymentDoc._id },
+                { $set: { invoiceNumber: paymentDoc.invoiceNumber } },
+              ).catch(() => {});
             }
           } else {
             // Admin-initiated invoice edits should sync to the active registration.
@@ -1129,6 +1193,12 @@ exports.stripeWebhook = async (req, res) => {
         ? Number(pi.metadata.renewalMultiYearCount) : null;
       const webhookRenewalCount = pi.metadata?.renewalExactCount
         ? Number(pi.metadata.renewalExactCount) : null;
+      let webhookHoldersToRemove = null;
+      try {
+        if (pi.metadata?.renewalHoldersToRemove) {
+          webhookHoldersToRemove = JSON.parse(pi.metadata.renewalHoldersToRemove);
+        }
+      } catch (_) { /* non-critical */ }
 
       let invoiceSnapshot;
       // For holder-upgrade payments we may need to update the registration
@@ -1143,12 +1213,16 @@ exports.stripeWebhook = async (req, res) => {
         const currentExpiry = doc.expirationDate ? new Date(doc.expirationDate) : null;
         const renewalBase   = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
         // price set to amountDollars so buildInvoiceSnapshot can derive Individual years from it.
+        const webhookRenewalPpc = registrationModel !== 'Individual' && webhookRenewalCount
+          ? tierPpcForPlan(renewalPlan, Math.max(3, webhookRenewalCount))
+          : null;
         const renewalDocObj = {
           ...doc.toObject(),
           subscriptionPlan: renewalPlan,
           multiYearCount:   renewalYears,
           price:            amountDollars,
           ...(webhookRenewalCount ? { committedCount: webhookRenewalCount, holderCountValue: webhookRenewalCount } : {}),
+          ...(webhookRenewalPpc ? { pricePerCertificate: webhookRenewalPpc, pricePerCert: webhookRenewalPpc } : {}),
         };
         invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
       } else if (isPurposeHolderUpgradeWebhook) {
@@ -1205,6 +1279,7 @@ exports.stripeWebhook = async (req, res) => {
         newSubscriptionPlan:  newSubscriptionPlan || null,
         renewalMultiYearCount: webhookRenewalYears,
         renewalExactCount:     webhookRenewalCount,
+        renewalHoldersToRemove: webhookHoldersToRemove,
       };
 
       let paymentDoc;
@@ -1268,7 +1343,7 @@ exports.stripeWebhook = async (req, res) => {
             pricePerCert: newPpcW || upgradeSnapshotWebhook.pricePerCert,
           };
         }
-        await createOrUpdateInvoice({
+        const webhookInvoiceDoc = await createOrUpdateInvoice({
           registrationId,
           registrationModel,
           paymentId:      paymentDoc._id,
@@ -1279,6 +1354,25 @@ exports.stripeWebhook = async (req, res) => {
           existingInvoiceNumber: paymentDoc.invoiceNumber,
           purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : 'payment',
         });
+
+        // For renewals: sync canonical invoice number back if it differs from payment doc.
+        if (isPurposeRenewal && webhookInvoiceDoc && webhookInvoiceDoc.invoiceNumber && webhookInvoiceDoc.invoiceNumber !== paymentDoc.invoiceNumber) {
+          const canonicalNumW = webhookInvoiceDoc.invoiceNumber;
+          await Promise.all([
+            Payment.findByIdAndUpdate(paymentDoc._id, { $set: { invoiceNumber: canonicalNumW } }),
+            Renewal.findOneAndUpdate({ paymentId: paymentDoc._id }, { $set: { invoiceNumber: canonicalNumW } }),
+            (async () => {
+              const { doc: freshRegW, Model: freshModelW } = await findRegistration(registrationId, registrationModel);
+              if (freshRegW && freshModelW) {
+                if (freshRegW.nextRenewal?.paidAt) {
+                  await freshModelW.findByIdAndUpdate(registrationId, { $set: { 'nextRenewal.invoiceNumber': canonicalNumW } });
+                } else {
+                  await freshModelW.findByIdAndUpdate(registrationId, { $set: { 'lastRenewal.invoiceNumber': canonicalNumW } });
+                }
+              }
+            })(),
+          ]);
+        }
       } catch (invoiceErr) {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
       }
@@ -1442,6 +1536,20 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
         ? computeExpiry(activePlan, nr.activationDate || now, nr.multiYearCount)
         : null);
 
+  // Airline: compute correct PPC and explicit totalAmount for the activated plan.
+  // findByIdAndUpdate bypasses the pre-save hook, so we must set totalAmount manually.
+  const newCommittedCount = nr.committedCount || doc.committedCount || null;
+  let newPricePerCert = doc.pricePerCertificate;
+  let computedTotalAmount = nr.price || null;
+  if (registrationModel !== 'Individual' && newCommittedCount) {
+    newPricePerCert = tierPpcForPlan(activePlan, newCommittedCount);
+    if (activePlan === 'Multiple Years Subscription Plan' && nr.multiYearCount > 1) {
+      computedTotalAmount = newPricePerCert * newCommittedCount * nr.multiYearCount;
+    } else {
+      computedTotalAmount = newPricePerCert * newCommittedCount;
+    }
+  }
+
   const update = {
     subscriptionPlan:       activePlan,
     // subscriptionDate = the renewal's activationDate (when the new plan period starts),
@@ -1461,29 +1569,48 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
     ...(registrationModel === 'Individual' && nr.price ? { price: nr.price } : {}),
     // Airline-only fields
     ...(registrationModel !== 'Individual' ? {
-      ...(nr.committedCount ? {
-        committedCount:   nr.committedCount,
-        holderCountValue: String(nr.committedCount),
-        holderCount:      holderRangeFromCount(nr.committedCount),
+      ...(newCommittedCount ? {
+        committedCount:      newCommittedCount,
+        holderCountValue:    String(newCommittedCount),
+        holderCount:         holderRangeFromCount(newCommittedCount),
+        pricePerCertificate: newPricePerCert,
       } : {}),
-      ...(nr.price ? { amountPaid: nr.price, totalAmount: nr.price } : {}),
+      ...(computedTotalAmount ? { amountPaid: computedTotalAmount, totalAmount: computedTotalAmount } : {}),
     } : {}),
   };
+
+  // Holder IDs to remove from certificateHolders array when this renewal activates.
+  const holdersToRemove = Array.isArray(nr.holdersToRemove) && nr.holdersToRemove.length
+    ? nr.holdersToRemove
+    : null;
 
   // nextRenewal is a typed subdocument — $unset leaves an empty shell.
   // Set each field to null explicitly, then $unset nextRenewalId.
   // The frontend checks nextRenewal.paidAt so nulling paidAt is sufficient,
   // but we also null the whole object for cleanliness.
-  const updatedDoc = await Model.findByIdAndUpdate(
-    doc._id,
-    {
-      $set:   { ...update, 'nextRenewal.paidAt': null, 'nextRenewal.plan': null,
-                'nextRenewal.activationDate': null, 'nextRenewal.expiresAt': null,
-                'nextRenewal.invoiceNumber': null, 'nextRenewal.price': null },
-      $unset: { nextRenewalId: 1 },
-    },
-    { new: true },
-  );
+  const mongoUpdateOp = {
+    $set:   { ...update, 'nextRenewal.paidAt': null, 'nextRenewal.plan': null,
+              'nextRenewal.activationDate': null, 'nextRenewal.expiresAt': null,
+              'nextRenewal.invoiceNumber': null, 'nextRenewal.price': null,
+              'nextRenewal.holdersToRemove': null },
+    $unset: { nextRenewalId: 1 },
+    // Remove specific certificate holder subdocs whose _id was marked for removal.
+    // $pull and $set can coexist when they target different field paths.
+    // Convert string IDs to ObjectId for proper subdocument _id matching.
+    ...(holdersToRemove ? {
+      $pull: {
+        certificateHolders: {
+          _id: {
+            $in: holdersToRemove.map(id => {
+              try { return new mongoose.Types.ObjectId(id); } catch { return id; }
+            }),
+          },
+        },
+      },
+    } : {}),
+  };
+
+  const updatedDoc = await Model.findByIdAndUpdate(doc._id, mongoUpdateOp, { new: true });
 
   // ── Send renewal activation email ─────────────────────────────────────────
   // The `lastRenewal` snapshot on the doc holds the renewal details for the email template.

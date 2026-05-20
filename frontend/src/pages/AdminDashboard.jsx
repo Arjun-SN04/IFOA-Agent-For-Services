@@ -163,6 +163,19 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
   const [savingEdit, setSavingEdit] = React.useState(false)
   const [editErr, setEditErr] = React.useState('')
 
+  // Canonical invoice number from Invoice collection — authoritative source of truth.
+  const [canonicalInvoiceNum, setCanonicalInvoiceNum] = React.useState(nr.invoiceNumber || '')
+  React.useEffect(() => {
+    if (!record._id) return
+    getInvoiceByRegistration(record._id)
+      .then(res => {
+        const docs = res.data?.data || []
+        const renewalDoc = docs.find(d => d.purpose === 'renewal')
+        if (renewalDoc?.invoiceNumber) setCanonicalInvoiceNum(renewalDoc.invoiceNumber)
+      })
+      .catch(() => {})
+  }, [record._id, nr.paidAt])
+
   const fmtInput = (v) => {
     if (!v) return ''
     const d = new Date(v)
@@ -183,7 +196,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
   const setEdit = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }))
 
   const handleActivate = async () => {
-    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n� Switch plan to: ${nrPlanLabel}\n� Set expiry to: ${fmtDate(nr.expiresAt)}\n� Use invoice: ${nr.invoiceNumber || '�'}\n\nThis cannot be undone automatically.`)) return
+    if (!window.confirm(`Activate queued plan now?\n\nThis will:\n� Switch plan to: ${nrPlanLabel}\n� Set expiry to: ${fmtDate(nr.expiresAt)}\n� Use invoice: ${canonicalInvoiceNum || '�'}\n\nThis cannot be undone automatically.`)) return
     setActivating(true)
     setActivateErr('')
     try {
@@ -366,7 +379,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
           <ViewField label="Activates On" value={fmtDate(nr.activationDate)} />
           <ViewField label={nr.plan === 'Unlimited Plan' ? 'Duration' : 'Expires On'} value={nr.plan === 'Unlimited Plan' ? 'Never (Unlimited)' : fmtDate(nr.expiresAt)} />
           <ViewField label="Amount Paid" value={fmtMoney(nr.price)} />
-          <ViewField label="Invoice #" value={nr.invoiceNumber} />
+          <ViewField label="Invoice #" value={canonicalInvoiceNum} />
         </div>
         <p className="mt-3 text-[10px] text-emerald-600 leading-relaxed">
           Current plan remains active until {fmtDateYMD(record.expirationDate)}. Queued plan activates automatically on {fmtDateYMD(nr.activationDate)}.
@@ -391,7 +404,7 @@ function triggerInvoiceDownload({ url, filename }) {
 
 
 // ─── AdminInvoicesPanel — shows all invoices for a registration ───────────────
-function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
+function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerMode = false }) {
   const [invoices, setInvoices] = React.useState(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
@@ -597,9 +610,9 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
   )
 
   return (
-    <div className="border-t border-slate-100 pt-5">
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">All Invoices</p>
+    <div className={drawerMode ? 'p-3' : 'border-t border-slate-100 pt-5'}>
+      <div className={`flex items-center ${drawerMode ? 'justify-end mb-3' : 'justify-between mb-4'}`}>
+        {!drawerMode && <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">All Invoices</p>}
         <button
           onClick={load}
           disabled={loading}
@@ -620,33 +633,48 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
       )}
 
       {visibleInvoices !== null && visibleInvoices.length > 0 && (
-        <div className="space-y-2">
-          {visibleInvoices.map((inv) => (
-            <div key={String(inv._id)} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+        <div className={`space-y-2 pr-1 ${drawerMode ? '' : 'max-h-[480px] overflow-y-auto'}`}>
+          {visibleInvoices.map((inv) => {
+            const isHolderUpgrade = inv.purpose === 'holder-upgrade' ||
+              (inv.lineItems || inv.draft?.lineItems || []).some(li =>
+                String(li.description || '').toLowerCase().includes('upgrade') ||
+                String(li.description || '').toLowerCase().includes('holder')
+              )
+            const isRenewal = inv._source === 'renewal' || inv.purpose === 'renewal' || !!inv.plan
+            const purposeLabel = inv._source === 'registration' ? 'Active Plan'
+              : inv._source === 'payment' ? 'Legacy'
+              : isHolderUpgrade ? 'Holder Upgrade'
+              : isRenewal ? 'Subscription Renewed'
+              : 'Subscription'
+            const purposeCls = inv._source === 'registration' ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
+              : isHolderUpgrade ? 'bg-violet-50 border-violet-200 text-violet-700'
+              : isRenewal ? 'bg-slate-100 border-slate-200 text-slate-600'
+              : 'bg-slate-100 border-slate-200 text-slate-600'
+            const planLabel = inv.subscriptionPlan || inv.plan || ''
+            const isActiveInvoice = record?.invoiceNumber && inv.invoiceNumber === record.invoiceNumber
+            return (
+            <div key={String(inv._id)} className={`rounded-xl border px-4 py-3 transition-all ${isActiveInvoice ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}>
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-[11px] font-bold text-slate-800">{inv.invoiceNumber || '(no number)'}</p>
-                    {inv._source === 'renewal' && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200"
-                        style={{ color: renewalStatusColor(inv.status) }}>
-                        Renewal · {inv.status || 'queued'}
-                      </span>
-                    )}
-                    {inv._source === 'payment' && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500">
-                        Legacy
-                      </span>
-                    )}
-                    {inv._source === 'registration' && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700">
-                        Active Plan
+                    <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${purposeCls}`}>
+                      {purposeLabel}
+                    </span>
+                    {isActiveInvoice && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700">
+                        Active
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{fmtInvDate(inv.createdAt)}</p>
-                  <p className="text-[10px] text-slate-400">{fmtAmt(inv.totalAmount)}</p>
-                  {inv.plan && <p className="text-[10px] text-slate-400">{inv.plan}</p>}
+                  <p className="text-[10px] text-slate-500 mt-0.5">{fmtInvDate(inv.paidAt || inv.createdAt)}</p>
+                  {planLabel && <p className="text-[10px] text-slate-400 mt-0.5">{planLabel}</p>}
+                  <p className="text-[10px] font-semibold text-slate-700 mt-0.5">{fmtAmt(
+                    inv.draft?.lineItems?.length
+                      ? inv.draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0)
+                      : inv.totalAmount
+                  )}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {hasPdf(inv) && (
@@ -679,40 +707,107 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record }) {
               </div>
 
               {editing?._id === inv._id && (
-                <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
-                  {[
-                    ['Invoice #',     'invoiceNumber'],
-                    ['Recipient Name','recipientName'],
-                    ['Company',       'recipientCompany'],
-                    ['Address',       'recipientAddress1'],
-                    ['Country',       'recipientCountry'],
-                    ['Payment Method','paymentMethod'],
-                    ['Description',   'description'],
-                    ['Quantity',      'quantity'],
-                    ['Unit Price',    'unitPrice'],
-                    ['Total Price',   'totalPrice'],
-                  ].map(([label, key]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <label className="w-28 text-[10px] font-semibold text-slate-500 flex-shrink-0">{label}</label>
-                      <input
-                        value={editForm[key] || ''}
-                        onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                        className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      />
+                <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                    {[
+                      ['Invoice #',      'invoiceNumber'],
+                      ['Recipient Name', 'recipientName'],
+                      ['Company',        'recipientCompany'],
+                      ['Payment Method', 'paymentMethod'],
+                      ['Country',        'recipientCountry'],
+                    ].map(([label, key]) => (
+                      <div key={key}>
+                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+                        <input
+                          value={editForm[key] || ''}
+                          onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Address</p>
+                    <input
+                      value={editForm.recipientAddress1 || ''}
+                      onChange={e => setEditForm(f => ({ ...f, recipientAddress1: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Description</p>
+                    <input
+                      value={editForm.description || ''}
+                      onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['Quantity',   'quantity',  1, 1],
+                      ['Unit Price', 'unitPrice', 1, 0],
+                    ].map(([label, key, step, min]) => (
+                      <div key={key}>
+                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+                        <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+                          <button
+                            type="button"
+                            onClick={() => setEditForm(f => {
+                              const next = Math.max(min, parseFloat(f[key] || 0) - step)
+                              const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
+                              const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
+                              return { ...f, [key]: String(next), totalPrice: String(q * u) }
+                            })}
+                            className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200"
+                          >−</button>
+                          <input
+                            value={editForm[key] || ''}
+                            onChange={e => setEditForm(f => {
+                              const val = e.target.value
+                              const q = key === 'quantity' ? parseFloat(val || 0) : parseFloat(f.quantity || 0)
+                              const u = key === 'unitPrice' ? parseFloat(val || 0) : parseFloat(f.unitPrice || 0)
+                              return { ...f, [key]: val, totalPrice: isNaN(q * u) ? f.totalPrice : String(q * u) }
+                            })}
+                            className="flex-1 min-w-0 text-[11px] font-semibold text-center py-1 bg-transparent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditForm(f => {
+                              const next = parseFloat(f[key] || 0) + step
+                              const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
+                              const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
+                              return { ...f, [key]: String(next), totalPrice: String(q * u) }
+                            })}
+                            className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200"
+                          >+</button>
+                        </div>
+                      </div>
+                    ))}
+                    <div>
+                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Total Price</p>
+                      <div className="flex items-center border border-emerald-200 rounded-lg overflow-hidden bg-emerald-50">
+                        <span className="pl-2 text-emerald-600 text-xs font-bold flex-shrink-0">$</span>
+                        <input
+                          value={editForm.totalPrice || ''}
+                          onChange={e => setEditForm(f => ({ ...f, totalPrice: e.target.value }))}
+                          className="flex-1 min-w-0 text-[11px] font-bold text-center py-1.5 bg-transparent focus:outline-none text-emerald-700"
+                        />
+                      </div>
                     </div>
-                  ))}
+                  </div>
                   {saveErr && <p className="text-[11px] text-red-600 font-semibold">{saveErr}</p>}
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-1.5 transition disabled:opacity-50"
+                    className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-bold text-white bg-slate-900 hover:bg-slate-700 rounded-lg px-3 py-2 transition disabled:opacity-50"
                   >
                     {saving ? 'Saving…' : 'Save Invoice'}
                   </button>
                 </div>
               )}
             </div>
-          ))}
+          )
+          })}
         </div>
       )}
     </div>
@@ -727,10 +822,10 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 gap-3 overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          className="w-full max-w-2xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
@@ -738,7 +833,10 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               <h2 className="text-lg font-extrabold text-slate-900">{fullName}</h2>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowInvoices(v => !v)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+              <button
+                onClick={() => setShowInvoices(v => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${showInvoices ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
                 All Invoices
               </button>
               <button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
@@ -749,7 +847,6 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             </div>
           </div>
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
-            {showInvoices && <AdminInvoicesPanel registrationId={record._id} registrationModel="Individual" record={record} />}
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <ViewField label="Status" value={<StatusText value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />} />
@@ -806,6 +903,28 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             <NextRenewalSection record={record} registrationModel="Individual" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
+        <AnimatePresence>
+          {showInvoices && (
+            <motion.div
+              key="inv-drawer-individual"
+              initial={{ opacity: 0, x: 40, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 40, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+              className="w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[78vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Invoice History</p>
+                  <p className="text-sm font-bold text-white truncate max-w-[180px]">{fullName}</p>
+                </div>
+                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition">✕</button>
+              </div>
+              <AdminInvoicesPanel registrationId={record._id} registrationModel="Individual" record={record} drawerMode={true} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </AnimatePresence>
   )
@@ -818,10 +937,10 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 gap-3 overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          className="w-full max-w-3xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
@@ -829,7 +948,10 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               <h2 className="text-lg font-extrabold text-slate-900">{record.airlineName || 'Airline'}</h2>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowInvoices(v => !v)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+              <button
+                onClick={() => setShowInvoices(v => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${showInvoices ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+              >
                 All Invoices
               </button>
               <button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
@@ -840,7 +962,6 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             </div>
           </div>
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
-            {showInvoices && <AdminInvoicesPanel registrationId={record._id} registrationModel="Airlines" record={record} />}
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <ViewField label="Status" value={<StatusText value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />} />
@@ -910,6 +1031,28 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             <NextRenewalSection record={record} registrationModel="Airlines" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
+        <AnimatePresence>
+          {showInvoices && (
+            <motion.div
+              key="inv-drawer-airline"
+              initial={{ opacity: 0, x: 40, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 40, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+              className="w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[78vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Invoice History</p>
+                  <p className="text-sm font-bold text-white truncate max-w-[180px]">{record.airlineName || 'Airline'}</p>
+                </div>
+                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition">✕</button>
+              </div>
+              <AdminInvoicesPanel registrationId={record._id} registrationModel="Airlines" record={record} drawerMode={true} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </AnimatePresence>
   )
@@ -1088,9 +1231,30 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0,10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
                 <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0,10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
                 <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
-                <Field label="Exact Holder Count"><input className={inputCls} type="number" min="1" value={form.holderCountValue || ''} onChange={e => set('holderCountValue', e.target.value)} /></Field>
-                <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.pricePerCertificate ?? form.pricePerCert ?? ''} onChange={e => set('pricePerCertificate', parseFloat(e.target.value))} /></Field>
-                <Field label="Total Fees (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.totalServiceFees ?? form.totalAmount ?? ''} onChange={e => set('totalServiceFees', parseFloat(e.target.value))} /></Field>
+                <Field label="Exact Holder Count">
+                  <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+                    <button type="button"
+                      onClick={() => setForm(p => { const c = Math.max(1, Number(p.holderCountValue || 1) - 1); return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                      className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200">−</button>
+                    <input className="flex-1 min-w-0 text-xs text-center py-1.5 bg-transparent focus:outline-none" type="number" min="1"
+                      value={form.holderCountValue || ''}
+                      onChange={e => setForm(p => { const c = parseFloat(e.target.value) || 0; return { ...p, holderCountValue: e.target.value, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })} />
+                    <button type="button"
+                      onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                      className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
+                  </div>
+                </Field>
+                <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
+                  value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
+                  onChange={e => setForm(p => { const price = parseFloat(e.target.value) || 0; const count = Number(p.committedCount ?? p.holderCountValue) || 0; return { ...p, pricePerCertificate: price, pricePerCert: price, totalServiceFees: count * price } })} /></Field>
+                <Field label="Total Amount (USD)">
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
+                    <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0"
+                      value={form.totalServiceFees ?? form.totalAmount ?? ''}
+                      onChange={e => set('totalServiceFees', parseFloat(e.target.value))} />
+                  </div>
+                </Field>
               </div>
             </div>
             <div><SectionHead label="Airline / Operator" />
@@ -1221,6 +1385,10 @@ async function generateIFOAInvoicePDF(inv) {
     const w = font.widthOfTextAtSize(String(str ?? ''), size)
     page.drawText(String(str ?? ''), { x: rx - w, y, size, font, color })
   }
+  const txtC = (str, cx, y, { size = 9, font = fontReg, color = DARK } = {}) => {
+    const w = font.widthOfTextAtSize(String(str ?? ''), size)
+    page.drawText(String(str ?? ''), { x: cx - w / 2, y, size, font, color })
+  }
   const line = (x1, y1, x2, y2, color = BORDER, thickness = 0.5) =>
     page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color })
   const rect = (x, y, w, h, color) =>
@@ -1302,15 +1470,24 @@ async function generateIFOAInvoicePDF(inv) {
   txt('Thank you for your Business. Your invoice is as follows:', ML, Y, { size: 9 })
   Y -= 28
 
-  const C = { pos: ML, desc: ML + 28, qtyR: ML + W - 160, unitR: ML + W - 70, total: ML + W }
+  const C = {
+    pos:    ML,
+    desc:   ML + 28,
+    qtyR:   ML + W - 160,
+    qtyC:   ML + W - 175,
+    unitR:  ML + W - 70,
+    unitC:  ML + W - 115,
+    total:  ML + W,
+    totalC: ML + W - 35,
+  }
   const TH_Y = Y
   const TH_H = 16
   rect(ML, TH_Y - TH_H + 4, W, TH_H, LGRAY)
-  txt('Pos.',          C.pos,  TH_Y - 8, { size: 8, font: fontBold })
-  txt('Description',  C.desc, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Quantity',    C.qtyR, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Unit Price',  C.unitR, TH_Y - 8, { size: 8, font: fontBold })
-  txtR('Total Price USD', C.total, TH_Y - 8, { size: 8, font: fontBold })
+  txt('Pos.',          C.pos,   TH_Y - 8, { size: 8, font: fontBold })
+  txt('Description',  C.desc,  TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Quantity',    C.qtyC,  TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Unit Price',  C.unitC, TH_Y - 8, { size: 8, font: fontBold })
+  txtC('Total Price USD', C.totalC, TH_Y - 8, { size: 8, font: fontBold })
   Y = TH_Y - TH_H - 2
   line(ML, Y, ML + W, Y, BORDER, 0.4)
   Y -= 12
@@ -1320,9 +1497,9 @@ async function generateIFOAInvoicePDF(inv) {
     const rowY = Y
     txt(String(i + 1), C.pos, rowY, { size: 9 })
     txt(item.description, C.desc, rowY, { size: 9, maxWidth: C.qtyR - C.desc - 30 })
-    txtR(String(item.quantity), C.qtyR, rowY, { size: 9 })
-    txtR(fmtM(item.unitPrice), C.unitR, rowY, { size: 9 })
-    txtR(fmtM(item.totalPrice), C.total, rowY, { size: 9 })
+    txtC(String(item.quantity), C.qtyC, rowY, { size: 9 })
+    txtC(fmtM(item.unitPrice), C.unitC, rowY, { size: 9 })
+    txtC(fmtM(item.totalPrice), C.totalC, rowY, { size: 9 })
     Y -= 18
   })
 
@@ -1332,7 +1509,7 @@ async function generateIFOAInvoicePDF(inv) {
 
   const totalAmt = items.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0)
   txt('Invoice Sum Tax-Exempt', C.desc, Y, { size: 9, font: fontBold })
-  txtR(fmtM(totalAmt), C.total, Y, { size: 9, font: fontBold })
+  txtC(fmtM(totalAmt), C.totalC, Y, { size: 9, font: fontBold })
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 30
@@ -2064,7 +2241,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 text-xs font-black flex items-center justify-center flex-shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-black flex items-center justify-center flex-shrink-0">
                           {initials}
                         </div>
                         <div className="min-w-0">
@@ -2315,11 +2492,14 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                     <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs font-medium text-slate-700">{planLabel(primary.subscriptionPlan)}</span></td>
                     <td className="px-4 py-4">
-                      <div className="flex flex-col gap-1 items-center">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
-                          {primary.certificateHolders?.length || 0}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(primary)}</span>
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-md bg-slate-900 text-white text-[11px] font-bold px-1.5">
+                            {primary.holderCountValue || primary.certificateHolders?.length || 0}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">holders</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{fmtAirlineTotal(primary)}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">{primary.subscriptionDate ? fmtDateMDY(primary.subscriptionDate) : <span className="text-slate-300">—</span>}</td>

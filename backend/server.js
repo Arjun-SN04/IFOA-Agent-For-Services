@@ -6,7 +6,7 @@ const path       = require('path');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
 
-dotenv.config();
+dotenv.config({ override: true });
 
 // ── Fail fast if required env vars are missing ────────────────────────────────
 if (!process.env.MONGO_URI)   throw new Error('MONGO_URI env var is required');

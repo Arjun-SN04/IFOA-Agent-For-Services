@@ -48,6 +48,9 @@ const RenewalSchema = new mongoose.Schema({
     index: true,
   },
 
+  // Holder IDs to remove when this renewal activates (airline downgrade scenario)
+  holdersToRemove: { type: [String], default: null },
+
   // Set when admin force-activates via POST /api/payments/admin/activate-renewal
   activatedAt:   { type: Date, default: null },
   activatedByAdmin: { type: Boolean, default: false },

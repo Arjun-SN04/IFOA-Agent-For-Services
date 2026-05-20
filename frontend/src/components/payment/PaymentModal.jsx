@@ -474,10 +474,11 @@ export function serverPaymentToInvoice(paymentDoc) {
 
 // ── Wrapper: fetches clientSecret then mounts Elements ────────────────────────
 // newSubscriptionPlan: optional — pass when user changes plan at renewal time
-export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount }) {
-  const [clientSecret, setClientSecret] = useState(null)
-  const [fetchError,   setFetchError]   = useState(null)
-  const [loading,      setLoading]      = useState(true)
+export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount, renewalHoldersToRemove }) {
+  const [clientSecret,  setClientSecret]  = useState(null)
+  const [fetchError,    setFetchError]    = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [backendAmount, setBackendAmount] = useState(null)
 
   // Lock background page scroll without shifting viewport position.
   // This page uses its own fixed-height scroll container, so forcing
@@ -509,6 +510,8 @@ export default function PaymentModal({ registrationId, registrationModel, amount
         if (renewalMultiYearCount) body.renewalMultiYearCount = renewalMultiYearCount
         // Forward user-adjusted holder count for airline renewals
         if (renewalExactCount) body.renewalExactCount = renewalExactCount
+        // Forward holder IDs to remove on activation (airline downgrade)
+        if (renewalHoldersToRemove && renewalHoldersToRemove.length) body.renewalHoldersToRemove = renewalHoldersToRemove
         // Forward additional holder count for holder-upgrade purchases
         if (additionalHolderCount) body.additionalHolderCount = additionalHolderCount
 
@@ -528,6 +531,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
         }
         if (!res.ok || !json.success) throw new Error(json.message || 'Could not create payment intent')
         setClientSecret(json.clientSecret)
+        if (json.amount) setBackendAmount(json.amount)
       } catch (err) {
         setFetchError(err.message)
       } finally {
@@ -589,7 +593,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
                 clientSecret={clientSecret}
                 registrationId={registrationId}
                 registrationModel={registrationModel}
-                amount={amount}
+                amount={backendAmount ?? amount}
                 subscriptionData={subscriptionData}
                 purpose={purpose || 'payment'}
                 onSuccess={onSuccess}

@@ -210,6 +210,8 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
         ...draft,
         invoiceNumber: draft.invoiceNumber || invoiceNumber || invoice.invoiceNumber,
       };
+      // Mixed-type fields require explicit markModified so Mongoose detects the change.
+      invoice.markModified('draft');
     }
 
     invoice.adminGenerated = true;
