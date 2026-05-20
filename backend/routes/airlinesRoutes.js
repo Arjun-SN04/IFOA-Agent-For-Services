@@ -2,6 +2,10 @@ const express = require('express');
 const multer  = require('multer');
 const router  = express.Router();
 const authMiddleware = require('../middleware/auth');
+const Airlines    = require('../models/Airlines');
+const Individual  = require('../models/Individual');
+const User        = require('../models/User');
+const HolderEvent = require('../models/HolderEvent');
 const {
   createAirlinesSubscription,
   getAllAirlinesSubscriptions,
@@ -79,6 +83,163 @@ router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAi
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 // renew — owner or admin (additional ownership check inside controller)
 router.post('/:id/renew',                   authMiddleware, requireOwnership, renewAirlinesSubscription);
+
+// ── Holder management (owner or admin) ───────────────────────────────────────
+
+// DELETE /:id/holders/:holderId — remove a single holder from the airline
+router.delete('/:id/holders/:holderId', authMiddleware, requireOwnership, async (req, res) => {
+  try {
+    const airline = await Airlines.findById(req.params.id);
+    if (!airline) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const holder = airline.certificateHolders.id(req.params.holderId);
+    if (!holder) return res.status(404).json({ success: false, message: 'Holder not found.' });
+
+    const snapshot = holder.toObject();
+
+    // Remove the holder subdoc
+    airline.certificateHolders.pull({ _id: req.params.holderId });
+    await airline.save();
+
+    // Persist the event so admin gets notified
+    await HolderEvent.create({
+      type:           'holder-removed',
+      airlineId:      airline._id,
+      airlineName:    airline.airlineName || `${airline.firstName} ${airline.lastName}`.trim(),
+      holderName:     snapshot.fullName || '',
+      holderEmail:    snapshot.email    || '',
+      holderSnapshot: snapshot,
+      status:         'pending-contact',
+      performedBy:    req.user.role === 'admin' ? 'admin' : 'airline',
+    });
+
+    return res.json({ success: true, data: airline });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /:id/holders/:holderId/convert — convert holder directly to an Individual account
+router.post('/:id/holders/:holderId/convert', authMiddleware, requireOwnership, async (req, res) => {
+  try {
+    const airline = await Airlines.findById(req.params.id);
+    if (!airline) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const holder = airline.certificateHolders.id(req.params.holderId);
+    if (!holder) return res.status(404).json({ success: false, message: 'Holder not found.' });
+
+    const snapshot = holder.toObject();
+
+    const holderEmail = (snapshot.email || '').toLowerCase().trim();
+    if (!holderEmail) {
+      return res.status(400).json({ success: false, message: 'Holder has no email address. Cannot create an account.' });
+    }
+
+    // Check no existing user with this email
+    const existing = await User.findOne({ email: holderEmail });
+    if (existing) {
+      return res.status(409).json({ success: false, message: `An account already exists for ${holderEmail}.` });
+    }
+
+    // Build name parts from fullName (e.g. "John Smith" → first="John" last="Smith")
+    const nameParts = (snapshot.fullName || '').trim().split(/\s+/);
+    const firstName = nameParts[0] || 'Holder';
+    const lastName  = nameParts.slice(1).join(' ') || airline.airlineName || 'Member';
+
+    // Password = fullName lowercased, no spaces: "John Smith" → "johnsmith"
+    const rawPassword = (snapshot.fullName || 'holder').toLowerCase().replace(/\s+/g, '');
+
+    // Map holder certificate type to Individual enum (same values, direct mapping)
+    const primaryCertificate = snapshot.certificateType || 'Part 61 - Pilot';
+    const primaryAirmanCertificate = snapshot.certificateStatus === 'NEW' ? 'NEW' : 'EXISTING';
+
+    // keepSubscription=true  → copy airline plan/dates, mark Active (airline already paid)
+    // keepSubscription=false → create pending account only, no active plan, holder pays independently
+    const keepSubscription = req.body.keepSubscription !== false; // default true
+
+    const INDIV_PRICE = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299, 'Multiple Years Subscription Plan': 55 };
+    const individualPrice = INDIV_PRICE[airline.subscriptionPlan] || 69;
+
+    const individual = await Individual.create({
+      firstName,
+      lastName,
+      email:          holderEmail,
+      phone:          airline.phone || '0000000000',
+      subscriptionPlan:  airline.subscriptionPlan,
+      multiYearCount:    airline.multiYearCount || null,
+      price:             keepSubscription ? individualPrice : 0,
+      subscriptionDate:  keepSubscription ? (airline.subscriptionDate || null) : null,
+      expirationDate:    keepSubscription ? (airline.expirationDate   || null) : null,
+      status:            keepSubscription ? 'Active'  : 'Pending',
+      paymentStatus:     keepSubscription ? 'paid'    : 'pending',
+      isPaid:            keepSubscription,
+      isFormCompleted:   true,
+      // Never auto-generate invoice — airline already paid; no new charge regardless of keepSubscription
+      invoiceGenerated:  false,
+      primaryCertificate,
+      primaryAirmanCertificate,
+      faaCertificateNumber:          snapshot.faaCertificateNumber  || '',
+      iacraTrackingNumber:           snapshot.iacraFtnNumber        || '',
+      hasSecondaryCertificate:       snapshot.hasSecondaryCertificate || false,
+      secondaryCertificate:          snapshot.secondaryCertificateType         || '',
+      secondaryFaaCertificateNumber: snapshot.secondaryFaaCertificateNumber    || '',
+      secondaryIacraTrackingNumber:  snapshot.secondaryIacraFtnNumber          || '',
+      dateOfBirth:      snapshot.dateOfBirth || null,
+      agreedToTerms:    true,
+      convertedFromAirlineId:   airline._id,
+      convertedFromAirlineName: airline.airlineName || `${airline.firstName} ${airline.lastName}`.trim(),
+    });
+
+    // Create login account for the converted holder
+    await User.create({
+      email:              holderEmail,
+      password:           rawPassword,
+      role:               'individual',
+      firstName,
+      lastName,
+      registrationId:     individual._id,
+      registrationModel:  'Individual',
+      mustChangePassword: true, // force password change on first login
+      subscriptionIds:    [individual._id],
+    });
+
+    // Remove holder from airline
+    airline.certificateHolders.pull({ _id: req.params.holderId });
+    await airline.save();
+
+    // Persist event for admin visibility
+    const event = await HolderEvent.create({
+      type:                  'holder-converted',
+      airlineId:             airline._id,
+      airlineName:           airline.airlineName || `${airline.firstName} ${airline.lastName}`.trim(),
+      holderName:            snapshot.fullName || '',
+      holderEmail:           holderEmail,
+      holderSnapshot:        snapshot,
+      convertedIndividualId: individual._id,
+      status:                'converted',
+      performedBy:           req.user.role === 'admin' ? 'admin' : 'airline',
+      adminNotes:            keepSubscription
+        ? 'Airline kept subscription active — plan and dates carried over from airline.'
+        : 'Airline cancelled subscription — individual account created without active plan.',
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        airline,
+        individual,
+        event,
+        keepSubscription,
+        credentials: { email: holderEmail, password: rawPassword },
+      },
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ success: false, message: 'An account already exists for this email.' });
+    }
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/',    authMiddleware, requireAdmin,    getAllAirlinesSubscriptions);

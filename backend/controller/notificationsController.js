@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Airlines = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
 const Individual = require('../models/Individual');
+const HolderEvent = require('../models/HolderEvent');
 
 function daysUntil(dateVal) {
   if (!dateVal) return null;
@@ -196,9 +197,42 @@ async function getAdminNotifications(limit) {
     };
   });
 
+  // 7. Holder events (removed / converted) — always show unresolved ones
+  const holderEvents = await HolderEvent.find({})
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  const holderEventNotifs = holderEvents.map((ev) => {
+    const isRemoved   = ev.type === 'holder-removed';
+    const isConverted = ev.type === 'holder-converted';
+    const pending     = isRemoved && ev.status === 'pending-contact';
+
+    return {
+      id:          `holder-event-${ev._id}`,
+      type:        ev.type,
+      title:       isRemoved
+        ? (pending ? 'Holder Removed — Contact Required' : 'Holder Removed')
+        : 'Holder Converted to Individual',
+      message:     isRemoved
+        ? `${ev.airlineName} removed holder ${ev.holderName}${ev.holderEmail ? ` (${ev.holderEmail})` : ''}. ${pending ? 'Contact them regarding continued subscription.' : `Status: ${ev.status}.`}`
+        : `${ev.airlineName} converted holder ${ev.holderName}${ev.holderEmail ? ` (${ev.holderEmail})` : ''} to an Individual account.`,
+      createdAt:   toIso(ev.createdAt),
+      severity:    pending ? 'high' : (isConverted ? 'success' : 'info'),
+      link:        '/admin/airlines',
+      entityId:    String(ev.airlineId),
+      holderEventId: String(ev._id),
+      holderEventStatus: ev.status,
+      holderEmail:   ev.holderEmail,
+      holderName:    ev.holderName,
+      convertedIndividualId: ev.convertedIndividualId ? String(ev.convertedIndividualId) : null,
+    };
+  });
+
   // Merge: wire requests always first, then by recency
   const all = [
     ...wireNotifs,
+    ...holderEventNotifs,
     ...newAirlineNotifs,
     ...newIndividualNotifs,
     ...paidAirlineNotifs,
@@ -311,6 +345,30 @@ async function getAirlineNotifications(user, limit) {
       });
     }
   });
+
+  // Holder events for this airline — show converted notifications so airline is informed
+  if (ids.length > 0) {
+    const airlineHolderEvents = await HolderEvent.find({
+      airlineId: { $in: ids },
+      type: 'holder-converted',
+      performedBy: 'admin', // only events where admin did the conversion (not airline-initiated)
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    for (const ev of airlineHolderEvents) {
+      out.push({
+        id:       `airline-holder-converted-${ev._id}`,
+        type:     'holder-converted-by-admin',
+        title:    'Holder Converted to Individual',
+        message:  `${ev.holderName}${ev.holderEmail ? ` (${ev.holderEmail})` : ''} has been converted to an individual subscriber and now has their own account.`,
+        createdAt: toIso(ev.createdAt),
+        severity:  'info',
+        link:      '/dashboard/subscription',
+      });
+    }
+  }
 
   return sortByCreatedDesc(out).slice(0, limit);
 }

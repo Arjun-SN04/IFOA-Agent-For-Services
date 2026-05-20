@@ -9,6 +9,101 @@ import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
 import { getAirlineTotal } from '../../utils/airlineTotal'
+import PhoneInputLib from 'react-phone-input-2'
+import 'react-phone-input-2/lib/style.css'
+const PhoneInput = PhoneInputLib.default || PhoneInputLib
+
+// ── Shared country data + dropdown (mirrors Step1PersonalInfo) ────────────────
+const COUNTRY_TO_ISO2 = {
+  'Afghanistan':'af','Albania':'al','Algeria':'dz','American Samoa':'as','Andorra':'ad',
+  'Angola':'ao','Anguilla':'ai','Antigua and Barbuda':'ag','Argentina':'ar','Armenia':'am',
+  'Aruba':'aw','Australia':'au','Austria':'at','Azerbaijan':'az','Bahamas':'bs',
+  'Bahrain':'bh','Bangladesh':'bd','Barbados':'bb','Belarus':'by','Belgium':'be',
+  'Belize':'bz','Benin':'bj','Bermuda':'bm','Bhutan':'bt','Bolivia':'bo',
+  'Bosnia and Herzegovina':'ba','Botswana':'bw','Brazil':'br','Brunei':'bn','Bulgaria':'bg',
+  'Burkina Faso':'bf','Burundi':'bi','Cabo Verde':'cv','Cambodia':'kh','Cameroon':'cm',
+  'Canada':'ca','Cayman Islands':'ky','Central African Republic':'cf','Chad':'td','Chile':'cl',
+  'China':'cn','Colombia':'co','Comoros':'km','Congo':'cg','Costa Rica':'cr',
+  'Croatia':'hr','Cuba':'cu','Cyprus':'cy','Czech Republic':'cz','Denmark':'dk',
+  'Dominican Republic':'do','Ecuador':'ec','Egypt':'eg','El Salvador':'sv','Eritrea':'er',
+  'Estonia':'ee','Ethiopia':'et','Finland':'fi','France':'fr','Germany':'de',
+  'Ghana':'gh','Greece':'gr','Guatemala':'gt','Haiti':'ht','Honduras':'hn',
+  'Hong Kong':'hk','Hungary':'hu','Iceland':'is','India':'in','Indonesia':'id',
+  'Iraq':'iq','Ireland':'ie','Israel':'il','Italy':'it','Jamaica':'jm',
+  'Japan':'jp','Jordan':'jo','Kazakhstan':'kz','Kenya':'ke','Korea (Republic of)':'kr',
+  'Kuwait':'kw','Kyrgyzstan':'kg','Latvia':'lv','Lebanon':'lb','Libya':'ly',
+  'Lithuania':'lt','Luxembourg':'lu','Malaysia':'my','Maldives':'mv','Mali':'ml',
+  'Malta':'mt','Mexico':'mx','Moldova':'md','Monaco':'mc','Mongolia':'mn',
+  'Morocco':'ma','Mozambique':'mz','Myanmar':'mm','Nepal':'np','Netherlands':'nl',
+  'New Zealand':'nz','Nicaragua':'ni','Nigeria':'ng','Norway':'no','Oman':'om',
+  'Pakistan':'pk','Palestine':'ps','Panama':'pa','Paraguay':'py','Peru':'pe',
+  'Philippines':'ph','Poland':'pl','Portugal':'pt','Puerto Rico':'pr','Qatar':'qa',
+  'Romania':'ro','Russian Federation':'ru','Rwanda':'rw','Saudi Arabia':'sa','Senegal':'sn',
+  'Serbia':'rs','Singapore':'sg','Slovakia':'sk','Slovenia':'si','Somalia':'so',
+  'South Africa':'za','Spain':'es','Sri Lanka':'lk','Sudan':'sd','Sweden':'se',
+  'Switzerland':'ch','Syria':'sy','Taiwan':'tw','Tanzania':'tz','Thailand':'th',
+  'Tunisia':'tn','Turkey':'tr','Uganda':'ug','Ukraine':'ua','United Arab Emirates':'ae',
+  'United Kingdom':'gb','United States of America':'us','Uruguay':'uy','Uzbekistan':'uz',
+  'Venezuela':'ve','Vietnam':'vn','Yemen':'ye','Zambia':'zm','Zimbabwe':'zw',
+}
+
+const COUNTRY_LIST = [
+  'Afghanistan','Albania','Algeria','American Samoa','Andorra','Angola','Anguilla','Antarctica',
+  'Antigua and Barbuda','Argentina','Armenia','Aruba','Australia','Austria','Azerbaijan','Bahamas',
+  'Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bermuda','Bhutan',
+  'Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi',
+  'Cabo Verde','Cambodia','Cameroon','Canada','Cayman Islands','Central African Republic','Chad',
+  'Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus',
+  'Czech Republic','Denmark','Dominican Republic','Ecuador','Egypt','El Salvador','Eritrea',
+  'Estonia','Ethiopia','Finland','France','Germany','Ghana','Greece','Guatemala','Haiti',
+  'Honduras','Hong Kong','Hungary','Iceland','India','Indonesia','Iraq','Ireland','Israel',
+  'Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Korea (Republic of)','Kuwait',
+  'Kyrgyzstan','Latvia','Lebanon','Libya','Lithuania','Luxembourg','Malaysia','Maldives','Mali',
+  'Malta','Mexico','Moldova','Monaco','Mongolia','Morocco','Mozambique','Myanmar','Nepal',
+  'Netherlands','New Zealand','Nicaragua','Nigeria','Norway','Oman','Pakistan','Palestine',
+  'Panama','Paraguay','Peru','Philippines','Poland','Portugal','Puerto Rico','Qatar','Romania',
+  'Russian Federation','Rwanda','Saudi Arabia','Senegal','Serbia','Singapore','Slovakia','Slovenia',
+  'Somalia','South Africa','Spain','Sri Lanka','Sudan','Sweden','Switzerland','Syria','Taiwan',
+  'Tanzania','Thailand','Tunisia','Turkey','Uganda','Ukraine','United Arab Emirates',
+  'United Kingdom','United States of America','Uruguay','Uzbekistan','Venezuela','Vietnam',
+  'Yemen','Zambia','Zimbabwe',
+]
+
+function EditCountrySelect({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const filtered = COUNTRY_LIST.filter(c => c.toLowerCase().includes(search.toLowerCase()))
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => { setOpen(v => !v); setSearch('') }}
+        className={`w-full text-left px-3 py-2 border rounded-lg text-sm bg-white outline-none transition flex items-center justify-between ${
+          open ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-200 hover:border-slate-300'
+        } ${value ? 'text-slate-900' : 'text-slate-400'}`}>
+        <span>{value || '— Select country —'}</span>
+        <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-400" />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-400">No results</div>}
+            {filtered.map(c => (
+              <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
+                className={`px-4 py-2 text-sm cursor-pointer transition-colors ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}>
+                {c}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const EMPTY_HOLDER = {
   fullName: '', dateOfBirth: '', certificateType: '',
@@ -111,6 +206,12 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   const [error, setError] = useState('')
   const [limitWarning, setLimitWarning] = useState('')
   const modalRef = useRef(null)
+
+  // Phone country flag — init from existing country value
+  const [phoneCountry, setPhoneCountry] = useState(() => {
+    const existing = sub.country || ''
+    return COUNTRY_TO_ISO2[existing] || 'us'
+  })
 
   // Pre-payment count state (airline only)
   const [exactCount, setExactCount] = useState(Number(sub.holderCountValue || sub.committedCount || sub.certificateHolders?.length || 1))
@@ -482,7 +583,18 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number</label>
-                    <input className={inp} placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                    <PhoneInput
+                      country={phoneCountry}
+                      value={form.phone}
+                      onChange={(phone, countryData) => {
+                        setField('phone', phone)
+                        if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                      }}
+                      enableSearch
+                      searchPlaceholder="Search country..."
+                      preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                      dropdownStyle={{ bottom: '100%', top: 'auto' }}
+                    />
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
@@ -517,7 +629,14 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
-                    <input className={inp} placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                    <EditCountrySelect
+                      value={form.country}
+                      onChange={(val) => {
+                        setField('country', val)
+                        const iso2 = COUNTRY_TO_ISO2[val]
+                        if (iso2) setPhoneCountry(iso2)
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -680,7 +799,18 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Phone Number <span className="text-red-400">*</span></label>
-                    <input className={inp} placeholder="+1 555 000 0000" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+                    <PhoneInput
+                      country={phoneCountry}
+                      value={form.phone}
+                      onChange={(phone, countryData) => {
+                        setField('phone', phone)
+                        if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                      }}
+                      enableSearch
+                      searchPlaceholder="Search country..."
+                      preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                      dropdownStyle={{ bottom: '100%', top: 'auto' }}
+                    />
                   </div>
                 </div>
               </div>
@@ -707,7 +837,14 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</label>
-                    <input className={inp} placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} />
+                    <EditCountrySelect
+                      value={form.country}
+                      onChange={(val) => {
+                        setField('country', val)
+                        const iso2 = COUNTRY_TO_ISO2[val]
+                        if (iso2) setPhoneCountry(iso2)
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -1843,6 +1980,13 @@ export default function SubscriptionPage() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
+  // Re-fetch when a holder action (remove/convert) completes in a child SubscriptionCard
+  useEffect(() => {
+    const onRefresh = () => { invalidate(`subs_${user?.id || user?.email}`); setRefreshKey(k => k + 1) }
+    window.addEventListener('ifoa-subscription-refresh', onRefresh)
+    return () => window.removeEventListener('ifoa-subscription-refresh', onRefresh)
+  }, [user, invalidate])
+
   // ── Auto-activate any queued renewals whose activationDate has passed ─────────
   const autoActivateAttempted = useState(() => new Set())[0]
   useEffect(() => {
@@ -2240,6 +2384,53 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
 
   const [cachedInvoiceDocs, setCachedInvoiceDocs] = useState(null)
 
+  // Holder action state
+  const [holderAction, setHolderAction]       = useState(null)   // { holder, holderId, action: 'remove'|'convert' }
+  const [holderActLoading, setHolderActLoading] = useState(false)
+  const [holderActError, setHolderActError]   = useState('')
+  const [holderCredentials, setHolderCredentials] = useState(null) // { email, password, keepSubscription } shown after convert
+  const [convertKeepSub, setConvertKeepSub]   = useState(true)   // true = keep active, false = cancel
+
+  const closeHolderModal = () => { setHolderAction(null); setHolderActError(''); setConvertKeepSub(true) }
+
+  const handleHolderRemove = async () => {
+    if (!holderAction) return
+    setHolderActLoading(true); setHolderActError('')
+    try {
+      await axios.delete(
+        `${BASE_URL}/airlines/${s._id}/holders/${holderAction.holderId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      closeHolderModal()
+      // Trigger re-fetch by bumping refreshKey via parent — signal via window event
+      window.dispatchEvent(new Event('ifoa-subscription-refresh'))
+    } catch (err) {
+      setHolderActError(err.response?.data?.message || 'Failed to remove holder.')
+    } finally {
+      setHolderActLoading(false)
+    }
+  }
+
+  const handleHolderConvert = async () => {
+    if (!holderAction) return
+    setHolderActLoading(true); setHolderActError('')
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/airlines/${s._id}/holders/${holderAction.holderId}/convert`,
+        { keepSubscription: convertKeepSub },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = res.data?.data || {}
+      setHolderCredentials({ ...(data.credentials || {}), keepSubscription: data.keepSubscription !== false })
+      closeHolderModal()
+      window.dispatchEvent(new Event('ifoa-subscription-refresh'))
+    } catch (err) {
+      setHolderActError(err.response?.data?.message || 'Failed to convert holder.')
+    } finally {
+      setHolderActLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!s._id || !token) return
     axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
@@ -2578,14 +2769,35 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-3">Certificate Holders</p>
                   <div className="space-y-2">
                     {s.certificateHolders.map((h, i) => (
-                      <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold text-slate-900">{h.fullName}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{h.certificateType}</p>
-                          {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
-                          {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
+                      <div key={h._id || i} className="rounded-xl border border-slate-100 bg-slate-50 px-3 sm:px-4 py-3 flex flex-col gap-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{h.fullName}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{h.certificateType}</p>
+                            {h.faaCertificateNumber && <p className="text-xs text-slate-400">FAA #: {h.faaCertificateNumber}</p>}
+                            {h.iacraFtnNumber && <p className="text-xs text-slate-400">FTN: {h.iacraFtnNumber}</p>}
+                            {h.email && <p className="text-xs text-slate-400">{h.email}</p>}
+                          </div>
+                          <span className='text-[10px] font-bold uppercase tracking-widest flex-shrink-0 self-start mt-0.5' style={{ color: h.certificateStatus === 'EXISTING' ? '#047857' : '#64748b' }}>{h.certificateStatus}</span>
                         </div>
-                        <span className='text-[10px] font-bold uppercase tracking-widest flex-shrink-0 self-start' style={{ color: h.certificateStatus === 'EXISTING' ? '#047857' : '#64748b' }}>{h.certificateStatus}</span>
+                        {active && h._id && (
+                          <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
+                            <button
+                              onClick={() => setHolderAction({ holder: h, holderId: h._id, action: 'convert' })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                              Convert to Individual
+                            </button>
+                            <button
+                              onClick={() => setHolderAction({ holder: h, holderId: h._id, action: 'remove' })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-500 hover:border-red-200 hover:text-red-600 hover:bg-red-50 transition"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              Remove Holder
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2734,6 +2946,146 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
           </div>
         )
       })()}
+
+      {/* ── Holder Remove Confirm Modal ─────────────────────────────────── */}
+      {holderAction?.action === 'remove' && (
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-0.5">Remove Holder</p>
+              <h2 className="text-base font-extrabold text-slate-900">Remove {holderAction.holder.fullName}?</h2>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                This will remove <strong>{holderAction.holder.fullName}</strong> from your airline subscription. Their access to the Agent for Service will be revoked.
+              </p>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs text-amber-700 font-semibold">IFOA will contact the holder regarding continuing their subscription individually.</p>
+              </div>
+              {holderActError && <p className="text-xs text-red-600 font-semibold">{holderActError}</p>}
+            </div>
+            <div className="px-6 pb-5 flex gap-2.5">
+              <button onClick={closeHolderModal} disabled={holderActLoading}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleHolderRemove} disabled={holderActLoading}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition disabled:opacity-60">
+                {holderActLoading ? 'Removing…' : 'Remove Holder'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Holder Convert Confirm Modal ─────────────────────────────────── */}
+      {holderAction?.action === 'convert' && (
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Convert to Individual</p>
+              <h2 className="text-base font-extrabold text-slate-900">Convert {holderAction.holder.fullName}?</h2>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                <strong>{holderAction.holder.fullName}</strong> will be removed from your airline plan and given their own login account.
+              </p>
+
+              {/* Subscription option */}
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Subscription after conversion:</p>
+              <div className="space-y-2">
+                <button type="button" onClick={() => setConvertKeepSub(true)}
+                  className={`w-full text-left rounded-xl border px-4 py-3 transition ${convertKeepSub ? 'border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${convertKeepSub ? 'border-emerald-500' : 'border-slate-300'}`}>
+                      {convertKeepSub && <div className="w-2 h-2 rounded-full bg-emerald-500" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Keep subscription active</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Current plan, start date, and expiry are carried over. No new payment required — already covered.</p>
+                    </div>
+                  </div>
+                </button>
+                <button type="button" onClick={() => setConvertKeepSub(false)}
+                  className={`w-full text-left rounded-xl border px-4 py-3 transition ${!convertKeepSub ? 'border-slate-700 bg-slate-50 ring-2 ring-slate-100' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${!convertKeepSub ? 'border-slate-700' : 'border-slate-300'}`}>
+                      {!convertKeepSub && <div className="w-2 h-2 rounded-full bg-slate-700" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Cancel subscription</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Account created with no active plan. Holder can subscribe independently when ready.</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Login credentials:</p>
+                <p className="text-sm text-slate-800 font-semibold">Email: {holderAction.holder.email || <span className="text-red-500">No email on file</span>}</p>
+                <p className="text-sm text-slate-800 font-semibold">Password: <span className="font-mono">{(holderAction.holder.fullName || '').toLowerCase().replace(/\s+/g, '')}</span> <span className="text-[10px] font-medium text-slate-400">(full name, no spaces)</span></p>
+              </div>
+              {!holderAction.holder.email && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-xs text-red-600 font-semibold">This holder has no email address. Add their email first before converting.</p>
+                </div>
+              )}
+              {holderActError && <p className="text-xs text-red-600 font-semibold">{holderActError}</p>}
+            </div>
+            <div className="px-6 pb-5 flex gap-2.5">
+              <button onClick={closeHolderModal} disabled={holderActLoading}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleHolderConvert} disabled={holderActLoading || !holderAction.holder.email}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition disabled:opacity-60">
+                {holderActLoading ? 'Converting…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Credentials Display Modal (after convert success) ─────────────── */}
+      {holderCredentials && (
+        <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Conversion Successful</p>
+              <h2 className="text-base font-extrabold text-slate-900">Individual Account Created</h2>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              {holderCredentials.keepSubscription ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                  <p className="text-xs font-bold text-emerald-700">Subscription kept active — plan and expiry carried over from your airline account.</p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs font-bold text-slate-600">Account created with no active plan. Holder can subscribe independently when ready.</p>
+                </div>
+              )}
+              <p className="text-sm text-slate-600">Share these login details with the holder. They can log in and change their password on first sign-in.</p>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 space-y-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Email (Username)</p>
+                  <p className="font-mono text-sm font-bold text-slate-900 break-all">{holderCredentials.email}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Temporary Password</p>
+                  <p className="font-mono text-sm font-bold text-slate-900">{holderCredentials.password}</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400">They will be prompted to change their password on first login.</p>
+            </div>
+            <div className="px-6 pb-5">
+              <button onClick={() => setHolderCredentials(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

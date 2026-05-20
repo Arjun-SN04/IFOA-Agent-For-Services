@@ -104,6 +104,10 @@ const IndividualSchema = new mongoose.Schema({
     invoiceNumber:  { type: String },
   },
 
+  // Set when an airline converts a certificate holder to an individual account.
+  convertedFromAirlineId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Airlines', default: null },
+  convertedFromAirlineName: { type: String, default: '' },
+
   agreedToTerms: { type: Boolean, required: true },
   submittedAt: { type: Date, default: Date.now },
 }, { timestamps: true });

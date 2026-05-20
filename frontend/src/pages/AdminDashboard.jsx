@@ -7,6 +7,9 @@ import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import { Plane } from 'lucide-react'
 import { getAirlineTotal, fmtAirlineTotal } from '../utils/airlineTotal'
+import PhoneInputLib from 'react-phone-input-2'
+import 'react-phone-input-2/lib/style.css'
+const AdminPhoneInput = PhoneInputLib.default || PhoneInputLib
 import {
   deleteAirlinesSubscription,
   deleteIndividual,
@@ -30,6 +33,97 @@ import {
   activateQueuedRenewal,
   sendRenewalReminders,
 } from '../services/api'
+
+// ── Shared country data for admin edit modals ────────────────────────────────
+const ADMIN_COUNTRY_TO_ISO2 = {
+  'Afghanistan':'af','Albania':'al','Algeria':'dz','American Samoa':'as','Andorra':'ad',
+  'Angola':'ao','Anguilla':'ai','Antigua and Barbuda':'ag','Argentina':'ar','Armenia':'am',
+  'Aruba':'aw','Australia':'au','Austria':'at','Azerbaijan':'az','Bahamas':'bs',
+  'Bahrain':'bh','Bangladesh':'bd','Barbados':'bb','Belarus':'by','Belgium':'be',
+  'Belize':'bz','Benin':'bj','Bermuda':'bm','Bhutan':'bt','Bolivia':'bo',
+  'Bosnia and Herzegovina':'ba','Botswana':'bw','Brazil':'br','Brunei':'bn','Bulgaria':'bg',
+  'Burkina Faso':'bf','Burundi':'bi','Cabo Verde':'cv','Cambodia':'kh','Cameroon':'cm',
+  'Canada':'ca','Cayman Islands':'ky','Central African Republic':'cf','Chad':'td','Chile':'cl',
+  'China':'cn','Colombia':'co','Comoros':'km','Congo':'cg','Costa Rica':'cr',
+  'Croatia':'hr','Cuba':'cu','Cyprus':'cy','Czech Republic':'cz','Denmark':'dk',
+  'Dominican Republic':'do','Ecuador':'ec','Egypt':'eg','El Salvador':'sv','Eritrea':'er',
+  'Estonia':'ee','Ethiopia':'et','Finland':'fi','France':'fr','Germany':'de',
+  'Ghana':'gh','Greece':'gr','Guatemala':'gt','Haiti':'ht','Honduras':'hn',
+  'Hong Kong':'hk','Hungary':'hu','Iceland':'is','India':'in','Indonesia':'id',
+  'Iraq':'iq','Ireland':'ie','Israel':'il','Italy':'it','Jamaica':'jm',
+  'Japan':'jp','Jordan':'jo','Kazakhstan':'kz','Kenya':'ke','Korea (Republic of)':'kr',
+  'Kuwait':'kw','Kyrgyzstan':'kg','Latvia':'lv','Lebanon':'lb','Libya':'ly',
+  'Lithuania':'lt','Luxembourg':'lu','Malaysia':'my','Maldives':'mv','Mali':'ml',
+  'Malta':'mt','Mexico':'mx','Moldova':'md','Monaco':'mc','Mongolia':'mn',
+  'Morocco':'ma','Mozambique':'mz','Myanmar':'mm','Nepal':'np','Netherlands':'nl',
+  'New Zealand':'nz','Nicaragua':'ni','Nigeria':'ng','Norway':'no','Oman':'om',
+  'Pakistan':'pk','Palestine':'ps','Panama':'pa','Paraguay':'py','Peru':'pe',
+  'Philippines':'ph','Poland':'pl','Portugal':'pt','Puerto Rico':'pr','Qatar':'qa',
+  'Romania':'ro','Russian Federation':'ru','Rwanda':'rw','Saudi Arabia':'sa','Senegal':'sn',
+  'Serbia':'rs','Singapore':'sg','Slovakia':'sk','Slovenia':'si','Somalia':'so',
+  'South Africa':'za','Spain':'es','Sri Lanka':'lk','Sudan':'sd','Sweden':'se',
+  'Switzerland':'ch','Syria':'sy','Taiwan':'tw','Tanzania':'tz','Thailand':'th',
+  'Tunisia':'tn','Turkey':'tr','Uganda':'ug','Ukraine':'ua','United Arab Emirates':'ae',
+  'United Kingdom':'gb','United States of America':'us','Uruguay':'uy','Uzbekistan':'uz',
+  'Venezuela':'ve','Vietnam':'vn','Yemen':'ye','Zambia':'zm','Zimbabwe':'zw',
+}
+const ADMIN_COUNTRY_LIST = [
+  'Afghanistan','Albania','Algeria','American Samoa','Andorra','Angola','Anguilla','Antarctica',
+  'Antigua and Barbuda','Argentina','Armenia','Aruba','Australia','Austria','Azerbaijan','Bahamas',
+  'Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bermuda','Bhutan',
+  'Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi',
+  'Cabo Verde','Cambodia','Cameroon','Canada','Cayman Islands','Central African Republic','Chad',
+  'Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus',
+  'Czech Republic','Denmark','Dominican Republic','Ecuador','Egypt','El Salvador','Eritrea',
+  'Estonia','Ethiopia','Finland','France','Germany','Ghana','Greece','Guatemala','Haiti',
+  'Honduras','Hong Kong','Hungary','Iceland','India','Indonesia','Iraq','Ireland','Israel',
+  'Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Korea (Republic of)','Kuwait',
+  'Kyrgyzstan','Latvia','Lebanon','Libya','Lithuania','Luxembourg','Malaysia','Maldives','Mali',
+  'Malta','Mexico','Moldova','Monaco','Mongolia','Morocco','Mozambique','Myanmar','Nepal',
+  'Netherlands','New Zealand','Nicaragua','Nigeria','Norway','Oman','Pakistan','Palestine',
+  'Panama','Paraguay','Peru','Philippines','Poland','Portugal','Puerto Rico','Qatar','Romania',
+  'Russian Federation','Rwanda','Saudi Arabia','Senegal','Serbia','Singapore','Slovakia','Slovenia',
+  'Somalia','South Africa','Spain','Sri Lanka','Sudan','Sweden','Switzerland','Syria','Taiwan',
+  'Tanzania','Thailand','Tunisia','Turkey','Uganda','Ukraine','United Arab Emirates',
+  'United Kingdom','United States of America','Uruguay','Uzbekistan','Venezuela','Vietnam',
+  'Yemen','Zambia','Zimbabwe',
+]
+
+function AdminCountrySelect({ value, onChange }) {
+  const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState('')
+  const filtered = ADMIN_COUNTRY_LIST.filter(c => c.toLowerCase().includes(search.toLowerCase()))
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => { setOpen(v => !v); setSearch('') }}
+        className={`w-full text-left px-3 py-2 border rounded-lg text-sm bg-white outline-none transition flex items-center justify-between ${
+          open ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-200 hover:border-slate-300'
+        } ${value ? 'text-slate-900' : 'text-slate-400'}`}>
+        <span>{value || '— Select country —'}</span>
+        <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-400" />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-400">No results</div>}
+            {filtered.map(c => (
+              <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
+                className={`px-4 py-2 text-sm cursor-pointer transition-colors ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}>
+                {c}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const fmtDate = (v) =>
   v ? new Date(v).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
@@ -847,6 +941,20 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             </div>
           </div>
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
+            {record.convertedFromAirlineName && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Converted from Airline</p>
+                  <p className="text-sm font-semibold text-emerald-900">{record.convertedFromAirlineName}</p>
+                  <p className="text-[11px] text-emerald-600 mt-0.5">This holder was transferred from the airline subscription and given an individual account.</p>
+                </div>
+              </div>
+            )}
             <div><SectionHead label="Status & Subscription" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <ViewField label="Status" value={<StatusText value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />} />
@@ -1062,7 +1170,8 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
 function IndividualEditModal({ record, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
-  useEffect(() => { setForm({ ...record }); setErr('') }, [record])
+  const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
+  useEffect(() => { setForm({ ...record }); setErr(''); setPhoneCountry(ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us') }, [record])
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
   const handleSave = async () => {
@@ -1116,13 +1225,35 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Middle Name"><input className={inputCls} value={form.middleName || ''} onChange={e => set('middleName', e.target.value)} /></Field>
                 <Field label="Date of Birth"><input className={inputCls} type="date" value={form.dateOfBirth ? String(form.dateOfBirth).slice(0,10) : ''} onChange={e => set('dateOfBirth', e.target.value)} /></Field>
                 <Field label="Email"><input className={inputCls} type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} /></Field>
-                <Field label="Phone"><input className={inputCls} value={form.phone || ''} onChange={e => set('phone', e.target.value)} /></Field>
+                <Field label="Phone">
+                  <AdminPhoneInput
+                    country={phoneCountry}
+                    value={form.phone || ''}
+                    onChange={(phone, countryData) => {
+                      set('phone', phone)
+                      if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                    }}
+                    enableSearch
+                    searchPlaceholder="Search country..."
+                    preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                    dropdownStyle={{ bottom: '100%', top: 'auto' }}
+                  />
+                </Field>
                 <div className="sm:col-span-2"><Field label="Address Line 1"><input className={inputCls} value={form.addressLine1 || ''} onChange={e => set('addressLine1', e.target.value)} /></Field></div>
                 <div className="sm:col-span-2"><Field label="Address Line 2"><input className={inputCls} placeholder="Apt, suite, unit, etc." value={form.addressLine2 || ''} onChange={e => set('addressLine2', e.target.value)} /></Field></div>
                 <Field label="City"><input className={inputCls} value={form.city || ''} onChange={e => set('city', e.target.value)} /></Field>
                 <Field label="State / Province"><input className={inputCls} value={form.state || ''} onChange={e => set('state', e.target.value)} /></Field>
                 <Field label="Postal Code"><input className={inputCls} value={form.postalCode || ''} onChange={e => set('postalCode', e.target.value)} /></Field>
-                <Field label="Country"><input className={inputCls} value={form.country || ''} onChange={e => set('country', e.target.value)} /></Field>
+                <Field label="Country">
+                  <AdminCountrySelect
+                    value={form.country || ''}
+                    onChange={(val) => {
+                      set('country', val)
+                      const iso2 = ADMIN_COUNTRY_TO_ISO2[val]
+                      if (iso2) setPhoneCountry(iso2)
+                    }}
+                  />
+                </Field>
                 <div className="sm:col-span-2"><Field label="Payment Email"><input className={inputCls} type="email" placeholder="billing@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
@@ -1186,7 +1317,8 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
 function AirlineEditModal({ record, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
-  useEffect(() => { setForm({ ...record }); setErr('') }, [record])
+  const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
+  useEffect(() => { setForm({ ...record }); setErr(''); setPhoneCountry(ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us') }, [record])
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const setHolder = (idx, field, value) =>
     setForm(p => ({ ...p, certificateHolders: p.certificateHolders.map((h, i) => i === idx ? { ...h, [field]: value } : h) }))
@@ -1265,7 +1397,16 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="City"><input className={inputCls} value={form.city || ''} onChange={e => set('city', e.target.value)} /></Field>
                 <Field label="State / Province"><input className={inputCls} value={form.state || ''} onChange={e => set('state', e.target.value)} /></Field>
                 <Field label="Postal Code"><input className={inputCls} value={form.postalCode || ''} onChange={e => set('postalCode', e.target.value)} /></Field>
-                <Field label="Country"><input className={inputCls} value={form.country || ''} onChange={e => set('country', e.target.value)} /></Field>
+                <Field label="Country">
+                  <AdminCountrySelect
+                    value={form.country || ''}
+                    onChange={(val) => {
+                      set('country', val)
+                      const iso2 = ADMIN_COUNTRY_TO_ISO2[val]
+                      if (iso2) setPhoneCountry(iso2)
+                    }}
+                  />
+                </Field>
               </div>
             </div>
             <div><SectionHead label="Point of Contact" />
@@ -1275,7 +1416,20 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <Field label="Middle Name"><input className={inputCls} value={form.middleName || ''} onChange={e => set('middleName', e.target.value)} /></Field>
                 <Field label="Date of Birth"><input className={inputCls} type="date" value={form.dateOfBirth ? String(form.dateOfBirth).slice(0,10) : ''} onChange={e => set('dateOfBirth', e.target.value)} /></Field>
                 <Field label="Email"><input className={inputCls} type="email" value={form.email || form.contactEmail || ''} onChange={e => set('email', e.target.value)} /></Field>
-                <Field label="Phone"><input className={inputCls} value={form.phone || form.contactPhone || ''} onChange={e => set('phone', e.target.value)} /></Field>
+                <Field label="Phone">
+                  <AdminPhoneInput
+                    country={phoneCountry}
+                    value={form.phone || form.contactPhone || ''}
+                    onChange={(phone, countryData) => {
+                      set('phone', phone)
+                      if (countryData?.countryCode) setPhoneCountry(countryData.countryCode)
+                    }}
+                    enableSearch
+                    searchPlaceholder="Search country..."
+                    preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
+                    dropdownStyle={{ bottom: '100%', top: 'auto' }}
+                  />
+                </Field>
                 <div className="sm:col-span-2"><Field label="Payment Email"><input className={inputCls} type="email" placeholder="billing@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
@@ -2249,6 +2403,11 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                             {[primary.firstName, primary.lastName].filter(Boolean).join(' ') || '—'}
                           </p>
                           <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{primary.primaryCertificate || 'No cert type'}</p>
+                          {primary.convertedFromAirlineName && (
+                            <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 truncate max-w-[130px]" title={`Converted from ${primary.convertedFromAirlineName}`}>
+                              ↗ {primary.convertedFromAirlineName}
+                            </span>
+                          )}
                           {hasMany && (
                             <button
                               onClick={e => { e.stopPropagation(); toggle(key) }}
