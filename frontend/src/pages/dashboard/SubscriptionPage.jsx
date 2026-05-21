@@ -1384,8 +1384,8 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
           {/* Amount due */}
           <div className="rounded-xl bg-slate-900 px-5 py-4 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Amount Due</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">{dueLabel}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white">Amount Due</p>
+              <p className="text-[10px] text-white/70 mt-0.5">{dueLabel}</p>
             </div>
             <span className="text-2xl font-black text-white">${dueAmount.toFixed(2)}</span>
           </div>
@@ -2266,9 +2266,9 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
   }
 
   const purposeColor = (doc) => {
-    if (doc._source === 'renewal' || doc.plan) return 'bg-amber-50 text-amber-700 border-amber-200'
-    if (isHolderUpgrade(doc)) return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    return 'bg-slate-100 text-slate-600 border-slate-200'
+    if (doc._source === 'renewal' || doc.plan) return 'bg-slate-800 text-white border-slate-700'
+    if (isHolderUpgrade(doc)) return 'bg-slate-800 text-white border-slate-700'
+    return 'bg-slate-800 text-white border-slate-700'
   }
 
   const handleView = (doc) => {
@@ -2895,7 +2895,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-              className="fixed top-20 left-4 right-4 lg:absolute lg:top-[100px] lg:left-full lg:ml-10 lg:right-auto lg:translate-x-0 w-auto lg:w-[345px] z-50"
+              className="fixed top-20 left-4 right-4 lg:absolute lg:top-[100px] lg:left-full lg:ml-10 lg:right-auto lg:translate-x-0 w-auto lg:w-[400px] z-50"
             >
               <div className="w-full rounded-2xl border border-slate-200 bg-white overflow-hidden sticky top-8"
                 style={{ boxShadow: '0 8px 32px rgba(15,23,42,0.12)' }}>
@@ -2941,49 +2941,54 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                   </div>
                 </div>
 
-                {/* Holder list — scrolls after 4 items (~72px each) */}
-                <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: '288px' }}>
+                {/* Holder list */}
+                <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: '520px' }}>
                   {filteredHP.length === 0 ? (
                     <div className="py-8 text-center">
                       <p className="text-xs font-semibold text-slate-500">No match for "{holderSearch}"</p>
                     </div>
                   ) : filteredHP.map((h, i) => (
-                    <div key={h._id || i} className="px-4 py-3 hover:bg-slate-50/80 transition-colors">
-                      <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <div key={h._id || i} className="px-4 py-4 hover:bg-slate-50/60 transition-colors">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {i + 1}
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-slate-900 truncate leading-tight">{h.fullName}</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">{h.fullName}</p>
+                            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border flex-shrink-0 bg-slate-100 border-slate-200 text-slate-500">
+                              {h.certificateStatus || 'NEW'}
+                            </span>
+                          </div>
                           {h.certificateType && (
                             <p className="text-[11px] text-slate-500 mt-0.5 truncate">{h.certificateType}</p>
                           )}
-                          <div className="flex flex-wrap gap-x-3 mt-1">
+                          <div className="flex flex-wrap gap-x-4 mt-1.5">
                             {h.faaCertificateNumber && (
                               <p className="text-[10px] text-slate-400">
-                                <span className="font-semibold text-slate-500">FAA</span> {h.faaCertificateNumber}
+                                <span className="font-bold text-slate-500">FAA</span> {h.faaCertificateNumber}
                               </p>
                             )}
                             {h.iacraFtnNumber && (
                               <p className="text-[10px] text-slate-400">
-                                <span className="font-semibold text-slate-500">FTN</span> {h.iacraFtnNumber}
+                                <span className="font-bold text-slate-500">FTN</span> {h.iacraFtnNumber}
                               </p>
                             )}
                           </div>
                         </div>
-                        <span className="text-[10px] font-semibold text-slate-500 flex-shrink-0 mt-0.5">
-                          {h.certificateStatus || 'NEW'}
-                        </span>
                       </div>
                       {active && h._id && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 pl-10">
                           <button
                             onClick={() => openEditHolder(h)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
                             Edit
                           </button>
                           <button
                             onClick={() => setHolderAction({ holder: h, holderId: h._id, action: 'convert' })}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                             Convert

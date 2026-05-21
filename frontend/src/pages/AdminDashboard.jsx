@@ -67,6 +67,44 @@ const ADMIN_COUNTRY_TO_ISO2 = {
   'United Kingdom':'gb','United States of America':'us','Uruguay':'uy','Uzbekistan':'uz',
   'Venezuela':'ve','Vietnam':'vn','Yemen':'ye','Zambia':'zm','Zimbabwe':'zw',
 }
+const ADMIN_ISO2_TO_COUNTRY = Object.fromEntries(
+  Object.entries(ADMIN_COUNTRY_TO_ISO2).map(([name, iso2]) => [iso2.toLowerCase(), name])
+)
+const isoToCountry = (val) => {
+  if (!val) return ''
+  const lower = val.toLowerCase()
+  return ADMIN_ISO2_TO_COUNTRY[lower] || val
+}
+const ISO2_DIAL = {
+  af:'+93',al:'+355',dz:'+213',as:'+1684',ad:'+376',ao:'+244',ai:'+1264',ag:'+1268',ar:'+54',am:'+374',
+  aw:'+297',au:'+61',at:'+43',az:'+994',bs:'+1242',bh:'+973',bd:'+880',bb:'+1246',by:'+375',be:'+32',
+  bz:'+501',bj:'+229',bm:'+1441',bt:'+975',bo:'+591',ba:'+387',bw:'+267',br:'+55',bn:'+673',bg:'+359',
+  bf:'+226',bi:'+257',cv:'+238',kh:'+855',cm:'+237',ca:'+1',ky:'+1345',cf:'+236',td:'+235',cl:'+56',
+  cn:'+86',co:'+57',km:'+269',cg:'+242',cr:'+506',hr:'+385',cu:'+53',cy:'+357',cz:'+420',dk:'+45',
+  do:'+1809',ec:'+593',eg:'+20',sv:'+503',er:'+291',ee:'+372',et:'+251',fi:'+358',fr:'+33',de:'+49',
+  gh:'+233',gr:'+30',gt:'+502',ht:'+509',hn:'+504',hk:'+852',hu:'+36',is:'+354',in:'+91',id:'+62',
+  iq:'+964',ie:'+353',il:'+972',it:'+39',jm:'+1876',jp:'+81',jo:'+962',kz:'+7',ke:'+254',kr:'+82',
+  kw:'+965',kg:'+996',lv:'+371',lb:'+961',ly:'+218',lt:'+370',lu:'+352',my:'+60',mv:'+960',ml:'+223',
+  mt:'+356',mx:'+52',md:'+373',mc:'+377',mn:'+976',ma:'+212',mz:'+258',mm:'+95',np:'+977',nl:'+31',
+  nz:'+64',ni:'+505',ng:'+234',no:'+47',om:'+968',pk:'+92',ps:'+970',pa:'+507',py:'+595',pe:'+51',
+  ph:'+63',pl:'+48',pt:'+351',pr:'+1787',qa:'+974',ro:'+40',ru:'+7',rw:'+250',sa:'+966',sn:'+221',
+  rs:'+381',sg:'+65',sk:'+421',si:'+386',so:'+252',za:'+27',es:'+34',lk:'+94',sd:'+249',se:'+46',
+  ch:'+41',sy:'+963',tw:'+886',tz:'+255',th:'+66',tn:'+216',tr:'+90',ug:'+256',ua:'+380',ae:'+971',
+  gb:'+44',us:'+1',uy:'+598',uz:'+998',ve:'+58',vn:'+84',ye:'+967',zm:'+260',zw:'+263',
+}
+const fmtPhone = (phone, countryIso2) => {
+  if (!phone) return ''
+  const dialCode = countryIso2 ? ISO2_DIAL[countryIso2.toLowerCase()] : null
+  if (dialCode && phone.startsWith(dialCode)) {
+    return `${dialCode} ${phone.slice(dialCode.length)}`
+  }
+  // fallback: sort known dial codes longest-first to avoid greedy mismatch
+  const sorted = Object.values(ISO2_DIAL).sort((a, b) => b.length - a.length)
+  for (const code of sorted) {
+    if (phone.startsWith(code)) return `${code} ${phone.slice(code.length)}`
+  }
+  return phone
+}
 const ADMIN_COUNTRY_LIST = [
   'Afghanistan','Albania','Algeria','American Samoa','Andorra','Angola','Anguilla','Antarctica',
   'Antigua and Barbuda','Argentina','Armenia','Aruba','Australia','Austria','Azerbaijan','Bahamas',
@@ -733,16 +771,12 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                 String(li.description || '').toLowerCase().includes('holder')
               )
             const isRenewal = inv._source === 'renewal' || inv.purpose === 'renewal' || !!inv.plan
-            const purposeLabel = inv._source === 'registration' ? 'Active Plan'
-              : inv._source === 'payment' ? 'Legacy'
+            const purposeLabel = inv._source === 'payment' ? 'Legacy'
               : isHolderUpgrade ? 'Holder Upgrade'
               : isRenewal ? 'Subscription Renewed'
               : 'Subscription'
-            const purposeCls = inv._source === 'registration' ? 'bg-blue-50 border-blue-200 text-blue-700'
-              : inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
-              : isHolderUpgrade ? 'bg-violet-50 border-violet-200 text-violet-700'
-              : isRenewal ? 'bg-slate-100 border-slate-200 text-slate-600'
-              : 'bg-slate-100 border-slate-200 text-slate-600'
+            const purposeCls = inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
+              : 'bg-slate-800 border-slate-700 text-white'
             const planLabel = inv.subscriptionPlan || inv.plan || ''
             const isActiveInvoice = record?.invoiceNumber && inv.invoiceNumber === record.invoiceNumber
             return (
@@ -964,7 +998,6 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDateYMD(record.subscriptionDate) : (record.isPaid ? fmtDateYMD(record.updatedAt) : 'Activates on payment')} />
                 <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDateYMD(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price" value={fmtMoney(record.price)} />
-                <ViewField label="Service Fees" value={fmtMoney(record.totalServiceFees)} />
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Personal Information" />
@@ -974,9 +1007,9 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="Last Name" value={record.lastName} />
                 <ViewField label="DOB" value={record.dateOfBirth ? fmtDateMDY(record.dateOfBirth) : '—'} />
                 <ViewField label="Email" value={record.email} />
-                <ViewField label="Phone" value={record.phone} />
+                <ViewField label="Phone" value={fmtPhone(record.phone, record.country)} />
                 <div className="col-span-2 sm:col-span-3">
-                  <ViewField label="Address" value={[record.addressLine1, record.city, record.postalCode, record.country].filter(Boolean).join(', ')} />
+                  <ViewField label="Address" value={[record.addressLine1, record.city, record.postalCode, isoToCountry(record.country)].filter(Boolean).join(', ')} />
                 </div>
               </div>
             </div>
@@ -1097,7 +1130,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="col-span-2 sm:col-span-3"><ViewField label="Company" value={record.airlineName} /></div>
-                <div className="col-span-2 sm:col-span-3"><ViewField label="Address" value={[record.addressLine1, record.addressLine2, record.city, record.state, record.postalCode, record.country].filter(Boolean).join(', ')} /></div>
+                <div className="col-span-2 sm:col-span-3"><ViewField label="Address" value={[record.addressLine1, record.addressLine2, record.city, record.state, record.postalCode, isoToCountry(record.country)].filter(Boolean).join(', ')} /></div>
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Point of Contact" />
@@ -1107,7 +1140,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <ViewField label="Middle Name" value={record.middleName} />
                 <ViewField label="Date of Birth" value={record.dateOfBirth ? fmtDateMDY(record.dateOfBirth) : '—'} />
                 <ViewField label="Email" value={record.email || record.contactEmail} />
-                <ViewField label="Phone" value={record.phone || record.contactPhone} />
+                <ViewField label="Phone" value={fmtPhone(record.phone || record.contactPhone, record.country)} />
                 <ViewField label="Payment Email" value={record.paymentEmail} />
               </div>
             </div>

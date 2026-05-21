@@ -336,28 +336,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── COMPLIANCE ALERT ── */}
-      <section className="py-6 px-6" style={{ background: C.gray50, borderBottom: `1px solid ${C.gray200}` }}>
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3 sm:gap-4">
-            <div className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-white text-base font-black" style={{ background: C.dark }}>!</div>
-            <div>
-              <p className="font-black text-sm" style={{ color: C.dark }}>FAA Agent for Service Rule Now in Effect</p>
-              <p className="text-sm mt-0.5" style={{ color: C.gray600 }}>
-                Effective October 8, 2024 — All FAA certificate holders with a foreign address must designate a U.S. Agent for Service.{' '}
-                <strong style={{ color: C.dark }}>Enforcement action has begun.</strong>
-              </p>
-            </div>
-          </div>
-          <Link to="/register"
-            className="shrink-0 self-start sm:self-auto font-bold text-sm px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl text-white transition-all duration-200 whitespace-nowrap"
-            style={{ background: C.blue }}
-            onMouseEnter={e => e.currentTarget.style.background = C.blueDark}
-            onMouseLeave={e => e.currentTarget.style.background = C.blue}>
-            Get Compliant Now
-          </Link>
-        </div>
-      </section>
 
       {/* ── WHO WE ARE ── */}
       {/* <section className="py-20 px-6 bg-white">
