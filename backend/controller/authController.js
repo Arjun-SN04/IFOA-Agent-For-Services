@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const OTP  = require('../models/OTP');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { sendOtpEmail } = require('../services/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET env var is required — set it in .env');
@@ -41,6 +43,7 @@ function publicUser(user) {
     registrationId: user.registrationId,
     subscriptionIds: user.subscriptionIds || [],
     mustChangePassword: user.mustChangePassword || false,
+    secondaryEmails: user.secondaryEmails || [],
   };
 }
 
@@ -54,9 +57,10 @@ exports.signup = async (req, res) => {
       return res.status(403).json({ message: 'Admin accounts cannot be self-registered.' });
     if (role === 'airline' && !airlineName?.trim())
       return res.status(400).json({ message: 'Airline name is required for airline accounts.' });
-    const existing = await User.findOne({ email: email.toLowerCase() });
+    const normalAdminEmail = email.toLowerCase();
+    const existing = await User.findOne({ $or: [{ email: normalAdminEmail }, { secondaryEmails: normalAdminEmail }] });
     if (existing)
-      return res.status(409).json({ message: 'An account with this email already exists.' });
+      return res.status(409).json({ message: 'This email is already associated with an account.' });
     const user = await User.create({
       email, password, role, firstName, lastName,
       airlineName: role === 'airline' ? airlineName.trim() : '',
@@ -75,7 +79,10 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required.' });
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const normalEmail = email.toLowerCase();
+    let user = await User.findOne({ email: normalEmail });
+    // If not found as primary email, check secondary emails (airline login aliases)
+    if (!user) user = await User.findOne({ secondaryEmails: normalEmail });
     // Always run bcrypt regardless of whether the user exists — prevents
     // timing-based user enumeration attacks.
     const valid = user
@@ -320,6 +327,343 @@ exports.linkRegistration = async (req, res) => {
     res.json({ message: 'Registration linked.', token, user: publicUser(user) });
   } catch (err) {
     console.error('Link registration error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// POST /api/auth/add-secondary-email  (protected — airline only)
+exports.addSecondaryEmail = async (req, res) => {
+  try {
+    const { currentPassword, secondaryEmail } = req.body;
+    if (!currentPassword) return res.status(400).json({ message: 'Current password is required.' });
+    if (!secondaryEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryEmail))
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    if (user.role !== 'airline') return res.status(403).json({ message: 'Only airline accounts can add secondary emails.' });
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    const normalEmail = secondaryEmail.toLowerCase().trim();
+
+    if (normalEmail === user.email)
+      return res.status(400).json({ message: 'This is already your primary email.' });
+    if ((user.secondaryEmails || []).includes(normalEmail))
+      return res.status(409).json({ message: 'This email is already a secondary login for your account.' });
+
+    // Make sure no other account uses it as primary or secondary
+    const conflict = await User.findOne({
+      $or: [{ email: normalEmail }, { secondaryEmails: normalEmail }],
+    });
+    if (conflict) return res.status(409).json({ message: 'This email is already in use by another account.' });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $addToSet: { secondaryEmails: normalEmail } },
+      { new: true, runValidators: false },
+    );
+
+    const token = signToken(updatedUser);
+    res.json({ message: 'Secondary email added.', token, user: publicUser(updatedUser) });
+  } catch (err) {
+    console.error('Add secondary email error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// DELETE /api/auth/remove-secondary-email  (protected — airline only)
+exports.removeSecondaryEmail = async (req, res) => {
+  try {
+    const { currentPassword, secondaryEmail } = req.body;
+    if (!currentPassword) return res.status(400).json({ message: 'Current password is required.' });
+    if (!secondaryEmail) return res.status(400).json({ message: 'secondaryEmail is required.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    if (user.role !== 'airline') return res.status(403).json({ message: 'Only airline accounts can manage secondary emails.' });
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    const normalEmail = secondaryEmail.toLowerCase().trim();
+    if (!(user.secondaryEmails || []).includes(normalEmail))
+      return res.status(404).json({ message: 'Secondary email not found on this account.' });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $pull: { secondaryEmails: normalEmail } },
+      { new: true, runValidators: false },
+    );
+
+    const token = signToken(updatedUser);
+    res.json({ message: 'Secondary email removed.', token, user: publicUser(updatedUser) });
+  } catch (err) {
+    console.error('Remove secondary email error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── OTP helpers ───────────────────────────────────────────────────────────────
+function generateOtpCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function createAndSendOtp(email, purpose) {
+  const code = generateOtpCode();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+  // Invalidate any prior unused OTPs for this email+purpose
+  await OTP.deleteMany({ email: email.toLowerCase(), purpose, used: false });
+  await OTP.create({ email: email.toLowerCase(), code, purpose, expiresAt });
+  await sendOtpEmail(email.toLowerCase(), code, purpose);
+}
+
+async function verifyOtp(email, code, purpose) {
+  const record = await OTP.findOne({
+    email:   email.toLowerCase(),
+    code,
+    purpose,
+    used:    false,
+    expiresAt: { $gt: new Date() },
+  });
+  return record;
+}
+
+// POST /api/auth/send-otp
+// Body: { email, purpose: 'signup' | 'password-reset' | 'secondary-email' }
+exports.sendOtp = async (req, res) => {
+  try {
+    const { email, purpose } = req.body;
+    if (!email || !purpose) return res.status(400).json({ message: 'email and purpose are required.' });
+    const validPurposes = ['signup', 'password-reset', 'secondary-email'];
+    if (!validPurposes.includes(purpose)) return res.status(400).json({ message: 'Invalid purpose.' });
+
+    const normalEmail = email.toLowerCase().trim();
+
+    if (purpose === 'signup') {
+      // Don't send if email already registered as primary or secondary
+      const existing = await User.findOne({ $or: [{ email: normalEmail }, { secondaryEmails: normalEmail }] });
+      if (existing) return res.status(409).json({ message: 'This email is already associated with an account.' });
+    }
+
+    if (purpose === 'password-reset') {
+      const existing = await User.findOne({ email: normalEmail });
+      if (!existing) {
+        // Don't reveal whether account exists — return 200 silently
+        return res.json({ message: 'If an account exists, a reset code has been sent.' });
+      }
+    }
+
+    await createAndSendOtp(normalEmail, purpose);
+    res.json({ message: 'Verification code sent to your email.' });
+  } catch (err) {
+    console.error('sendOtp error:', err);
+    res.status(500).json({ message: 'Failed to send OTP. Please try again.' });
+  }
+};
+
+// POST /api/auth/verify-otp-signup
+// Body: { email, code, password, role, firstName, lastName, airlineName }
+exports.verifyOtpAndSignup = async (req, res) => {
+  try {
+    const { email, code, password, role, firstName, lastName, airlineName } = req.body;
+    if (!email || !code) return res.status(400).json({ message: 'email and code are required.' });
+    if (!password || !role) return res.status(400).json({ message: 'password and role are required.' });
+    if (role === 'admin') return res.status(403).json({ message: 'Admin accounts cannot be self-registered.' });
+    if (role === 'airline' && !airlineName?.trim()) return res.status(400).json({ message: 'Airline name is required for airline accounts.' });
+
+    const record = await verifyOtp(email, code, 'signup');
+    if (!record) return res.status(400).json({ message: 'Invalid or expired verification code.' });
+
+    // Mark OTP as used
+    record.used = true;
+    await record.save();
+
+    const normalSignupEmail = email.toLowerCase();
+    const existing = await User.findOne({ $or: [{ email: normalSignupEmail }, { secondaryEmails: normalSignupEmail }] });
+    if (existing) return res.status(409).json({ message: 'This email is already associated with an account.' });
+
+    const user = await User.create({
+      email, password, role, firstName, lastName,
+      airlineName: role === 'airline' ? airlineName.trim() : '',
+    });
+    const token = signToken(user);
+    res.status(201).json({ token, user: publicUser(user) });
+  } catch (err) {
+    console.error('verifyOtpAndSignup error:', err);
+    res.status(500).json({ message: 'Server error during signup.' });
+  }
+};
+
+// POST /api/auth/reset-password
+// Body: { email, code, newPassword }
+exports.resetPasswordWithOtp = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) return res.status(400).json({ message: 'email, code and newPassword are required.' });
+    if (newPassword.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+
+    const record = await verifyOtp(email, code, 'password-reset');
+    if (!record) return res.status(400).json({ message: 'Invalid or expired reset code.' });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
+
+    record.used = true;
+    await record.save();
+
+    user.password = await bcrypt.hash(newPassword, 12);
+    user.mustChangePassword = false;
+    await user.save();
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    console.error('resetPasswordWithOtp error:', err);
+    res.status(500).json({ message: 'Server error during password reset.' });
+  }
+};
+
+// POST /api/auth/send-secondary-email-otp  (protected — airline only)
+// Body: { secondaryEmail }
+exports.sendSecondaryEmailOtp = async (req, res) => {
+  try {
+    const { secondaryEmail } = req.body;
+    if (!secondaryEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryEmail))
+      return res.status(400).json({ message: 'Enter a valid email address.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    if (user.role !== 'airline') return res.status(403).json({ message: 'Only airline accounts can add secondary emails.' });
+
+    const normalEmail = secondaryEmail.toLowerCase().trim();
+
+    if (normalEmail === user.email) return res.status(400).json({ message: 'This is already your primary email.' });
+    if ((user.secondaryEmails || []).includes(normalEmail))
+      return res.status(409).json({ message: 'This email is already a secondary login for your account.' });
+
+    const conflict = await User.findOne({ $or: [{ email: normalEmail }, { secondaryEmails: normalEmail }] });
+    if (conflict) return res.status(409).json({ message: 'This email is already in use by another account.' });
+
+    await createAndSendOtp(normalEmail, 'secondary-email');
+    res.json({ message: 'Verification code sent to the new email address.' });
+  } catch (err) {
+    console.error('sendSecondaryEmailOtp error:', err);
+    res.status(500).json({ message: 'Failed to send OTP. Please try again.' });
+  }
+};
+
+// POST /api/auth/verify-secondary-email  (protected — airline only)
+// Body: { secondaryEmail, code, currentPassword }
+exports.verifyOtpAndAddSecondary = async (req, res) => {
+  try {
+    const { secondaryEmail, code, currentPassword } = req.body;
+    if (!secondaryEmail || !code || !currentPassword)
+      return res.status(400).json({ message: 'secondaryEmail, code and currentPassword are required.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    if (user.role !== 'airline') return res.status(403).json({ message: 'Only airline accounts can add secondary emails.' });
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    const normalEmail = secondaryEmail.toLowerCase().trim();
+
+    const record = await verifyOtp(normalEmail, code, 'secondary-email');
+    if (!record) return res.status(400).json({ message: 'Invalid or expired verification code.' });
+
+    if (normalEmail === user.email) return res.status(400).json({ message: 'This is already your primary email.' });
+    if ((user.secondaryEmails || []).includes(normalEmail))
+      return res.status(409).json({ message: 'This email is already a secondary login for your account.' });
+
+    const conflict = await User.findOne({ $or: [{ email: normalEmail }, { secondaryEmails: normalEmail }] });
+    if (conflict) return res.status(409).json({ message: 'This email is already in use by another account.' });
+
+    record.used = true;
+    await record.save();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $addToSet: { secondaryEmails: normalEmail } },
+      { new: true, runValidators: false },
+    );
+
+    const token = signToken(updatedUser);
+    res.json({ message: 'Secondary email verified and added.', token, user: publicUser(updatedUser) });
+  } catch (err) {
+    console.error('verifyOtpAndAddSecondary error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// POST /api/auth/send-credential-change-otp  (protected)
+// Verifies current password, then sends OTP to the user's current email.
+// Body: { currentPassword }
+exports.sendCredentialChangeOtp = async (req, res) => {
+  try {
+    const { currentPassword } = req.body;
+    if (!currentPassword) return res.status(400).json({ message: 'Current password is required.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    await createAndSendOtp(user.email, 'credential-change');
+    res.json({ message: 'Verification code sent to your email.' });
+  } catch (err) {
+    console.error('sendCredentialChangeOtp error:', err);
+    res.status(500).json({ message: 'Failed to send OTP. Please try again.' });
+  }
+};
+
+// POST /api/auth/verify-otp-and-update-credentials  (protected)
+// Verifies OTP then updates email/password atomically.
+// Body: { currentPassword, otp, newEmail?, newPassword? }
+exports.verifyOtpAndUpdateCredentials = async (req, res) => {
+  try {
+    const { currentPassword, otp, newEmail, newPassword } = req.body;
+    if (!currentPassword || !otp) return res.status(400).json({ message: 'currentPassword and otp are required.' });
+    if (!newEmail && !newPassword) return res.status(400).json({ message: 'Provide a new email or new password.' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    const record = await verifyOtp(user.email, otp, 'credential-change');
+    if (!record) return res.status(400).json({ message: 'Invalid or expired verification code.' });
+
+    const updateFields = {};
+
+    if (newEmail && newEmail.toLowerCase() !== user.email) {
+      const exists = await User.findOne({ email: newEmail.toLowerCase() });
+      if (exists) return res.status(409).json({ message: 'This email is already in use.' });
+      updateFields.email = newEmail.toLowerCase();
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 8) return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+      updateFields.password = await bcrypt.hash(newPassword, 12);
+      updateFields.mustChangePassword = false;
+    }
+
+    record.used = true;
+    await record.save();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: updateFields },
+      { new: true, runValidators: false },
+    );
+
+    const token = signToken(updatedUser);
+    res.json({ message: 'Credentials updated successfully.', token, user: publicUser(updatedUser) });
+  } catch (err) {
+    console.error('verifyOtpAndUpdateCredentials error:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };

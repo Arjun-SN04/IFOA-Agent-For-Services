@@ -89,6 +89,40 @@ input[type="date"].focus\:ring-blue-500\/20:focus {
   box-shadow: none !important;
 }
 
+/* ─── Global modal / popup animations ───────────────────────────────────────
+   Apply .animate-modal-backdrop to overlay divs (fixed inset-0).
+   Apply .animate-modal-panel   to the white card inside.
+   Both are CSS-only enter animations — no JS required.
+   For components using framer-motion the motion.div handles enter + exit;
+   these classes are the fallback for inline JSX modals.
+─────────────────────────────────────────────────────────────────────────── */
+@keyframes ifoa-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ifoa-panel-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.975); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);     }
+}
+
+@keyframes ifoa-panel-in-sm {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);     }
+}
+
+.animate-modal-backdrop {
+  animation: ifoa-backdrop-in 0.18s ease-out both;
+}
+
+.animate-modal-panel {
+  animation: ifoa-panel-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-modal-panel-sm {
+  animation: ifoa-panel-in-sm 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── Layout: ensure register page left column always fills and scrolls ── */
 /* The register page uses position:fixed on the outer wrapper.
    We make sure the left scrollable column stretches to fill the remaining
@@ -120,7 +154,7 @@ input[type="date"].focus\:ring-blue-500\/20:focus {
   position: relative;
 }
 
-/* ── Responsive dashboard ── */
+/* ── Responsive dashboard & Layout helpers ── */
 @media (max-width: 767px) {
   aside[class*='fixed'] {
     transition: transform 0.3s ease, width 0.3s ease;

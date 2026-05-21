@@ -207,9 +207,9 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                   <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Certificate Status</label>
                   <div className="flex gap-3 pt-1">
                     {['NEW', 'EXISTING'].map(val => (
-                      <label key={val} className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all duration-150 flex-1 justify-center ${h.certificateStatus === val ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-blue-300 text-gray-600 bg-white'}`}>
-                        <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${h.certificateStatus === val ? 'border-blue-600 bg-blue-600' : 'border-gray-300'}`}>
-                          {h.certificateStatus === val && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      <label key={val} className={`flex items-center gap-2 cursor-pointer px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all duration-150 flex-1 justify-center ${h.certificateStatus === val ? 'border-slate-900 bg-slate-900 text-white' : 'border-gray-200 hover:border-gray-400 text-gray-600 bg-white'}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${h.certificateStatus === val ? 'border-white bg-white' : 'border-gray-300'}`}>
+                          {h.certificateStatus === val && <span className="w-1.5 h-1.5 rounded-full bg-slate-900" />}
                         </span>
                         <input type="radio" name={`status-${i}`} value={val} checked={h.certificateStatus === val}
                           onChange={e => onChange(i, 'certificateStatus', e.target.value)} className="hidden" />

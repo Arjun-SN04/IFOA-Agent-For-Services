@@ -70,7 +70,7 @@ router.post('/holder-events/:id/convert', auth, adminOnly, async (req, res) => {
 
     const nameParts = (ev.holderName || '').trim().split(/\s+/);
     const firstName = nameParts[0] || 'Holder';
-    const lastName  = nameParts.slice(1).join(' ') || 'Member';
+    const lastName  = nameParts.slice(1).join(' ') || '—';
     const rawPassword = (ev.holderName || 'holder').toLowerCase().replace(/\s+/g, '');
 
     const primaryCertificate = snapshot.certificateType || 'Part 61 - Pilot';

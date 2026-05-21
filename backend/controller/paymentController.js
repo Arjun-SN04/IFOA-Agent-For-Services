@@ -44,6 +44,7 @@ const {
   sendAirlinePaymentConfirmation,
   sendIndividualRenewalConfirmation,
   sendAirlineRenewalConfirmation,
+  sendAirlineHolderUpgradeConfirmation,
 } = require('../services/emailService');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -621,10 +622,10 @@ exports.createPaymentIntent = async (req, res) => {
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount:   amountCents,
-      currency: 'usd',
-      payment_method_types: ['card'],
-      description: `Subscription — ${registrationModel} ${registrationId}`,
+      amount:               amountCents,
+      currency:             'usd',
+      payment_method_types: ['card', 'link'],
+      description:          `Subscription — ${registrationModel} ${registrationId}`,
       metadata,
     });
 
@@ -953,14 +954,23 @@ exports.confirmPayment = async (req, res) => {
     });
 
     // Send confirmation email (non-blocking).
-    // Renewals get a different template than first-time payments.
     if (updatedReg) {
-      const sendFn = isPurposeRenewal
-        ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
-        : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
-      sendFn(updatedReg, req.user?.email).catch((e) =>
-        console.warn('[confirmPayment] Email failed:', e.message)
-      );
+      if (isPurposeHolderUpgrade) {
+        sendAirlineHolderUpgradeConfirmation(
+          updatedReg,
+          Number(pi.metadata?.additionalHolderCount || 0),
+          Number(pi.metadata?.newPricePerCertificate || 0),
+          amountDollars,
+          req.user?.email,
+        ).catch((e) => console.warn('[confirmPayment] Email failed:', e.message));
+      } else {
+        const sendFn = isPurposeRenewal
+          ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
+          : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
+        sendFn(updatedReg, req.user?.email).catch((e) =>
+          console.warn('[confirmPayment] Email failed:', e.message)
+        );
+      }
     }
   } catch (err) {
     console.error('[confirmPayment]', err.message);
@@ -1377,15 +1387,23 @@ exports.stripeWebhook = async (req, res) => {
         console.warn('[stripeWebhook] Invoice doc creation failed:', invoiceErr.message);
       }
 
-      // Send confirmation email — renewal vs first payment (non-blocking).
-      // Skip if frontend confirmPayment already sent it (avoid duplicate).
+      // Send confirmation email — skip if frontend confirmPayment already sent it.
       if (updatedRegWebhook && !alreadyConfirmedByFrontend) {
-        const sendFn = isPurposeRenewal
-          ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
-          : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
-        sendFn(updatedRegWebhook).catch((e) =>
-          console.warn('[stripeWebhook] Email failed:', e.message)
-        );
+        if (isPurposeHolderUpgradeWebhook) {
+          sendAirlineHolderUpgradeConfirmation(
+            updatedRegWebhook,
+            Number(pi.metadata?.additionalHolderCount || 0),
+            Number(pi.metadata?.newPricePerCertificate || 0),
+            amountDollars,
+          ).catch((e) => console.warn('[stripeWebhook] Email failed:', e.message));
+        } else {
+          const sendFn = isPurposeRenewal
+            ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
+            : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
+          sendFn(updatedRegWebhook).catch((e) =>
+            console.warn('[stripeWebhook] Email failed:', e.message)
+          );
+        }
       }
 
       console.log(`[stripeWebhook] Payment ${paymentDoc._id} recorded for ${registrationModel} ${registrationId}`);

@@ -417,7 +417,7 @@ export default function AdminAirlineForm() {
           <h3 className="text-lg font-black mb-4" style={{ color: C.dark }}>Plan & Company Details</h3>
 
           {/* Holder Count & Plan */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                 Number of Holders {errors.holderCount && <span style={{ color: C.red }}>*</span>}
@@ -489,7 +489,7 @@ export default function AdminAirlineForm() {
           </div>
 
           {/* Contact Person */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                 First Name {errors.firstName && <span style={{ color: C.red }}>*</span>}
@@ -530,7 +530,7 @@ export default function AdminAirlineForm() {
           </div>
 
           {/* DOB, Email, Phone */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>Date of Birth</label>
               <input
@@ -597,7 +597,7 @@ export default function AdminAirlineForm() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>City</label>
               <input
@@ -622,7 +622,7 @@ export default function AdminAirlineForm() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>Postal Code</label>
               <input
@@ -692,7 +692,7 @@ export default function AdminAirlineForm() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                     Full Name {errors.holderErrors?.[idx]?.fullName && <span style={{ color: C.red }}>*</span>}
@@ -719,7 +719,7 @@ export default function AdminAirlineForm() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                     Certificate Type {errors.holderErrors?.[idx]?.certificateType && <span style={{ color: C.red }}>*</span>}
@@ -750,7 +750,7 @@ export default function AdminAirlineForm() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                     FAA Certificate # {errors.holderErrors?.[idx]?.faaCertificateNumber && <span style={{ color: C.red }}>*</span>}
@@ -799,7 +799,7 @@ export default function AdminAirlineForm() {
                 </label>
 
                 {holder.hasSecondaryCertificate && (
-                  <div className="grid grid-cols-3 gap-4 mt-4 pl-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pl-6">
                     <div>
                       <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>
                         Type {errors.holderErrors?.[idx]?.secondaryCertificateType && <span style={{ color: C.red }}>*</span>}
@@ -849,7 +849,7 @@ export default function AdminAirlineForm() {
           <p className="text-sm mb-4" style={{ color: C.gray600 }}>
             These will be the login credentials for the airline. If left blank, primary contact info will be used.
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold mb-2" style={{ color: C.dark }}>Point of Contact Email</label>
               <input

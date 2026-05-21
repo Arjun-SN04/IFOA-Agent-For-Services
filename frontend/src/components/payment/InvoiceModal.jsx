@@ -17,7 +17,15 @@
  */
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { generateIFOAInvoicePDF, triggerInvoiceDownload } from '../../utils/ifoaInvoicePdf'
+
+const INV_BACKDROP = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.18 } }, exit: { opacity: 0, transition: { duration: 0.15 } } }
+const INV_PANEL    = {
+  hidden:  { opacity: 0, y: 12, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 340, damping: 28 } },
+  exit:    { opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.15, ease: 'easeIn' } },
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (d) =>
@@ -127,6 +135,8 @@ export async function downloadInvoicePDF(inv) {
 export default function InvoiceModal({ invoice, onClose }) {
   const [downloading, setDownloading] = useState(false)
   const [previewing,  setPreviewing]  = useState(false)
+  const [visible,     setVisible]     = useState(true)
+  const handleClose = () => setVisible(false)
 
   if (!invoice) return null
 
@@ -173,8 +183,14 @@ export default function InvoiceModal({ invoice, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+    <AnimatePresence onExitComplete={onClose}>
+    {visible && (
+    <motion.div
+      variants={INV_BACKDROP} initial="hidden" animate="visible" exit="exit"
+      className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div
+        variants={INV_PANEL} initial="hidden" animate="visible" exit="exit"
+        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
 
         {/* Accent bar */}
         <div className="h-0.5 w-full bg-slate-200" />
@@ -185,7 +201,7 @@ export default function InvoiceModal({ invoice, onClose }) {
             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Payment Confirmed</p>
             <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Your Invoice</h2>
           </div>
-          <button onClick={onClose}
+          <button onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -290,12 +306,14 @@ export default function InvoiceModal({ invoice, onClose }) {
               )}
             </button>
           </div>
-          <button onClick={onClose}
+          <button onClick={handleClose}
             className="w-full rounded-xl py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition">
             Close
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   )
 }

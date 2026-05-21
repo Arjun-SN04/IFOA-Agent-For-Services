@@ -1,17 +1,179 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_white.png'
 import { Lock, ShieldCheck, MapPin } from 'lucide-react'
+import OtpTimer from '../components/OtpTimer'
 
 const roles = [
   { value: 'individual', label: 'Individual Pilot / Dispatcher', desc: 'Part 61/65 certificate holders' },
   { value: 'airline', label: 'Airline / Operator', desc: 'Companies with 3+ certificate holders' },
 ]
 
+// ── OTP Verification Modal ────────────────────────────────────────────────────
+function OtpModal({ email, onVerify, onResend, onCancel }) {
+  const [digits, setDigits] = useState(['', '', '', '', '', ''])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resent, setResent] = useState(false)
+  const [timerKey, setTimerKey] = useState(0)
+  const inputRefs = useRef([])
+
+  const code = digits.join('')
+
+  const handleDigit = (i, val) => {
+    if (!/^\d?$/.test(val)) return
+    const next = [...digits]
+    next[i] = val
+    setDigits(next)
+    if (val && i < 5) inputRefs.current[i + 1]?.focus()
+  }
+
+  const handleKeyDown = (i, e) => {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) {
+      inputRefs.current[i - 1]?.focus()
+    }
+    if (e.key === 'ArrowLeft' && i > 0) inputRefs.current[i - 1]?.focus()
+    if (e.key === 'ArrowRight' && i < 5) inputRefs.current[i + 1]?.focus()
+  }
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (!pasted) return
+    e.preventDefault()
+    const next = pasted.split('').concat(Array(6).fill('')).slice(0, 6)
+    setDigits(next)
+    const lastFilled = Math.min(pasted.length, 5)
+    inputRefs.current[lastFilled]?.focus()
+  }
+
+  const handleVerify = async () => {
+    if (code.length < 6) { setError('Enter the full 6-digit code.'); return }
+    setLoading(true); setError('')
+    try {
+      await onVerify(code)
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Invalid or expired code. Try again.')
+      setDigits(['', '', '', '', '', ''])
+      inputRefs.current[0]?.focus()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    setResending(true); setError(''); setResent(false)
+    try {
+      await onResend()
+      setResent(true)
+      setTimerKey(k => k + 1)
+      setDigits(['', '', '', '', '', ''])
+      inputRefs.current[0]?.focus()
+      setTimeout(() => setResent(false), 4000)
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to resend. Try again.')
+    } finally {
+      setResending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        transition={{ duration: 0.22 }}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden"
+        style={{ border: '1px solid #e2e8f0' }}
+      >
+        <div className="px-6 pt-6 pb-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4.5 h-4.5 text-slate-600" style={{ width: '1.1rem', height: '1.1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Email Verification</p>
+              <h2 className="text-sm font-black text-slate-900 leading-tight">Verify Your Email</h2>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-6">
+
+          <p className="text-sm text-slate-600 mb-1">We sent a 6-digit code to</p>
+          <p className="text-sm font-bold text-slate-900 truncate">{email}</p>
+          <div className="mt-1 mb-4"><OtpTimer resetKey={timerKey} /></div>
+
+          {error && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+              {error}
+            </div>
+          )}
+          {resent && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              New code sent!
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-center mb-5" onPaste={handlePaste}>
+            {digits.map((d, i) => (
+              <input
+                key={i}
+                ref={el => inputRefs.current[i] = el}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={d}
+                onChange={e => handleDigit(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(i, e)}
+                className="w-11 h-12 text-center text-lg font-black rounded-xl border-2 outline-none transition"
+                style={{
+                  borderColor: d ? '#0000ff' : '#e2e8f0',
+                  background: d ? '#f0f4ff' : '#f8fafc',
+                  color: '#0f172a',
+                }}
+                onFocus={e => { e.target.style.borderColor = '#0000ff'; e.target.style.boxShadow = '0 0 0 3px rgba(0,0,255,0.12)' }}
+                onBlur={e => { if (!d) { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none' } }}
+              />
+            ))}
+          </div>
+
+          <button onClick={handleVerify} disabled={loading || code.length < 6}
+            className="w-full rounded-xl py-3 text-sm font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2 mb-3"
+            style={{ background: loading ? '#3333ff' : '#0000ff' }}
+            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#0000e6' }}
+            onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#0000ff' }}>
+            {loading
+              ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Verifying…</>
+              : <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                  Verify & Create Account
+                </>
+            }
+          </button>
+
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <button onClick={handleResend} disabled={resending} className="hover:text-blue-600 transition-colors disabled:opacity-50">
+              {resending ? 'Sending…' : 'Resend code'}
+            </button>
+            <button onClick={onCancel} className="hover:text-slate-800 transition-colors">
+              Change email
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 export default function SignupPage() {
-  const { signup } = useAuth()
+  const { sendOtp, verifyOtpAndSignup } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = location.state?.from?.pathname
@@ -27,6 +189,7 @@ export default function SignupPage() {
   const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showOtp, setShowOtp] = useState(false)
 
   const inputStyle = {
     borderColor: '#e2e8f0',
@@ -44,21 +207,44 @@ export default function SignupPage() {
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     setLoading(true)
     try {
-      const user = await signup(email, password, role, firstName, lastName, role === 'airline' ? airlineName.trim() : undefined)
-      if (from && from !== '/signup' && from !== '/login') {
-        navigate(from, { replace: true })
-      } else {
-        navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true })
-      }
+      await sendOtp(email.trim().toLowerCase(), 'signup')
+      setShowOtp(true)
     } catch (err) {
-      setError(err?.response?.data?.message || 'Signup failed. Please try again.')
+      setError(err?.response?.data?.message || 'Failed to send verification code. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleVerify = async (code) => {
+    const user = await verifyOtpAndSignup(email.trim().toLowerCase(), code, {
+      password, role, firstName, lastName,
+      airlineName: role === 'airline' ? airlineName.trim() : undefined,
+    })
+    setShowOtp(false)
+    if (from && from !== '/signup' && from !== '/login') {
+      navigate(from, { replace: true })
+    } else {
+      navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true })
+    }
+  }
+
+  const handleResend = async () => {
+    await sendOtp(email.trim().toLowerCase(), 'signup')
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:py-10 bg-white">
+      <AnimatePresence>
+        {showOtp && (
+          <OtpModal
+            email={email}
+            onVerify={handleVerify}
+            onResend={handleResend}
+            onCancel={() => setShowOtp(false)}
+          />
+        )}
+      </AnimatePresence>
 
       <motion.div
         initial={{ opacity: 0, y: 24 }}
@@ -68,7 +254,7 @@ export default function SignupPage() {
       >
         {/* Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
-          {/* Simple white header */}
+          {/* Header */}
           <div className="px-5 sm:px-8 py-6 sm:py-7 text-center border-b border-slate-100">
             <Link to="/" className="inline-block">
               <img src={logo} alt="IFOA USA" className="h-10 sm:h-11 w-auto mx-auto" />
@@ -196,8 +382,8 @@ export default function SignupPage() {
                 onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#0000e6' }}
                 onMouseLeave={e => { if (!loading) e.currentTarget.style.background = '#0000ff' }}>
                 {loading ? (
-                  <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.2" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Creating account…</>
-                ) : 'Create Account'}
+                  <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.2" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Sending code…</>
+                ) : 'Send Verification Code'}
               </button>
             </form>
 

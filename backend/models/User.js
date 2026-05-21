@@ -25,6 +25,8 @@ const UserSchema = new mongoose.Schema({
   },
   // All subscription IDs ever created by this account (airlines can have multiple)
   subscriptionIds: [{ type: mongoose.Schema.Types.ObjectId }],
+  // Airline-only: additional emails that can be used to log in (same password)
+  secondaryEmails: [{ type: String, lowercase: true, trim: true }],
 }, { timestamps: true });
 
 // Hash password before save

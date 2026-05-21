@@ -1,60 +1,53 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
-  CardNumberElement,
-  CardExpiryElement,
-  CardCvcElement,
+  PaymentElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js'
 import InvoiceModal from './InvoiceModal'
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY, {
-  advancedFraudSignals: false,
-})
+const BACKDROP = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } }
+const PANEL    = {
+  hidden:  { opacity: 0, y: 16, scale: 0.97 },
+  visible: { opacity: 1, y: 0,  scale: 1, transition: { type: 'spring', stiffness: 340, damping: 28 } },
+  exit:    { opacity: 0, y: 10, scale: 0.98, transition: { duration: 0.16, ease: 'easeIn' } },
+}
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
 
 const ELEMENTS_APPEARANCE = {
   theme: 'stripe',
   variables: {
-    colorPrimary: '#2563eb',
+    colorPrimary: '#0f172a',
     colorBackground: '#ffffff',
     colorText: '#0f172a',
     colorDanger: '#dc2626',
     fontFamily: 'system-ui, sans-serif',
     spacingUnit: '4px',
-    borderRadius: '16px',
+    borderRadius: '10px',
   },
   rules: {
-    '.Input': { border: '1px solid #e2e8f0', boxShadow: 'none', padding: '10px 14px', background: '#f8fafc' },
-    '.Input:focus': { border: '1px solid #2563eb', boxShadow: '0 0 0 3px rgba(37,99,235,0.12)', background: '#ffffff' },
+    '.Input': { border: '1px solid #e2e8f0', boxShadow: 'none', padding: '10px 14px', background: '#f8fafc', color: '#0f172a' },
+    '.Input:focus': { border: '1px solid #0f172a', boxShadow: '0 0 0 2px rgba(15,23,42,0.08)', background: '#ffffff' },
     '.Label': { fontWeight: '700', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' },
-    '.Tab': { border: '1px solid #e2e8f0', boxShadow: 'none' },
-    '.Tab:hover': { border: '1px solid #2563eb' },
-    '.Tab--selected': { border: '2px solid #2563eb', boxShadow: '0 0 0 3px rgba(37,99,235,0.12)' },
+    '.Tab': { border: '1px solid #e2e8f0', boxShadow: 'none', borderRadius: '10px', color: '#64748b' },
+    '.Tab:hover': { border: '1px solid #cbd5e1', color: '#0f172a', background: '#f8fafc' },
+    '.Tab--selected': { border: '2px solid #0f172a', boxShadow: 'none', color: '#0f172a', background: '#ffffff', fontWeight: '700' },
+    '.Tab--selected:focus': { boxShadow: '0 0 0 2px rgba(15,23,42,0.12)' },
+    '.TabIcon--selected': { fill: '#0f172a' },
+    '.TabLabel--selected': { color: '#0f172a', fontWeight: '700' },
+    '.PickerItem--selected': { border: '2px solid #0f172a', boxShadow: 'none' },
+    '.PickerItem:hover': { border: '1px solid #cbd5e1' },
   },
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const CARD_ELEMENT_OPTIONS = {
-  style: {
-    base: {
-      color: '#0f172a',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      fontSize: '18px',
-      '::placeholder': { color: '#94a3b8' },
-      iconColor: '#64748b',
-    },
-    invalid: {
-      color: '#dc2626',
-      iconColor: '#dc2626',
-    },
-  },
-}
-
-// ── Payment Success Screen (shown before invoice) ─────────────────────────────
+// ── Payment Success Screen ────────────────────────────────────────────────────
 function PaymentSuccessScreen({ amount, onViewInvoice }) {
   const [show, setShow] = useState(false)
   useEffect(() => { const t = setTimeout(() => setShow(true), 60); return () => clearTimeout(t) }, [])
@@ -63,7 +56,6 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
     <div className={`flex flex-col items-center justify-center px-6 py-10 text-center transition-all duration-500 ${
       show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
     }`}>
-      {/* Animated green circle + tick */}
       <div className="relative mb-6">
         <div
           className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-200"
@@ -81,7 +73,6 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        {/* Ripple rings */}
         <div className="absolute inset-0 rounded-full border-4 border-emerald-400 opacity-0"
           style={{ animation: show ? 'pmRipple 1s ease-out 0.3s forwards' : 'none' }} />
         <div className="absolute inset-0 rounded-full border-4 border-emerald-300 opacity-0"
@@ -101,7 +92,8 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
 
       <button
         onClick={onViewInvoice}
-        className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-8 py-3 rounded-xl text-sm transition-all shadow-md shadow-red-200 hover:-translate-y-0.5"
+        className="inline-flex items-center gap-2 text-white font-bold px-8 py-3 rounded-xl text-sm transition-all shadow-md hover:-translate-y-0.5"
+        style={{ background: '#0000ff' }}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -118,12 +110,12 @@ function PaymentSuccessScreen({ amount, onViewInvoice }) {
 }
 
 // ── Inner checkout form ───────────────────────────────────────────────────────
-function CheckoutForm({ clientSecret, registrationId, registrationModel, amount, subscriptionData, purpose, onSuccess, onCancel }) {
+function CheckoutForm({ registrationId, registrationModel, amount, subscriptionData, purpose, onSuccess, onCancel }) {
   const stripe   = useStripe()
   const elements = useElements()
-  const [cardholderName, setCardholderName] = useState('')
   const [loading,       setLoading]      = useState(false)
   const [error,         setError]        = useState(null)
+  const [elementsReady, setElementsReady] = useState(false)
   // phase: 'form' | 'success' | 'invoice'
   const [phase,         setPhase]        = useState('form')
   const [invoice,       setInvoice]      = useState(null)
@@ -134,15 +126,9 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) return null
-
       const json = await res.json()
       const docs = Array.isArray(json?.data) ? json.data : []
-      if (!docs.length) return null
-
-      // Prefer the newest canonical invoice document. The backend updates the
-      // original invoice in place for holder-upgrades, so this usually returns
-      // the airline's active invoice with the refreshed holder count.
-      return docs[0]
+      return docs.length ? docs[0] : null
     } catch {
       return null
     }
@@ -179,27 +165,21 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
     setError(null)
 
     try {
-      const cardNumberEl = elements.getElement(CardNumberElement)
-      if (!cardNumberEl) {
-        throw new Error('Card form is not ready. Please try again.')
-      }
-
-      // 1. Confirm payment with Stripe card element
-      const { error: stripeErr, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardNumberEl,
-          billing_details: {
-            name: cardholderName?.trim() || undefined,
-            email: subscriptionData?.email || subscriptionData?.paymentEmail || undefined,
-          },
+      // confirmPayment handles card, Link, and any other enabled payment method
+      const { error: stripeErr, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/dashboard/subscription`,
         },
+        redirect: 'if_required',
       })
+
       if (stripeErr) throw new Error(stripeErr.message)
 
       if (paymentIntent?.status === 'succeeded') {
         const token = localStorage.getItem('ifoa_token') || ''
 
-        // 2. Call primary /payments/confirm endpoint — creates Payment record & marks subscription Active
+        // Notify our backend — creates Payment record + marks subscription Active
         let confirmJson = { success: false }
         try {
           const confirmRes = await fetch(`${BASE_URL}/payments/confirm`, {
@@ -221,8 +201,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
           console.warn('[PaymentModal] /payments/confirm network error:', networkErr.message)
         }
 
-        // 3. Fallback: if the primary confirm failed, directly mark the registration paid
-        //    This guarantees the user's profile shows Active even if the Payment record write failed
+        // Fallback: directly mark the registration paid if primary confirm failed
         if (!confirmJson.success) {
           console.warn('[PaymentModal] Primary confirm failed, running fallback mark-paid:', confirmJson.message)
           try {
@@ -238,8 +217,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
           }
         }
 
-        // 4. Prefer the canonical Invoice doc so airline holder-upgrades show
-        // the refreshed active-plan invoice to both the airline and admin.
+        // Prefer canonical Invoice doc for accurate holder count / totals
         const canonicalInvoice = await fetchCanonicalInvoice(token)
         const inv = canonicalInvoice
           ? invoiceDocToInvoice(canonicalInvoice, confirmJson.payment?.stripePaymentIntentId || paymentIntent.id)
@@ -248,7 +226,6 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
               : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date()))
 
         setInvoice(inv)
-        // Show success tick screen first
         setPhase('success')
         onSuccess?.(inv, confirmJson.registration)
       }
@@ -259,7 +236,6 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
     }
   }
 
-  // ── Success tick screen (before invoice) ────────────────────────────────────
   if (phase === 'success') {
     return (
       <PaymentSuccessScreen
@@ -269,7 +245,6 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
     )
   }
 
-  // ── Invoice modal screen ─────────────────────────────────────────────────────
   if (phase === 'invoice' && invoice) {
     return (
       <InvoiceModal
@@ -279,79 +254,43 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
     )
   }
 
-  // ── Payment form ─────────────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {/* Card preview */}
-      <div className="rounded-3xl p-4 shadow-xl relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 55%, #1e3a5f 100%)' }}>
-        {/* Decorative circles */}
-        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-white/5" />
-        <div className="absolute -right-2 -bottom-10 w-24 h-24 rounded-full bg-blue-500/10" />
-        <div className="flex justify-between items-start mb-4 relative">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-300 mb-1">Amount Due</p>
-            <p className="text-white font-black text-2xl tracking-tight">
-              ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+      {/* Amount strip */}
+      <div className="rounded-2xl px-4 py-3.5 relative overflow-hidden flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #000021 0%, #0f172a 60%, #1e3a5f 100%)' }}>
+        <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-blue-300 mb-0.5">Amount Due</p>
+          <p className="text-white font-black text-2xl tracking-tight leading-none">
+            ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </p>
+          {subscriptionData?.subscriptionPlan && (
+            <p className="text-white/40 text-[10px] mt-1 font-medium">
+              {subscriptionData.subscriptionPlan.replace(' Subscription Plan', '').replace(' Plan', '')}
             </p>
-          </div>
-          <div className="flex gap-0.5 mt-1">
-            <div className="w-8 h-8 rounded-full bg-blue-500/60" />
-            <div className="w-8 h-8 rounded-full bg-blue-300/40 -ml-4" />
-          </div>
+          )}
         </div>
-        <p className="text-white/50 font-mono text-sm tracking-[0.2em] mb-3 relative">•••• •••• •••• ••••</p>
-        <div className="flex justify-between text-white/50 text-[10px] font-semibold uppercase tracking-wider relative">
-          <span className="truncate max-w-[60%]">{cardholderName?.trim() || 'Cardholder Name'}</span>
-          <span>MM / YY</span>
+        <div className="flex items-center opacity-50 flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-blue-500/60" />
+          <div className="w-8 h-8 rounded-full bg-blue-300/40 -ml-4" />
         </div>
       </div>
 
-      {/* Cardholder */}
-      <div>
-        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
-          Cardholder Name
-        </label>
-        <input
-          type="text"
-          value={cardholderName}
-          onChange={(e) => setCardholderName(e.target.value)}
-          placeholder="Name on card"
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:bg-white"
+      {/* Stripe PaymentElement — card + Link, amount locked by clientSecret */}
+      <div className="min-h-[140px]">
+        <PaymentElement
+          onReady={() => setElementsReady(true)}
+          options={{
+            layout: { type: 'tabs', defaultCollapsed: false },
+            fields: { billingDetails: { name: 'auto', email: 'auto' } },
+            terms: { card: 'never' },
+          }}
         />
       </div>
 
-      {/* Card fields */}
-      <div>
-        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
-          Card Number
-        </label>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
-          <CardNumberElement options={CARD_ELEMENT_OPTIONS} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
-            Expiration Date
-          </label>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
-            <CardExpiryElement options={CARD_ELEMENT_OPTIONS} />
-          </div>
-        </div>
-        <div>
-          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">
-            Security Code
-          </label>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 focus-within:bg-white transition-all">
-            <CardCvcElement options={CARD_ELEMENT_OPTIONS} />
-          </div>
-        </div>
-      </div>
-
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2.5">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2.5">
           <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
           </svg>
@@ -359,13 +298,14 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         </div>
       )}
 
-      <div className="flex gap-3 pt-1">
+      <div className="border-t border-slate-100 pt-3 flex gap-3">
         <button type="button" onClick={onCancel} disabled={loading}
-          className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
           Cancel
         </button>
-        <button type="submit" disabled={loading || !stripe}
-          className="flex-[2] rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold px-4 py-3.5 text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-blue-200">
+        <button type="submit" disabled={loading || !stripe || !elementsReady}
+          className="flex-[2] rounded-xl text-white font-bold px-4 py-2.5 text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: '#0000ff' }}>
           {loading ? (
             <>
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -385,7 +325,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
         </button>
       </div>
 
-      <p className="text-center text-[10px] text-slate-400 font-semibold flex items-center justify-center gap-1.5 pb-1">
+      <p className="text-center text-[10px] text-slate-400 font-medium flex items-center justify-center gap-1.5 pb-2">
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
@@ -395,7 +335,7 @@ function CheckoutForm({ clientSecret, registrationId, registrationModel, amount,
   )
 }
 
-// ── Utility: build a local invoice object from subscription + paymentIntent ───
+// ── Utility: build local invoice from subscription + paymentIntent ─────────────
 export function buildInvoice(sub, registrationModel, amountCents, paymentIntent, now) {
   const isAirline = registrationModel !== 'Individual'
   const expirationDate = (() => {
@@ -406,46 +346,42 @@ export function buildInvoice(sub, registrationModel, amountCents, paymentIntent,
       return d.toISOString()
     }
     if (sub.subscriptionPlan === 'Multiple Years Subscription Plan') {
-      // Derive from actual charged amount (most reliable) — $55/year for Individual.
-      // Falls back to multiYearCount then default 3.
       const fromAmount = registrationModel !== 'Individual' ? null
         : amountCents >= 11000 ? Math.round(amountCents / 5500) : null
       const years = fromAmount || sub.multiYearCount || 3
       d.setFullYear(d.getFullYear() + years)
       return d.toISOString()
     }
-    return null // Unlimited
+    return null
   })()
 
   return {
     invoiceNumber:    sub?.invoiceNumber || paymentIntent?.id?.slice(-8).toUpperCase() || '—',
-    paidAt:        now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
+    paidAt:           now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
     subscriptionPlan: sub?.subscriptionPlan || '—',
-    expirationDate: expirationDate ? new Date(expirationDate).toISOString() : null,
-    amount:        amountCents / 100,
-    currency:      'USD',
-    paymentId:     paymentIntent?.id || '—',
+    expirationDate:   expirationDate ? new Date(expirationDate).toISOString() : null,
+    amount:           amountCents / 100,
+    currency:         'USD',
+    paymentId:        paymentIntent?.id || '—',
     name: isAirline
       ? sub?.airlineName || [sub?.firstName, sub?.lastName].filter(Boolean).join(' ')
       : [sub?.firstName, sub?.lastName].filter(Boolean).join(' '),
-    email: sub?.email || sub?.contactEmail || sub?.paymentEmail || '—',
-    phone: sub?.phone || sub?.contactPhone || '—',
+    email:   sub?.email || sub?.contactEmail || sub?.paymentEmail || '—',
+    phone:   sub?.phone || sub?.contactPhone || '—',
     address: [sub?.addressLine1, sub?.city, sub?.state, sub?.postalCode, sub?.country].filter(Boolean).join(', '),
     isAirline,
     pricePerCert: sub?.pricePerCertificate || sub?.pricePerCert || null,
-    // committedCount is the billed quantity — always prefer it over the current
-    // certificateHolders length, which may be partially filled.
     holderCount:  sub?.committedCount || sub?.holderCountValue || sub?.certificateHolders?.length || null,
-    primaryCertificate: sub?.primaryCertificate || null,
+    primaryCertificate:   sub?.primaryCertificate || null,
     faaCertificateNumber: sub?.faaCertificateNumber || null,
-    iacraTrackingNumber: sub?.iacraTrackingNumber || null,
+    iacraTrackingNumber:  sub?.iacraTrackingNumber || null,
   }
 }
 
-// ── Utility: convert a server Payment document to invoice shape ───────────────
+// ── Utility: convert server Payment doc to invoice shape ──────────────────────
 export function serverPaymentToInvoice(paymentDoc) {
   if (!paymentDoc) return null
-  const snap = paymentDoc.invoiceSnapshot || {}
+  const snap  = paymentDoc.invoiceSnapshot || {}
   const draft = paymentDoc.invoiceDraft || null
   return {
     invoiceNumber:    paymentDoc.invoiceNumber || snap.invoiceNumber || '—',
@@ -473,16 +409,18 @@ export function serverPaymentToInvoice(paymentDoc) {
 }
 
 // ── Wrapper: fetches clientSecret then mounts Elements ────────────────────────
-// newSubscriptionPlan: optional — pass when user changes plan at renewal time
-export default function PaymentModal({ registrationId, registrationModel, amount, subscriptionData, purpose, onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount, renewalHoldersToRemove }) {
+export default function PaymentModal({
+  registrationId, registrationModel, amount, subscriptionData, purpose,
+  onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount,
+  renewalExactCount, additionalHolderCount, renewalHoldersToRemove,
+}) {
   const [clientSecret,  setClientSecret]  = useState(null)
   const [fetchError,    setFetchError]    = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [backendAmount, setBackendAmount] = useState(null)
+  const [visible,       setVisible]       = useState(true)
+  const handleClose = () => setVisible(false)
 
-  // Lock background page scroll without shifting viewport position.
-  // This page uses its own fixed-height scroll container, so forcing
-  // body to `position: fixed` can make the checkout panel render off-screen.
   useEffect(() => {
     const prevBodyOverflow = document.body.style.overflow
     const prevHtmlOverflow = document.documentElement.style.overflow
@@ -495,7 +433,6 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   }, [])
 
   useEffect(() => {
-    // Don't fire until we have a real registrationId — avoids 401 on first render
     if (!registrationId || !registrationModel) return
     const create = async () => {
       try {
@@ -504,16 +441,12 @@ export default function PaymentModal({ registrationId, registrationModel, amount
           registrationModel,
           purpose: purpose || 'payment',
         }
-        // Forward plan-change request so backend can compute the correct amount
-        if (newSubscriptionPlan) body.newSubscriptionPlan = newSubscriptionPlan
-        // Forward user-selected year count for Multi-Year renewals
-        if (renewalMultiYearCount) body.renewalMultiYearCount = renewalMultiYearCount
-        // Forward user-adjusted holder count for airline renewals
-        if (renewalExactCount) body.renewalExactCount = renewalExactCount
-        // Forward holder IDs to remove on activation (airline downgrade)
-        if (renewalHoldersToRemove && renewalHoldersToRemove.length) body.renewalHoldersToRemove = renewalHoldersToRemove
-        // Forward additional holder count for holder-upgrade purchases
-        if (additionalHolderCount) body.additionalHolderCount = additionalHolderCount
+        if (newSubscriptionPlan)    body.newSubscriptionPlan    = newSubscriptionPlan
+        if (renewalMultiYearCount)  body.renewalMultiYearCount  = renewalMultiYearCount
+        if (renewalExactCount)      body.renewalExactCount      = renewalExactCount
+        if (renewalHoldersToRemove && renewalHoldersToRemove.length)
+          body.renewalHoldersToRemove = renewalHoldersToRemove
+        if (additionalHolderCount)  body.additionalHolderCount  = additionalHolderCount
 
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
           method:  'POST',
@@ -524,7 +457,6 @@ export default function PaymentModal({ registrationId, registrationModel, amount
           body: JSON.stringify(body),
         })
         const json = await res.json()
-        // 403 + mustChangePassword: redirect to login so user can set password first
         if (res.status === 403 && json?.mustChangePassword) {
           window.location.replace('/login')
           return
@@ -542,22 +474,30 @@ export default function PaymentModal({ registrationId, registrationModel, amount
   }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount])
 
   return createPortal(
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="w-full max-w-md max-h-[96vh] rounded-3xl bg-white flex flex-col overflow-hidden"
-        style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)' }}>
+    <AnimatePresence onExitComplete={onClose}>
+    {visible && (
+    <motion.div
+      variants={BACKDROP} initial="hidden" animate="visible" exit="exit"
+      className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-start justify-center pt-10 sm:pt-14 px-4 pb-4" style={{ zIndex: 9999 }}>
+      <motion.div
+        variants={PANEL} initial="hidden" animate="visible" exit="exit"
+        className="w-full max-w-md rounded-3xl bg-white flex flex-col overflow-hidden"
+        style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(82vh, 700px)' }}>
 
         {/* Header */}
         <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <svg className="w-5 h-5 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-900">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
             <div>
-              <div className="flex items-center gap-1.5 mb-0.5"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Checkout</p></div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Checkout</p>
               <p className="text-slate-900 font-black text-[14px] leading-tight">Complete Your Subscription</p>
             </div>
           </div>
-          <button onClick={onClose}
+          <button onClick={handleClose}
             className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -580,7 +520,7 @@ export default function PaymentModal({ registrationId, registrationModel, amount
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
               <p className="font-bold mb-1">Failed to initialize payment</p>
               <p>{fetchError}</p>
-              <button onClick={onClose} className="mt-3 text-xs font-semibold underline">Close</button>
+              <button onClick={handleClose} className="mt-3 text-xs font-semibold underline">Close</button>
             </div>
           )}
 
@@ -590,20 +530,21 @@ export default function PaymentModal({ registrationId, registrationModel, amount
               options={{ clientSecret, appearance: ELEMENTS_APPEARANCE }}
             >
               <CheckoutForm
-                clientSecret={clientSecret}
                 registrationId={registrationId}
                 registrationModel={registrationModel}
                 amount={backendAmount ?? amount}
                 subscriptionData={subscriptionData}
                 purpose={purpose || 'payment'}
                 onSuccess={onSuccess}
-                onCancel={onClose}
+                onCancel={handleClose}
               />
             </Elements>
           )}
         </div>
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>
+    )}
+    </AnimatePresence>,
     document.body
   )
 }

@@ -2,6 +2,7 @@ const express = require('express');
 const multer  = require('multer');
 const router  = express.Router();
 const authMiddleware = require('../middleware/auth');
+const { uploadBuffer } = require('../utils/cloudinary');
 const Airlines    = require('../models/Airlines');
 const Individual  = require('../models/Individual');
 const User        = require('../models/User');
@@ -40,6 +41,16 @@ const upload = multer({
   },
 });
 
+// 2 MB image upload (logo)
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = file.mimetype.startsWith('image/');
+    cb(ok ? null : new Error('Only image files are accepted.'), !!ok);
+  },
+});
+
 function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Admin access required.' });
@@ -56,6 +67,47 @@ function requireOwnership(req, res, next) {
   if (userRegId === id || userSubIds.includes(id)) return next();
   return res.status(403).json({ success: false, message: 'Access denied.' });
 }
+
+// ── Logo upload (Cloudinary) ─────────────────────────────────────────────────
+// Standalone upload — returns a URL (used during signup before record exists)
+router.post('/upload-logo', authMiddleware, imageUpload.single('logo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
+  try {
+    const result = await uploadBuffer(req.file.buffer, {
+      folder: 'airline-logos',
+      resource_type: 'image',
+      format: 'webp',
+      transformation: [{ width: 400, height: 400, crop: 'limit' }],
+    });
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    console.error('Logo upload error:', err);
+    res.status(500).json({ message: 'Upload failed.' });
+  }
+});
+
+// Update logo on an existing Airlines record
+router.patch('/:id/logo', authMiddleware, requireOwnership, imageUpload.single('logo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
+  try {
+    const result = await uploadBuffer(req.file.buffer, {
+      folder: 'airline-logos',
+      resource_type: 'image',
+      format: 'webp',
+      transformation: [{ width: 400, height: 400, crop: 'limit' }],
+    });
+    const updated = await Airlines.findByIdAndUpdate(
+      req.params.id,
+      { logoUrl: result.secure_url },
+      { new: true },
+    );
+    if (!updated) return res.status(404).json({ message: 'Airline record not found.' });
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    console.error('Logo update error:', err);
+    res.status(500).json({ message: 'Upload failed.' });
+  }
+});
 
 // ── Public — registration form submit ────────────────────────────────────────
 router.post('/', createAirlinesSubscription);
@@ -85,6 +137,31 @@ router.patch('/:id/add-holders',            authMiddleware, requireOwnership, ad
 router.post('/:id/renew',                   authMiddleware, requireOwnership, renewAirlinesSubscription);
 
 // ── Holder management (owner or admin) ───────────────────────────────────────
+
+// PATCH /:id/holders/:holderId — update a single holder's details
+router.patch('/:id/holders/:holderId', authMiddleware, requireOwnership, async (req, res) => {
+  try {
+    const airline = await Airlines.findById(req.params.id);
+    if (!airline) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const holder = airline.certificateHolders.id(req.params.holderId);
+    if (!holder) return res.status(404).json({ success: false, message: 'Holder not found.' });
+
+    const allowed = [
+      'fullName', 'certificateType', 'certificateStatus', 'faaCertificateNumber',
+      'iacraFtnNumber', 'email', 'dateOfBirth',
+      'hasSecondaryCertificate', 'secondaryCertificateType',
+      'secondaryFaaCertificateNumber', 'secondaryIacraFtnNumber',
+    ];
+    allowed.forEach(field => {
+      if (req.body[field] !== undefined) holder[field] = req.body[field];
+    });
+    await airline.save();
+    return res.json({ success: true, data: airline });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // DELETE /:id/holders/:holderId — remove a single holder from the airline
 router.delete('/:id/holders/:holderId', authMiddleware, requireOwnership, async (req, res) => {
@@ -144,7 +221,7 @@ router.post('/:id/holders/:holderId/convert', authMiddleware, requireOwnership, 
     // Build name parts from fullName (e.g. "John Smith" → first="John" last="Smith")
     const nameParts = (snapshot.fullName || '').trim().split(/\s+/);
     const firstName = nameParts[0] || 'Holder';
-    const lastName  = nameParts.slice(1).join(' ') || airline.airlineName || 'Member';
+    const lastName  = nameParts.slice(1).join(' ') || '—';
 
     // Password = fullName lowercased, no spaces: "John Smith" → "johnsmith"
     const rawPassword = (snapshot.fullName || 'holder').toLowerCase().replace(/\s+/g, '');
@@ -157,8 +234,8 @@ router.post('/:id/holders/:holderId/convert', authMiddleware, requireOwnership, 
     // keepSubscription=false → create pending account only, no active plan, holder pays independently
     const keepSubscription = req.body.keepSubscription !== false; // default true
 
-    const INDIV_PRICE = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299, 'Multiple Years Subscription Plan': 55 };
-    const individualPrice = INDIV_PRICE[airline.subscriptionPlan] || 69;
+    // Use what the airline actually paid per certificate, not the individual plan rate
+    const individualPrice = airline.pricePerCertificate || 0;
 
     const individual = await Individual.create({
       firstName,

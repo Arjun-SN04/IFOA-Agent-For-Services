@@ -196,7 +196,7 @@ export default function AdminIndividualForm() {
       <form onSubmit={handleSubmit} className="space-y-8">
         <div>
           <h3 className="text-lg font-black mb-4" style={{ color: C.dark }}>Plan & Payment</h3>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Field label="Subscription Plan">
               <select value={formData.subscriptionPlan} onChange={(e) => set('subscriptionPlan', e.target.value)} className="w-full px-4 py-2 rounded-xl border text-sm" style={{ borderColor: C.gray300 }}>
                 {PLAN_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -234,17 +234,17 @@ export default function AdminIndividualForm() {
 
         <div style={{ borderTop: `1px solid ${C.gray300}`, paddingTop: '2rem' }}>
           <h3 className="text-lg font-black mb-4" style={{ color: C.dark }}>Personal Details</h3>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <Field label="First Name"><input required value={formData.firstName} onChange={(e) => set('firstName', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Middle Name"><input value={formData.middleName} onChange={(e) => set('middleName', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Last Name"><input required value={formData.lastName} onChange={(e) => set('lastName', e.target.value)} className="input" style={inputStyle} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <Field label="Date of Birth"><input required type="date" value={formData.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Email"><input required type="email" value={formData.email} onChange={(e) => set('email', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Phone"><input required type="text" value={formData.phone} onChange={(e) => set('phone', e.target.value)} className="input" style={inputStyle} /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Field label="Address Line 1"><input value={formData.addressLine1} onChange={(e) => set('addressLine1', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="City"><input value={formData.city} onChange={(e) => set('city', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="State / Province"><input value={formData.state} onChange={(e) => set('state', e.target.value)} className="input" style={inputStyle} /></Field>
@@ -256,7 +256,7 @@ export default function AdminIndividualForm() {
 
         <div style={{ borderTop: `1px solid ${C.gray300}`, paddingTop: '2rem' }}>
           <h3 className="text-lg font-black mb-4" style={{ color: C.dark }}>Certificate Details</h3>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Field label="Primary Airman Certificate">
               <select value={formData.primaryAirmanCertificate} onChange={(e) => set('primaryAirmanCertificate', e.target.value)} className="w-full px-4 py-2 rounded-xl border text-sm" style={{ borderColor: C.gray300 }}>
                 {PRIMARY_AIRMAN_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -277,7 +277,7 @@ export default function AdminIndividualForm() {
           </label>
 
           {formData.hasSecondaryCertificate && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label="Secondary Certificate">
                 <select value={formData.secondaryCertificate} onChange={(e) => set('secondaryCertificate', e.target.value)} className="w-full px-4 py-2 rounded-xl border text-sm" style={{ borderColor: C.gray300 }}>
                   <option value="">-- Select --</option>

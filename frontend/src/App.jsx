@@ -102,7 +102,8 @@ function AdminShell() {
   return (
     <div className="min-h-screen bg-slate-50">
       <HeaderNav />
-      <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-clip">
+      {/* Changed overflow-x-clip to overflow-x-hidden to allow table scrolling while preventing page-level horizontal jitter */}
+      <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-hidden">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
           <Outlet />
         </Suspense>

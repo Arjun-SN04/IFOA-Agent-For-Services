@@ -104,8 +104,8 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                     key={value}
                     className={`cursor-pointer rounded-3xl border p-5 transition-all ${
                       selected
-                        ? 'border-blue-600 bg-blue-50'
-                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
+                        ? 'border-slate-900 bg-slate-900'
+                        : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50'
                     }`}
                   >
                     <input
@@ -118,8 +118,8 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                     />
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold text-slate-900">{value === 'EXISTING' ? 'Existing Certificate' : 'New Certificate'}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                        <p className={`text-sm font-bold ${selected ? 'text-white' : 'text-slate-900'}`}>{value === 'EXISTING' ? 'Existing Certificate' : 'New Certificate'}</p>
+                        <p className={`mt-1 text-sm leading-6 ${selected ? 'text-slate-300' : 'text-slate-600'}`}>
                           {value === 'EXISTING'
                             ? 'Use this if you already have an FAA certificate number.'
                             : 'Use this if you are still in the application process.'}
@@ -127,7 +127,7 @@ export default function Step2Certificates({ data, update, onNext, onBack }) {
                       </div>
                       <span
                         className={`flex h-8 w-8 items-center justify-center rounded-full border ${
-                          selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-slate-50 text-transparent'
+                          selected ? 'border-white bg-white text-slate-900' : 'border-slate-200 bg-slate-50 text-transparent'
                         }`}
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">

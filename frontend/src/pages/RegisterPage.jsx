@@ -25,8 +25,8 @@ import logo from '../assets/IFOA_USA_white.png'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-const B   = '#2563eb'
-const BD  = '#1d4ed8'
+const B   = '#0000ff'
+const BD  = '#0000e6'
 const BL  = '#3b82f6'
 const BXL = '#e2e8f0'
 const BM  = '#f8fafc'
@@ -70,6 +70,7 @@ const AIRLINES_INIT = {
   pricePerCertificate: 49,
   totalAmount: 0,
   airlineName: '',
+  logoUrl: '',
   firstName: '', lastName: '', middleName: '', dateOfBirth: '',
   email: '', phone: '',
   addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: '',
@@ -84,6 +85,7 @@ function hydrateAirlineFormFromExisting(existing) {
     pricePerCertificate: Number(existing.pricePerCertificate ?? existing.pricePerCert ?? AIRLINES_INIT.pricePerCertificate),
     totalAmount: Number(existing.totalAmount ?? existing.totalServiceFees ?? AIRLINES_INIT.totalAmount),
     airlineName: existing.airlineName || '',
+    logoUrl: existing.logoUrl || '',
     firstName: existing.firstName || existing.contactFirstName || '',
     lastName: existing.lastName || existing.contactLastName || '',
     middleName: existing.middleName || '',
@@ -887,28 +889,14 @@ export default function RegisterPage() {
         {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       </AnimatePresence>
 
-      {/* ── Full-height two-column layout ─────────────────────────────────── */}
+      {/* ── Main Layout: Split screen on Desktop, Regular flow on Mobile ── */}
       <div
-        className="flex"
-        style={{
-          height: '100dvh',
-          maxHeight: '100dvh',
-          overflow: 'hidden',
-          background: '#ffffff',
-        }}
+        className="flex flex-col lg:flex-row lg:h-dvh lg:overflow-hidden bg-white"
       >
         {/* ── LEFT: Scrollable form column ──────────────────────────────────── */}
         <div
           ref={scrollContainerRef}
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            height: '100dvh',
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-          }}
+          className="flex-1 min-w-0 flex flex-col h-auto lg:h-dvh overflow-y-auto overflow-x-hidden"
         >
           {/* Top nav bar */}
           <div

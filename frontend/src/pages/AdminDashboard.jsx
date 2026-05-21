@@ -151,10 +151,8 @@ const fmtMoney = (v) =>
     ? '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '—'
 
-const hasExistingInvoice = (record) => {
-  const paid = record?.isPaid === true || record?.paymentStatus === 'paid'
-  return Boolean(record?.invoiceGenerated || paid)
-}
+const hasExistingInvoice = (record) =>
+  Boolean(record?.invoiceGenerated || record?.invoiceDraft || record?.invoiceNumber)
 
 const inputCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-300'
@@ -802,7 +800,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
 
               {editing?._id === inv._id && (
                 <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
                     {[
                       ['Invoice #',      'invoiceNumber'],
                       ['Recipient Name', 'recipientName'],
@@ -836,7 +834,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                       className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                     {[
                       ['Quantity',   'quantity',  1, 1],
                       ['Unit Price', 'unitPrice', 1, 0],
@@ -916,7 +914,7 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 gap-3 overflow-x-auto">
+      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-center lg:items-start justify-center p-4 pt-16 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -1003,7 +1001,7 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Record Info" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ViewField label="Submitted" value={fmtDate(record.createdAt)} />
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
@@ -1019,7 +1017,7 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 40, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              className="w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[78vh]"
+              className="w-full max-w-lg lg:w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[85vh] lg:max-h-[78vh]"
               onClick={e => e.stopPropagation()}
             >
               <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
@@ -1045,7 +1043,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-20 gap-3 overflow-x-auto">
+      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-center lg:items-start justify-center p-4 pt-16 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-3xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
@@ -1088,6 +1086,15 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Airline / Operator" />
+              {record.logoUrl && (
+                <div className="mb-4 flex items-center gap-3">
+                  <img src={record.logoUrl} alt="Company logo" className="w-14 h-14 rounded-xl object-contain border border-slate-200 bg-white" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Company Logo</p>
+                    <p className="text-xs text-slate-500 truncate max-w-[200px]">{record.airlineName}</p>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div className="col-span-2 sm:col-span-3"><ViewField label="Company" value={record.airlineName} /></div>
                 <div className="col-span-2 sm:col-span-3"><ViewField label="Address" value={[record.addressLine1, record.addressLine2, record.city, record.state, record.postalCode, record.country].filter(Boolean).join(', ')} /></div>
@@ -1131,7 +1138,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               </div>
             )}
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Record Info" />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ViewField label="Submitted" value={fmtDate(record.createdAt)} />
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
@@ -1147,7 +1154,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 40, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              className="w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[78vh]"
+              className="w-full max-w-lg lg:w-[420px] flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-y-auto max-h-[85vh] lg:max-h-[78vh]"
               onClick={e => e.stopPropagation()}
             >
               <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
@@ -1935,18 +1942,26 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               onClick={e => e.stopPropagation()}>
 
           {/* Header */}
-          <div className="border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-1">
-                Admin — {record.invoiceGenerated ? 'Edit Invoice' : 'Invoice Generator'}
-              </p>
-              <h2 className="text-lg font-extrabold text-slate-900">
-                {record.airlineName || [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Record'}
-              </h2>
+          <div className="border-b border-slate-100 bg-white px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#0000ff' }}>
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
+                  {hasExistingInvoice(record) ? 'Edit Invoice' : 'Invoice Generator'} · Admin
+                </p>
+                <h2 className="text-base font-extrabold text-slate-900 leading-tight">
+                  {record.airlineName || [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Record'}
+                </h2>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              {record.invoiceGenerated && (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+              {hasExistingInvoice(record) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 text-[10px] font-bold">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                   Invoice Generated
                 </span>
               )}
@@ -1967,34 +1982,34 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               <p className="text-sm font-bold text-slate-700 mb-6">Select the payment method to generate the invoice accordingly:</p>
               <div className="grid sm:grid-cols-2 gap-4 mb-8">
                 {[
-                  { val: 'card',  label: 'Credit / Debit Card',  sub: 'Stripe / instant payment',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>, accent: 'red' },
-                  ...(isAirline ? [{ val: 'wire',  label: 'Wire Transfer',         sub: 'Bank transfer — BOFAUS3N',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>, accent: 'blue' }] : []),
+                  { val: 'card',  label: 'Credit / Debit Card',  sub: 'Stripe / instant payment',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg> },
+                  ...(isAirline ? [{ val: 'wire',  label: 'Wire Transfer',         sub: 'Bank transfer — BOFAUS3N',  icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> }] : []),
                 ].map(opt => (
                   <button key={opt.val} onClick={() => setPaymentMethodSel(opt.val)}
                     className={`rounded-2xl border-2 p-5 text-left transition-all ${
                       paymentMethodSel === opt.val
-                        ? opt.accent === 'red' ? 'border-red-500 bg-red-50/60' : 'border-blue-500 bg-blue-50/60'
+                        ? 'border-slate-900 bg-slate-900'
                         : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}>
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
-                      paymentMethodSel === opt.val
-                        ? opt.accent === 'red' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                        : 'bg-slate-100 text-slate-500'
+                      paymentMethodSel === opt.val ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'
                     }`}>{opt.icon}</div>
-                    <p className={`font-black text-sm mb-0.5 ${paymentMethodSel === opt.val ? opt.accent === 'red' ? 'text-red-700' : 'text-blue-700' : 'text-slate-900'}`}>{opt.label}</p>
-                    <p className="text-xs text-slate-400">{opt.sub}</p>
+                    <p className={`font-black text-sm mb-0.5 ${paymentMethodSel === opt.val ? 'text-white' : 'text-slate-900'}`}>{opt.label}</p>
+                    <p className={`text-xs ${paymentMethodSel === opt.val ? 'text-slate-300' : 'text-slate-400'}`}>{opt.sub}</p>
                   </button>
                 ))}
               </div>
               {isAirline && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-6">
-                  <span className="font-bold">Wire Transfer recommended</span> — this is an airline/company account. Wire details will appear in the invoice footer automatically.
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 mb-6 flex items-start gap-2">
+                  <svg className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span><span className="font-bold text-slate-700">Wire Transfer recommended</span> — wire details appear in the invoice footer automatically.</span>
                 </div>
               )}
               <div className="flex justify-end">
                 <button onClick={handleProceed} disabled={!paymentMethodSel}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition disabled:opacity-40">
-                  {record.invoiceGenerated ? 'Edit Invoice →' : 'Generate Invoice →'}
+                  style={paymentMethodSel ? { background: '#0000ff' } : {}}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl text-sm transition disabled:opacity-40 disabled:bg-slate-300">
+                  {hasExistingInvoice(record) ? 'Edit Invoice →' : 'Generate Invoice →'}
                 </button>
               </div>
             </div>
@@ -2018,26 +2033,25 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               )}
 
-              {record.invoiceGenerated && (
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              {hasExistingInvoice(record) && (
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <svg className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <div>
-                    <p className="text-xs font-black text-amber-800 mb-0.5">Invoice changes only</p>
-                    <p className="text-[11px] text-amber-700 leading-snug">Saving updates the invoice document only — it does <strong>not</strong> change the registration data (payment status, subscription plan, holder count, etc.). The user will see the updated invoice on their Subscription page.</p>
+                    <p className="text-xs font-bold text-slate-700 mb-0.5">Editing existing invoice</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">Changes update the invoice document only — payment status, subscription plan, and holder count remain unchanged.</p>
                   </div>
                 </div>
               )}
 
-              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border ${
-                inv.paymentMethod === 'wire'
-                  ? 'bg-blue-50 border-blue-200 text-blue-700'
-                  : 'bg-red-50 border-red-200 text-red-700'
-              }`}>
-                {inv.paymentMethod === 'wire' ? 'Wire Transfer Invoice' : 'Card Payment Invoice'}
+              <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border border-slate-200 bg-slate-50 text-slate-600">
+                {inv.paymentMethod === 'wire'
+                  ? <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>Wire Transfer Invoice</>
+                  : <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg>Card Payment Invoice</>
+                }
               </div>
 
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Invoice Details</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Invoice Details</p>
                 <div className="grid sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Number</label>
@@ -2077,7 +2091,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               </div>
 
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Recipient</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Recipient</p>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {isAirline && <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Company Name</label><input className={iCls} value={inv.recipientCompany} onChange={e => set('recipientCompany', e.target.value)} /></div>}
                   <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Contact Name</label><input className={iCls} value={inv.recipientContact} onChange={e => set('recipientContact', e.target.value)} /></div>
@@ -2088,7 +2102,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               </div>
 
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Line Items</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Line Items</p>
                 <div className="rounded-xl border border-slate-200 overflow-hidden">
                   <div className="grid grid-cols-12 gap-0 bg-slate-50 border-b border-slate-200 px-3 py-2">
                     <span className="col-span-5 text-[9px] font-black uppercase tracking-widest text-slate-400">Description</span>
@@ -2136,21 +2150,38 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
           {/* ── Footer actions ── */}
           {step === 'edit' && (
-            <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 flex justify-between items-center">
-              <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+            <div className="border-t border-slate-100 bg-white px-6 py-4 flex justify-between items-center">
+              <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
                 Cancel
               </button>
               <div className="flex items-center gap-2">
-                {(!record.invoiceGenerated || hasInvoiceChanges) && (
+                <button
+                  onClick={async () => {
+                    setPreviewLoading(true)
+                    try { const r = await generateIFOAInvoicePDF(inv); setPreviewData(r) }
+                    catch (e) { console.error(e) }
+                    finally { setPreviewLoading(false) }
+                  }}
+                  disabled={previewLoading || savingInvoice}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  {previewLoading
+                    ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+                    : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  }
+                  Preview PDF
+                </button>
+                {(!hasExistingInvoice(record) || hasInvoiceChanges) && (
                   <button
                     onClick={handleSaveInvoice}
                     disabled={savingInvoice || previewLoading}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition disabled:opacity-60 shadow-md shadow-red-200"
+                    style={{ background: '#0000ff' }}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl text-sm transition disabled:opacity-60"
                   >
                     {(savingInvoice || previewLoading)
                       ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Saving…</>
                       : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        {record.invoiceGenerated ? 'Save Changes' : 'Generate Invoice'}
+                        {hasExistingInvoice(record) ? 'Save Changes' : 'Generate Invoice'}
                       </>
                     }
                   </button>
@@ -2204,7 +2235,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   </button>
                   <button
                     onClick={handleDownloadFromPreview}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition shadow-md shadow-red-200"
+                    style={{ background: '#0000ff' }}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl text-sm transition"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
                     Download PDF
@@ -2348,8 +2380,8 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="max-h-[68vh] overflow-y-auto overflow-x-clip">
-        <table className="w-full table-auto text-sm">
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
+        <table className="w-full table-auto text-sm min-w-[1100px]">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-3 py-3.5 w-10">
@@ -2544,6 +2576,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
   )
 }
 
+// ─── Grouped Airlines Table ───────────────────────────────────────────────────
 function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId, selectedIds = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [expanded, setExpanded] = useState({})
   const highlightRef = useRef(null)
@@ -2578,8 +2611,8 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="max-h-[68vh] overflow-y-auto overflow-x-clip">
-        <table className="w-full table-auto text-sm">
+      <div className="max-h-[68vh] overflow-y-auto overflow-x-auto">
+        <table className="w-full table-auto text-sm min-w-[1100px]">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-3 py-3.5 w-10">
@@ -2627,9 +2660,14 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center flex-shrink-0">
-                          <Plane className="w-4 h-4" />
-                        </div>
+                        {primary.logoUrl ? (
+                          <img src={primary.logoUrl} alt={primary.airlineName}
+                            className="w-9 h-9 rounded-xl object-contain border border-slate-200 bg-white flex-shrink-0 transition-transform duration-200 hover:scale-[2.8] hover:shadow-xl relative hover:z-20" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center flex-shrink-0">
+                            <Plane className="w-4 h-4" />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
@@ -3403,57 +3441,57 @@ export default function AdminDashboard() {
       )}
 
       {tab !== 'add-airline' && tab !== 'add-individual' && (
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-6 px-1">
         {tab !== 'overview' && (
-          <>
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <div className="relative flex-grow sm:flex-grow-0">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
               <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-44 bg-white transition" />
+                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-full sm:w-48 bg-white transition shadow-sm" />
             </div>
             <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+              className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
               {PLANS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Plans' : p}</option>)}
             </select>
             <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+              className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
               {PAYMENTS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Payments' : p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+              className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
               {STATUSES.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
             </select>
             <select value={filterExpiry} onChange={e => setFilterExpiry(e.target.value)}
-              className="border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition">
+              className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
               <option value="All">All Dates</option>
               <option value="Expired">Expired</option>
               <option value="ExpiringSoon">Expiring in 30 days</option>
             </select>
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
+              <button onClick={clearFilters} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition h-[38px]">Clear</button>
             )}
-          </>
+          </div>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full lg:w-auto lg:ml-auto">
           {tab !== 'overview' && (
-            <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition">
+            <a href={tab === 'individuals' ? exportIndividualsExcel() : exportAirlinesExcel()} className="flex-1 lg:flex-none justify-center inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white transition shadow-sm shadow-emerald-200/50">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v10m0 0-4-4m4 4 4-4M4 20h16" /></svg>
-              Export Excel
+              Export
             </a>
           )}
           {tab === 'individuals' && (
-            <button onClick={() => navigate('/admin/add-individual')} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition" style={{ background: '#000021' }}>
+            <button onClick={() => navigate('/admin/add-individual')} className="flex-1 lg:flex-none justify-center inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white transition shadow-sm shadow-slate-900/10" style={{ background: '#000021' }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" /></svg>
-              Add Individual
+              Add New
             </button>
           )}
           {tab === 'airlines' && (
-            <button onClick={() => navigate('/admin/add-airline')} className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition" style={{ background: '#000021' }}>
+            <button onClick={() => navigate('/admin/add-airline')} className="flex-1 lg:flex-none justify-center inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white transition shadow-sm shadow-slate-900/10" style={{ background: '#000021' }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" /></svg>
-              Add Airline
+              Add New
             </button>
           )}
-          <button onClick={() => loadData(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition">
+          <button onClick={() => loadData(true)} className="flex-grow lg:flex-none justify-center inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition h-[40px]">
             <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" />
             </svg>

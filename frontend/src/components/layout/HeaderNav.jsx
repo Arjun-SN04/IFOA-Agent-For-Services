@@ -263,14 +263,15 @@ export default function HeaderNav() {
               </button>
 
               {notifOpen && (
-                <div className="dd-in absolute right-0 top-[calc(100%+10px)] w-[400px] max-w-[92vw] bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden z-50"
+                <div className="dd-in fixed left-3 right-3 top-[68px] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+10px)] sm:w-[400px] sm:max-w-[calc(100vw-24px)] bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden z-50"
                   style={{ boxShadow: '0 20px 60px -10px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.04)' }}>
 
                   {/* Header */}
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between"
                     style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)' }}>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}>
                         <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V10a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9" />
                         </svg>
@@ -295,7 +296,7 @@ export default function HeaderNav() {
                   </div>
 
                   {/* Body */}
-                  <div className="max-h-[440px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="max-h-[60vh] sm:max-h-[440px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                     {notifLoading && (
                       <div className="flex flex-col items-center justify-center py-10 gap-3">
                         <div className="w-7 h-7 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" />
@@ -304,13 +305,15 @@ export default function HeaderNav() {
                     )}
 
                     {!notifLoading && visibleNotifications.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-12 gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-2xl">
-                          🔕
+                      <div className="flex flex-col items-center justify-center py-14 gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                          <svg className="w-7 h-7 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V10a6 6 0 1 0-12 0v4.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9" />
+                          </svg>
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-bold text-slate-700">No notifications</p>
-                          <p className="text-xs text-slate-400 mt-0.5">You're all caught up!</p>
+                          <p className="text-xs text-slate-400 mt-1">You're all caught up!</p>
                         </div>
                       </div>
                     )}

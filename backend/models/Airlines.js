@@ -46,6 +46,7 @@ const AirlinesSchema = new mongoose.Schema({
 
   // Airline / Operator info
   airlineName: { type: String, required: true, trim: true },
+  logoUrl:     { type: String, default: '' },
 
   // Primary contact
   firstName:   { type: String, required: true },

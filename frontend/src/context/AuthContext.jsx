@@ -128,6 +128,72 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
+  const addSecondaryEmail = async (currentPassword, secondaryEmail) => {
+    const res = await API.post('/auth/add-secondary-email', { currentPassword, secondaryEmail })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
+  const removeSecondaryEmail = async (currentPassword, secondaryEmail) => {
+    const res = await API.delete('/auth/remove-secondary-email', { data: { currentPassword, secondaryEmail } })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
+  const sendOtp = async (email, purpose) => {
+    const res = await API.post('/auth/send-otp', { email, purpose })
+    return res.data
+  }
+
+  const verifyOtpAndSignup = async (email, code, userData) => {
+    const res = await API.post('/auth/verify-otp-signup', { email, code, ...userData })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    setMustChangePassword(res.data.user?.mustChangePassword || false)
+    return res.data.user
+  }
+
+  const requestPasswordReset = async (email) => {
+    const res = await API.post('/auth/send-otp', { email, purpose: 'password-reset' })
+    return res.data
+  }
+
+  const resetPasswordWithOtp = async (email, code, newPassword) => {
+    const res = await API.post('/auth/reset-password', { email, code, newPassword })
+    return res.data
+  }
+
+  const sendSecondaryEmailOtp = async (secondaryEmail) => {
+    const res = await API.post('/auth/send-secondary-email-otp', { secondaryEmail })
+    return res.data
+  }
+
+  const verifyOtpAndAddSecondary = async (secondaryEmail, code, currentPassword) => {
+    const res = await API.post('/auth/verify-secondary-email', { secondaryEmail, code, currentPassword })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
+  const sendCredentialChangeOtp = async (currentPassword) => {
+    const res = await API.post('/auth/send-credential-change-otp', { currentPassword })
+    return res.data
+  }
+
+  const verifyOtpAndUpdateCredentials = async (currentPassword, otp, newEmail, newPassword) => {
+    const res = await API.post('/auth/verify-otp-and-update-credentials', { currentPassword, otp, newEmail, newPassword })
+    setToken(res.data.token)
+    setUser(res.data.user)
+    setMustChangePassword(res.data.user?.mustChangePassword || false)
+    localStorage.setItem('ifoa_token', res.data.token)
+    return res.data
+  }
+
   return (
     <AuthContext.Provider value={{
       user, token, loading,
@@ -135,6 +201,11 @@ export function AuthProvider({ children }) {
       login, signup, logout, setSession,
       updateCredentials, updateProfile,
       linkRegistration, addSubscription, updateAirlineName,
+      addSecondaryEmail, removeSecondaryEmail,
+      sendOtp, verifyOtpAndSignup,
+      requestPasswordReset, resetPasswordWithOtp,
+      sendSecondaryEmailOtp, verifyOtpAndAddSecondary,
+      sendCredentialChangeOtp, verifyOtpAndUpdateCredentials,
     }}>
       {children}
     </AuthContext.Provider>

@@ -15,7 +15,7 @@ const SUGGESTIONS = [
 ]
 
 const PLAN_INFO = `
-IFOA USA Agent for Service — Subscription Plans:
+IFOA (International Flight Operational Academy) — Subscription Plans:
 
 1. TURBOPROP PLAN — $69.00/year (1 Year Subscription)
    • Dedicated U.S. Mailing Address
@@ -288,11 +288,18 @@ function ChatView({ messages, setMessages, loading, setLoading, initialQuestion 
 
         {loading && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5 justify-start">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" >
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0">
               <img src={ifoaLogo} alt="" className="h-4 w-auto object-contain" />
             </div>
-            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3.5 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500">Typing...</p>
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-4 shadow-sm flex items-center gap-1.5">
+              {[0, 1, 2].map(i => (
+                <motion.span
+                  key={i}
+                  className="block w-2 h-2 rounded-full bg-gray-400"
+                  animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+                />
+              ))}
             </div>
           </motion.div>
         )}
@@ -356,7 +363,7 @@ export default function ChatBot() {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hi! 👋 I'm the IFOA Form Assistant.\n\nI can help you with any question about FAA compliance, our registration form, plans, pricing, FAA certificates, or form fields. What would you like to know?",
+      content: "Hi! 👋 I'm the IFOA Assistant from International Flight Operational Academy.\n\nI can help with FAA compliance requirements, registration steps, subscription plans, pricing, certificate types, or any form questions. What would you like to know?",
     },
   ])
   const [loading, setLoading] = useState(false)
@@ -516,7 +523,7 @@ export default function ChatBot() {
                 </div>
                 <div>
                   <p className="text-sm font-black text-gray-900 leading-none">IFOA Assistant</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 leading-none">FAA Compliance · Always here</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-none">International Flight Operational Academy · FAA Compliance</p>
                 </div>
               </div>
 
