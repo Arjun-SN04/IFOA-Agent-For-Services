@@ -294,7 +294,7 @@ function inferRowKind(row) {
 async function linkOrCreateIndividualUser(individual, payload) {
   let user = await User.findOne({ email: payload.email });
   if (!user) {
-    const generatedPassword = (payload.firstName || 'ifoa12345').trim().toLowerCase().replace(/\s+/g, '');
+    const generatedPassword = '12345678';
     user = await User.create({
       email: payload.email,
       password: generatedPassword,

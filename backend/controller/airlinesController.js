@@ -10,7 +10,7 @@ const {
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice }  = require('../services/invoiceService');
-const { sendAirlinePaymentConfirmation } = require('../services/emailService');
+const { sendAirlinePaymentConfirmation, sendWireRequestAdminNotification } = require('../services/emailService');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -579,6 +579,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
+      'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
     ]);
 
     const allowedFields = [
@@ -587,6 +588,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'pricePerCertificate', 'pricePerCert', 'totalAmount', 'totalServiceFees',
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
+      'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
       // User-editable profile fields
       'subscriptionPlan', 'subscriptionDate', 'expirationDate',
       'holderCount', 'holderCountValue', 'committedCount',
@@ -1102,13 +1104,20 @@ exports.requestAirlineInvoice = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Airline ID is required.' });
     }
 
+    const purpose = req.body.purpose || 'initial';
     const update = {
       wirePaymentRequested: true,
       wirePaymentRequestedAt: Number.isNaN(now.getTime()) ? new Date() : now,
       paymentStatus: 'pending',
-      status: 'Pending',
       invoiceStatus: 'Wire Requested',
+      wireRequestPurpose: purpose,
+      wireRequestRenewalPlan: req.body.renewalPlan || null,
+      wireRequestAdditionalCount: req.body.additionalHolderCount ? Number(req.body.additionalHolderCount) : null,
     };
+    // Only reset status to Pending for initial requests — renewal/holder-upgrade airlines are already active
+    if (purpose === 'initial') {
+      update.status = 'Pending';
+    }
 
     const updated = await Airlines.findByIdAndUpdate(
       id,
@@ -1119,6 +1128,11 @@ exports.requestAirlineInvoice = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Airline subscription not found.' });
     }
+
+    // Fire-and-forget admin notification email — do not block the response
+    sendWireRequestAdminNotification(updated).catch((e) =>
+      console.warn('[requestAirlineInvoice] admin notification email failed:', e.message)
+    );
 
     return res.json({
       success: true,
@@ -1418,10 +1432,7 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // Create or update User account for airline
     let user = await User.findOne({ email: body.pointOfContactEmail });
 
-    // Password = airlineName stripped of spaces, lowercased.
-    // Simple and predictable so admin can verbally tell the airline.
-    // mustChangePassword=true forces a password-change prompt on first login.
-    const defaultPassword = (body.airlineName || 'ifoa12345').replace(/\s+/g, '').toLowerCase();
+    const defaultPassword = '12345678';
 
     if (!user) {
       user = new User({
@@ -1459,8 +1470,6 @@ exports.adminCreateAirlineForm = async (req, res) => {
         },
         loginCredentials: {
           email: body.pointOfContactEmail,
-          // Default password = airlineName lowercase no spaces (e.g. "Air India" → "airindia")
-          // The airline will be prompted to change it on first login.
           password: defaultPassword,
         },
       },
@@ -1545,7 +1554,7 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
 
         let user = await User.findOne({ email: payload.pointOfContactEmail });
         if (!user) {
-          const importPassword = (payload.airlineName || 'ifoa12345').replace(/\s+/g, '').toLowerCase();
+          const importPassword = '12345678';
           user = await User.create({
             email: payload.pointOfContactEmail,
             password: importPassword,
@@ -1563,7 +1572,6 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
             id: airline._id,
             airlineName: airline.airlineName,
             email: payload.pointOfContactEmail,
-            // Password is always airlineName lowercase no spaces — easy for admin to communicate
             loginCredentials: { email: payload.pointOfContactEmail, password: importPassword },
           });
         } else {
@@ -1685,4 +1693,166 @@ exports.markAirlinesInvoiceGenerated = async (req, res) => {
   }
 };
 
-// Duplicate removed — requestAirlineInvoice is defined above (exports at line ~796).
+// ── Activate a wire payment request (admin) ───────────────────────────────────
+// For renewals: populates nextRenewal and queues or immediately activates based on activationDate.
+// For initial/holder-upgrade: directly sets status=Active.
+exports.activateWirePayment = async (req, res) => {
+  try {
+    const doc = await Airlines.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const purpose        = doc.wireRequestPurpose || 'initial';
+    const now            = new Date();
+    const activationDate = doc.subscriptionDate ? new Date(doc.subscriptionDate) : now;
+    const expiresAt      = doc.expirationDate    ? new Date(doc.expirationDate)   : null;
+
+    if (purpose === 'renewal') {
+      const renewalPlan = doc.wireRequestRenewalPlan || doc.subscriptionPlan || '1 Year Subscription Plan';
+      const invoiceNum  = doc.invoiceNumber || await generateInvoiceNumber();
+
+      const nextRenewal = {
+        plan:           renewalPlan,
+        paidAt:         doc.wirePaymentRequestedAt || now,
+        activationDate,
+        expiresAt,
+        price:          doc.amountPaid   || 0,
+        invoiceNumber:  invoiceNum,
+        committedCount: doc.committedCount || null,
+      };
+
+      const renewalInvoiceBase = {
+        registrationId:    doc._id,
+        registrationModel: 'Airlines',
+        snapshot: {
+          name:             [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+          email:            doc.email || '',
+          isAirline:        true,
+          airlineName:      doc.airlineName || '',
+          subscriptionPlan: renewalPlan,
+          subscriptionDate: activationDate,
+          expirationDate:   expiresAt || null,
+          holderCount:      Number(doc.committedCount || doc.holderCountValue || 0),
+          pricePerCert:     Number(doc.pricePerCertificate || doc.pricePerCert || 0),
+          subtotal:         Number(doc.amountPaid || 0),
+          tax:              0,
+          totalPaid:        Number(doc.amountPaid || 0),
+        },
+        amountDollars:         Number(doc.amountPaid || 0),
+        paidAt:                now,
+        paymentMethod:         'wire',
+        existingInvoiceNumber: invoiceNum,
+        purpose:               'renewal',
+      };
+
+      if (activationDate <= now) {
+        // Activate immediately — current plan is expired
+        const immediateUpdate = {
+          subscriptionPlan:  renewalPlan,
+          subscriptionDate:  activationDate,
+          invoiceNumber:     invoiceNum,
+          invoiceStatus:     'Paid',
+          paymentStatus:     'paid',
+          isPaid:            true,
+          status:            'Active',
+          isFormCompleted:   true,
+          wirePaymentRequested:  false,
+          wireRequestPurpose:    null,
+          wireRequestRenewalPlan: null,
+          'nextRenewal.paidAt':         null,
+          'nextRenewal.plan':           null,
+          'nextRenewal.activationDate': null,
+          'nextRenewal.expiresAt':      null,
+          'nextRenewal.price':          null,
+          'nextRenewal.invoiceNumber':  null,
+          ...(expiresAt ? { expirationDate: expiresAt } : {}),
+        };
+        const updated = await Airlines.findByIdAndUpdate(
+          req.params.id, { $set: immediateUpdate }, { new: true }
+        );
+        try { await createOrUpdateInvoice(renewalInvoiceBase); } catch (e) {
+          console.warn('[activateWirePayment] Renewal invoice failed:', e.message);
+        }
+        return res.json({ success: true, activated: true, data: updated });
+      } else {
+        // Queue — activates when activationDate arrives; current plan still live
+        const updated = await Airlines.findByIdAndUpdate(
+          req.params.id,
+          { $set: { nextRenewal, wirePaymentRequested: false, wireRequestPurpose: null, wireRequestRenewalPlan: null } },
+          { new: true }
+        );
+        try { await createOrUpdateInvoice(renewalInvoiceBase); } catch (e) {
+          console.warn('[activateWirePayment] Queued renewal invoice failed:', e.message);
+        }
+        return res.json({ success: true, activated: false, queued: true, data: updated });
+      }
+
+    } else if (purpose === 'holder-upgrade') {
+      const additional      = Number(doc.wireRequestAdditionalCount || 0);
+      const currentCommitted = Number(doc.committedCount || doc.holderCountValue || 0);
+      const newCount        = Math.max(3, currentCommitted + additional);
+      const newRange        = holderRangeFromCount(newCount);
+      const plan            = doc.subscriptionPlan || '1 Year Subscription Plan';
+      let   newPpc          = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+      if (plan === 'Unlimited Plan')           newPpc = UNLIMITED_PRICES[newRange] ?? newPpc;
+      else if (plan === '1 Year Subscription Plan') newPpc = ONE_YEAR_PRICES[newRange] ?? newPpc;
+
+      const upgradeUpdate = {
+        committedCount:          newCount,
+        holderCountValue:        String(newCount),
+        holderCount:             newRange,
+        pricePerCertificate:     newPpc,
+        pricePerCert:            newPpc,
+        wirePaymentRequested:    false,
+        wireRequestPurpose:      null,
+        wireRequestAdditionalCount: null,
+      };
+      const updated = await Airlines.findByIdAndUpdate(
+        req.params.id, { $set: upgradeUpdate }, { new: true }
+      );
+
+      // Create invoice scoped to the additional holders so user sees upgrade charge
+      try {
+        const upgradeAmount = additional > 0 && newPpc > 0 ? additional * newPpc : Number(doc.amountPaid || 0);
+        await createOrUpdateInvoice({
+          registrationId:    doc._id,
+          registrationModel: 'Airlines',
+          snapshot: {
+            name:             [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+            email:            doc.email || '',
+            isAirline:        true,
+            airlineName:      doc.airlineName || '',
+            subscriptionPlan: plan,
+            holderCount:      additional,
+            pricePerCert:     newPpc,
+            subtotal:         upgradeAmount,
+            tax:              0,
+            totalPaid:        upgradeAmount,
+          },
+          amountDollars:         upgradeAmount,
+          paidAt:                now,
+          paymentMethod:         'wire',
+          existingInvoiceNumber: doc.invoiceNumber || null,
+          purpose:               'holder-upgrade',
+        });
+      } catch (invErr) {
+        console.warn('[activateWirePayment] Holder-upgrade invoice failed:', invErr.message);
+      }
+
+      return res.json({ success: true, activated: true, data: updated });
+
+    } else {
+      // Initial: mark active
+      const updated = await Airlines.findByIdAndUpdate(
+        req.params.id,
+        { $set: {
+          status: 'Active', isPaid: true, isFormCompleted: true,
+          paymentStatus: 'paid', wirePaymentRequested: false, wireRequestPurpose: null,
+        }},
+        { new: true }
+      );
+      return res.json({ success: true, activated: true, data: updated });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

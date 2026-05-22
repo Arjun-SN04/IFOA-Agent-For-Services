@@ -15,8 +15,7 @@ const userNav = [
   { to: '/dashboard',              label: 'Dashboard',   exact: true },
   { to: '/dashboard/profile',      label: 'Profile'                  },
   { to: '/dashboard/subscription', label: 'Subscription'             },
-  { to: '/dashboard/documents',    label: 'Documents'                },
-  { to: '/dashboard/settings',     label: 'Settings'                 },
+{ to: '/dashboard/settings',     label: 'Settings'                 },
 ]
 
 function NavLink({ item }) {

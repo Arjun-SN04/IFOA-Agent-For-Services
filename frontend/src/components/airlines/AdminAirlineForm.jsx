@@ -197,7 +197,6 @@ export default function AdminAirlineForm() {
     formData.certificateHolders.forEach((holder, idx) => {
       const hErr = {}
       if (!holder.fullName?.trim()) hErr.fullName = 'Required'
-      if (!holder.dateOfBirth) hErr.dateOfBirth = 'Required'
       if (!holder.certificateType) hErr.certificateType = 'Required'
       if (!holder.faaCertificateNumber?.trim()) hErr.faaCertificateNumber = 'Required'
       if (!holder.iacraFtnNumber?.trim()) hErr.iacraFtnNumber = 'Required'

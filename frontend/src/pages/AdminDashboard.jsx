@@ -30,7 +30,9 @@ import {
   generateInvoiceNumber,
   getInvoiceByRegistration,
   saveInvoiceDraftToDoc,
+  createAdminInvoiceDoc,
   activateQueuedRenewal,
+  activateWirePayment,
   sendRenewalReminders,
 } from '../services/api'
 
@@ -534,7 +536,7 @@ function triggerInvoiceDownload({ url, filename }) {
 
 
 // ─── AdminInvoicesPanel — shows all invoices for a registration ───────────────
-function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerMode = false }) {
+function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerMode = false, onGenerateInvoice }) {
   const [invoices, setInvoices] = React.useState(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
@@ -543,13 +545,24 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   const [saving, setSaving] = React.useState(false)
   const [saveErr, setSaveErr] = React.useState('')
   const [pdfBusy, setPdfBusy] = React.useState({})
+  // Tracks the active invoice number locally so stale `record.invoiceNumber` prop
+  // doesn't cause the Active badge to disappear after an inline edit.
+  const [activeInvoiceNum, setActiveInvoiceNum] = React.useState(record?.invoiceNumber || '')
+  // Keep in sync when parent re-renders with a fresher record (e.g. after resolveInvoiceNumber).
+  React.useEffect(() => {
+    if (record?.invoiceNumber && record.invoiceNumber !== activeInvoiceNum) {
+      setActiveInvoiceNum(record.invoiceNumber)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record?.invoiceNumber])
 
   const load = React.useCallback(async () => {
     if (!registrationId) return
     setLoading(true); setError('')
     try {
       const res = await getInvoiceByRegistration(registrationId)
-      setInvoices(res.data?.data || res.data || [])
+      const data = res.data?.data || res.data || []
+      setInvoices(data)
     } catch (e) {
       setError('Failed to load invoices.')
     } finally {
@@ -563,6 +576,9 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   // If record.invoiceNumber not represented in any source, synthesize an item from the record.
   const visibleInvoices = React.useMemo(() => {
     if (!invoices) return null
+    // If real Invoice docs exist, use them — no synthetic needed.
+    const hasRealDocs = invoices.some(d => !d._source)
+    if (hasRealDocs) return invoices
     const regNum = record?.invoiceNumber
     if (!regNum) return invoices
     const normalize = (s) => String(s || '').replace(/^Invoice\s+/i, '').trim().toUpperCase()
@@ -678,13 +694,6 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
 
   const handleSave = async () => {
     if (!editing) return
-    // Renewal-source items don't have an Invoice doc yet — create one via PATCH
-    // which requires an existing Invoice._id. For renewals, prompt admin to use
-    // the main admin invoice editor to generate the invoice first.
-    if (editing._source === 'renewal' && !editing._invoiceDocId) {
-      setSaveErr('No Invoice doc exists for this renewal. Generate invoice from the main editor first.')
-      return
-    }
     setSaving(true); setSaveErr('')
     try {
       const qty = Number(editForm.quantity) || 1
@@ -708,7 +717,37 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
           totalPrice:  total,
         }],
       }
-      await saveInvoiceDraftToDoc(editing._id, draft, editForm.invoiceNumber)
+      // If the entry has a real Invoice doc ID, update it.
+      // Otherwise (renewal/synthetic item) look up the Invoice doc by the current
+      // invoice number before falling back to creating a new one.
+      let targetInvoiceId = null
+      if (editing._source !== 'renewal' || editing._invoiceDocId) {
+        const candidateId = editing._invoiceDocId || editing._id
+        if (candidateId && !String(candidateId).startsWith('reg-')) {
+          targetInvoiceId = candidateId
+        }
+      }
+      if (!targetInvoiceId) {
+        // Renewal or synthetic item — resolve Invoice doc via the registry.
+        try {
+          const invRes = await getInvoiceByRegistration(registrationId)
+          const realDocs = (invRes.data?.data || []).filter(d => !d._source)
+          const matched = realDocs.find(d => d.invoiceNumber === editing.invoiceNumber)
+            || realDocs.find(d => d.adminGenerated)
+            || realDocs.find(d => !d.paymentId)
+            || realDocs[0]
+          if (matched?._id) targetInvoiceId = matched._id
+        } catch (_) { /* fall through to create */ }
+      }
+      if (targetInvoiceId) {
+        await saveInvoiceDraftToDoc(targetInvoiceId, draft, editForm.invoiceNumber)
+      } else {
+        await createAdminInvoiceDoc(registrationId, registrationModel, draft, editForm.invoiceNumber)
+      }
+      // Only move the Active badge if the invoice being edited was the active one.
+      if (editing.invoiceNumber === activeInvoiceNum) {
+        setActiveInvoiceNum(editForm.invoiceNumber)
+      }
       setEditing(null)
       await load()
     } catch (e) {
@@ -740,17 +779,31 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
     inv.totalAmount > 0
   )
 
+  const showWireGenerate = onGenerateInvoice && record?.wirePaymentRequested &&
+    !(invoices || []).some(d => !d._source)
+
   return (
     <div className={drawerMode ? 'p-3' : 'border-t border-slate-100 pt-5'}>
-      <div className={`flex items-center ${drawerMode ? 'justify-end mb-3' : 'justify-between mb-4'}`}>
+      <div className={`flex items-center gap-2 flex-wrap ${drawerMode ? 'justify-end mb-3' : 'justify-between mb-4'}`}>
         {!drawerMode && <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">All Invoices</p>}
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-        >
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          {showWireGenerate && (
+            <button
+              onClick={() => onGenerateInvoice(record)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-700 transition"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Generate Wire Invoice
+            </button>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {loading && visibleInvoices === null && (
@@ -779,7 +832,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
             const purposeCls = inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
               : 'bg-slate-800 border-slate-700 text-white'
             const planLabel = inv.subscriptionPlan || inv.plan || ''
-            const isActiveInvoice = record?.invoiceNumber && inv.invoiceNumber === record.invoiceNumber
+            const isActiveInvoice = activeInvoiceNum && inv.invoiceNumber === activeInvoiceNum
             return (
             <div key={String(inv._id)} className={`rounded-xl border px-4 py-3 transition-all ${isActiveInvoice ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}>
               <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -822,7 +875,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                       </button>
                     </>
                   )}
-                  {inv._source !== 'renewal' && inv._source !== 'payment' && inv._source !== 'registration' && (
+                  {inv._source !== 'payment' && (
                     <button
                       onClick={() => editing?._id === inv._id ? setEditing(null) : openEdit(inv)}
                       className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 border border-blue-200 bg-white rounded-lg px-2.5 py-1 transition"
@@ -1070,8 +1123,323 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
   )
 }
 
+// ─── Wire Request Section ──────────────────────────────────────────────────────
+function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
+  const [editing, setEditing] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [saveErr, setSaveErr] = React.useState('')
+  const [activating, setActivating] = React.useState(false)
+  const [activateErr, setActivateErr] = React.useState('')
+
+  const fmtDateInput = (v) => {
+    if (!v) return ''
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  }
+
+  const isRenewalRequest     = record.wireRequestPurpose === 'renewal'
+  const isHolderUpgradeRequest = record.wireRequestPurpose === 'holder-upgrade'
+
+  // For renewal: pre-fill dates with the NEW plan's expected period, not the current plan's dates.
+  // Activation date = current expiration (new plan starts when current ends).
+  // End date = empty so admin fills in the new expiry explicitly.
+  const defaultSubDate = isRenewalRequest
+    ? fmtDateInput(record.expirationDate)   // renewal starts when current plan ends
+    : fmtDateInput(record.subscriptionDate)
+  const defaultExpDate = isRenewalRequest
+    ? ''                                     // admin enters new renewal end date
+    : fmtDateInput(record.expirationDate)
+
+  const [form, setForm] = React.useState({
+    wireRequestPurpose:         record.wireRequestPurpose || 'initial',
+    wireRequestRenewalPlan:     record.wireRequestRenewalPlan || '',
+    wireRequestAdditionalCount: record.wireRequestAdditionalCount != null ? String(record.wireRequestAdditionalCount) : '',
+    invoiceNumber:              (isRenewalRequest || isHolderUpgradeRequest) ? '' : (record.invoiceNumber || ''),
+    amountPaid:                 record.amountPaid != null ? String(record.amountPaid) : '',
+    subscriptionDate:           defaultSubDate,
+    expirationDate:             defaultExpDate,
+    invoiceStatus:              record.invoiceStatus || 'Wire Requested',
+    paymentStatus:              record.paymentStatus || 'pending',
+  })
+
+  // After admin generates a wire renewal/upgrade invoice, record.invoiceNumber updates.
+  // Sync it into the form so the Invoice # input shows the newly generated number.
+  // skipMountRef skips the first render so form stays blank as initialized.
+  const skipInvNumRef = React.useRef(true)
+  React.useEffect(() => {
+    if (skipInvNumRef.current) { skipInvNumRef.current = false; return }
+    if (record.invoiceNumber) {
+      setForm(f => f.invoiceNumber === record.invoiceNumber ? f : { ...f, invoiceNumber: record.invoiceNumber })
+    }
+  }, [record.invoiceNumber])
+
+  const purposeLabel = isRenewalRequest ? 'Renewal'
+    : isHolderUpgradeRequest ? 'Holder Upgrade'
+    : 'Initial'
+
+  // Labels differ by purpose so admin isn't confused when entering renewal dates
+  const subDateLabel = form.wireRequestPurpose === 'renewal' ? 'Renewal Start Date' : 'Subscription Date'
+  const expDateLabel = form.wireRequestPurpose === 'renewal' ? 'Renewal End Date'   : 'Expiration Date'
+
+  const handleSave = async () => {
+    setSaving(true); setSaveErr('')
+    try {
+      const payload = {
+        wireRequestPurpose:         form.wireRequestPurpose,
+        wireRequestRenewalPlan:     form.wireRequestPurpose === 'renewal' ? (form.wireRequestRenewalPlan || null) : null,
+        wireRequestAdditionalCount: form.wireRequestPurpose === 'holder-upgrade' && form.wireRequestAdditionalCount
+          ? Number(form.wireRequestAdditionalCount) : null,
+        invoiceNumber:    form.invoiceNumber || undefined,
+        amountPaid:       form.amountPaid !== '' ? Number(form.amountPaid) : undefined,
+        subscriptionDate: form.subscriptionDate || undefined,
+        expirationDate:   form.expirationDate || undefined,
+        invoiceStatus:    form.invoiceStatus || undefined,
+        paymentStatus:    form.paymentStatus || undefined,
+      }
+      const saveRes = await updateAirlinesSubscription(record._id, payload)
+
+      // When admin marks paid for renewal or holder-upgrade, activate immediately after save.
+      // activateWirePayment reads the dates just saved above, then:
+      //   renewal + activationDate <= now  → immediate activation (expired plan)
+      //   renewal + activationDate > now   → queue as nextRenewal (active plan)
+      //   holder-upgrade                   → bump committedCount + pricePerCertificate + create invoice
+      const markedPaid      = form.paymentStatus === 'paid'
+      const isPurposeActive = form.wireRequestPurpose === 'renewal' || form.wireRequestPurpose === 'holder-upgrade'
+      if (markedPaid && isPurposeActive) {
+        const activateRes = await activateWirePayment(record._id)
+        setEditing(false)
+        onRecordUpdated?.(activateRes.data?.data || activateRes.data)
+        return
+      }
+
+      setEditing(false)
+      onRecordUpdated?.(saveRes.data?.data || saveRes.data)
+    } catch (e) {
+      setSaveErr(e?.response?.data?.message || 'Save failed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleActivate = async () => {
+    const purposeStr = record.wireRequestPurpose === 'renewal' ? 'renewal' : 'activation'
+    const activationDate = record.subscriptionDate ? new Date(record.subscriptionDate) : new Date()
+    const isQueued = activationDate > new Date()
+    const confirmMsg = isQueued
+      ? `Queue this wire payment as a renewal?\n\nPlan: ${record.wireRequestRenewalPlan || record.subscriptionPlan}\nActivates: ${activationDate.toLocaleDateString()}\nExpires: ${record.expirationDate ? new Date(record.expirationDate).toLocaleDateString() : '—'}\n\nThe renewal will activate automatically on the set date.`
+      : `Activate this wire ${purposeStr} now?\n\nThis will set the subscription to Active.\nSubscription Date: ${activationDate.toLocaleDateString()}\nExpires: ${record.expirationDate ? new Date(record.expirationDate).toLocaleDateString() : '—'}\n\nThis cannot be automatically undone.`
+    if (!window.confirm(confirmMsg)) return
+    setActivating(true); setActivateErr('')
+    try {
+      const res = await activateWirePayment(record._id)
+      onRecordUpdated?.(res.data?.data || res.data)
+    } catch (e) {
+      setActivateErr(e?.response?.data?.message || 'Activation failed.')
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  const field = (label, key, type = 'text', extra = {}) => (
+    <div key={key}>
+      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">{label}</label>
+      <input
+        type={type}
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+        value={form[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+        {...extra}
+      />
+    </div>
+  )
+
+  return (
+    <div className="border-t border-slate-100 pt-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <SectionHead label="Wire Payment Request" />
+          <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border bg-blue-50 border-blue-200 text-blue-600">
+            {purposeLabel}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => { setSaveErr(''); setEditing(v => !v) }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white hover:bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 transition"
+          >
+            {editing ? 'Cancel' : 'Edit Details'}
+          </button>
+          {onGenerateInvoice && (
+            <button
+              onClick={() => {
+                // Build a purpose-aware record so AdminInvoiceModal shows correct line items.
+                // For renewal: override subscriptionPlan with the renewal plan.
+                // For holder-upgrade: set count/price to reflect only the additional holders.
+                let invoiceRecord = record
+                if (record.wireRequestPurpose === 'renewal') {
+                  invoiceRecord = {
+                    ...record,
+                    subscriptionPlan:    record.wireRequestRenewalPlan || record.subscriptionPlan,
+                    invoiceNumber:       '',   // force fresh number — don't reuse current plan's
+                    invoiceDraft:        null, // no stale draft from current plan
+                    _wireInvoicePurpose: 'renewal',
+                  }
+                } else if (record.wireRequestPurpose === 'holder-upgrade') {
+                  const additional = Number(record.wireRequestAdditionalCount || 1)
+                  const ppc = additional > 0 && record.amountPaid > 0
+                    ? Math.round((record.amountPaid / additional) * 100) / 100
+                    : Number(record.pricePerCertificate || 0)
+                  invoiceRecord = {
+                    ...record,
+                    committedCount:      additional,
+                    holderCountValue:    String(additional),
+                    pricePerCertificate: ppc,
+                    pricePerCert:        ppc,
+                    invoiceNumber:       '',   // force fresh number
+                    invoiceDraft:        null,
+                    _wireInvoicePurpose: 'holder-upgrade',
+                  }
+                }
+                onGenerateInvoice(invoiceRecord)
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Generate Invoice
+            </button>
+          )}
+          <button
+            onClick={handleActivate}
+            disabled={activating}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white transition"
+          >
+            {activating ? (
+              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20"/><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z"/></svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            )}
+            {activating ? 'Activating…' : 'Activate Now'}
+          </button>
+        </div>
+      </div>
+      {activateErr && <p className="text-[11px] text-red-600 font-semibold mt-1">{activateErr}</p>}
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-4 space-y-3">
+        {editing && (
+          <div className="rounded-lg border border-blue-300 bg-white p-3 mb-1 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Purpose</label>
+                <select
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={form.wireRequestPurpose}
+                  onChange={e => setForm(f => ({ ...f, wireRequestPurpose: e.target.value }))}
+                >
+                  <option value="initial">Initial</option>
+                  <option value="renewal">Renewal</option>
+                  <option value="holder-upgrade">Holder Upgrade</option>
+                </select>
+              </div>
+              {form.wireRequestPurpose === 'renewal' && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Renewal Plan</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    value={form.wireRequestRenewalPlan}
+                    onChange={e => setForm(f => ({ ...f, wireRequestRenewalPlan: e.target.value }))}
+                  >
+                    <option value="">— Select —</option>
+                    <option value="1 Year Subscription Plan">1 Year</option>
+                    <option value="Multiple Years Subscription Plan">Multiple Years</option>
+                    <option value="Unlimited Plan">Unlimited</option>
+                  </select>
+                </div>
+              )}
+              {form.wireRequestPurpose === 'holder-upgrade' && (
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Additional Holders</label>
+                  <input type="number" min="1"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                    value={form.wireRequestAdditionalCount}
+                    onChange={e => setForm(f => ({ ...f, wireRequestAdditionalCount: e.target.value }))}
+                  />
+                </div>
+              )}
+              {field('Invoice #', 'invoiceNumber')}
+              {field('Amount Paid ($)', 'amountPaid', 'number', { min: '0', step: '0.01' })}
+              {field(subDateLabel, 'subscriptionDate', 'date')}
+              {field(expDateLabel, 'expirationDate', 'date')}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Status</label>
+                <select
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={form.invoiceStatus}
+                  onChange={e => setForm(f => ({ ...f, invoiceStatus: e.target.value }))}
+                >
+                  <option value="Wire Requested">Wire Requested</option>
+                  <option value="Invoice Sent">Invoice Sent</option>
+                  <option value="Paid">Paid</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Payment Status</label>
+                <select
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={form.paymentStatus}
+                  onChange={e => setForm(f => ({ ...f, paymentStatus: e.target.value }))}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+            {saveErr && <p className="text-[11px] text-red-600 font-semibold">{saveErr}</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditing(false)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-white">
+                {saving ? 'Saving…' : 'Save Wire Details'}
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs font-black text-blue-800 uppercase tracking-widest">Wire Invoice Requested</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <ViewField label="Requested On" value={record.wirePaymentRequestedAt ? fmtDate(record.wirePaymentRequestedAt) : '—'} />
+          {record.wireRequestPurpose === 'renewal' && record.wireRequestRenewalPlan && (
+            <ViewField label="Renewal Plan" value={record.wireRequestRenewalPlan.replace(' Subscription Plan', '').replace(' Plan', '')} />
+          )}
+          {record.wireRequestPurpose === 'holder-upgrade' && record.wireRequestAdditionalCount && (
+            <ViewField label="Additional Holders" value={`+${record.wireRequestAdditionalCount}`} />
+          )}
+          <ViewField label="Invoice Status" value={record.invoiceStatus} />
+          {record.invoiceNumber && !(
+            // For renewal/upgrade wire in initial "Wire Requested" state, record.invoiceNumber
+            // is the CURRENT plan's invoice — hide it until admin generates the new invoice.
+            (isRenewalRequest || isHolderUpgradeRequest) && record.invoiceStatus === 'Wire Requested'
+          ) && <ViewField label="Invoice #" value={record.invoiceNumber} />}
+          {record.amountPaid > 0 && <ViewField label="Amount Paid" value={`$${Number(record.amountPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />}
+          {/* For renewal/upgrade, record.subscriptionDate/expirationDate are the CURRENT plan's dates.
+              Don't show them in the wire-request view — they're not what the airline requested. */}
+          {!isRenewalRequest && !isHolderUpgradeRequest && record.subscriptionDate && (
+            <ViewField label="Subscription Date" value={fmtDate(record.subscriptionDate)} />
+          )}
+          {!isRenewalRequest && !isHolderUpgradeRequest && record.expirationDate && (
+            <ViewField label="Expiration Date" value={fmtDate(record.expirationDate)} />
+          )}
+          <ViewField label="Payment Status" value={record.paymentStatus} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Airline View Modal ────────────────────────────────────────────────────────
-function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
+function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerateInvoice }) {
   const [showInvoices, setShowInvoices] = useState(false)
   return (
     <AnimatePresence>
@@ -1171,6 +1539,9 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 </div>
               </div>
             )}
+            {record.wirePaymentRequested && (
+              <WireRequestSection record={record} onRecordUpdated={onRecordUpdated} onGenerateInvoice={onGenerateInvoice} />
+            )}
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Record Info" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ViewField label="Submitted" value={fmtDate(record.createdAt)} />
@@ -1198,7 +1569,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 </div>
                 <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition">✕</button>
               </div>
-              <AdminInvoicesPanel registrationId={record._id} registrationModel="Airlines" record={record} drawerMode={true} />
+              <AdminInvoicesPanel registrationId={record._id} registrationModel="Airlines" record={record} drawerMode={true} onGenerateInvoice={onGenerateInvoice} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -1212,7 +1583,6 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
   const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
-  useEffect(() => { setForm({ ...record }); setErr(''); setPhoneCountry(ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us') }, [record])
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
   const handleSave = async () => {
@@ -1359,7 +1729,6 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
   const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
-  useEffect(() => { setForm({ ...record }); setErr(''); setPhoneCountry(ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us') }, [record])
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const setHolder = (idx, field, value) =>
     setForm(p => ({ ...p, certificateHolders: p.certificateHolders.map((h, i) => i === idx ? { ...h, [field]: value } : h) }))
@@ -1778,8 +2147,10 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     record.amountPaid || record.totalAmount || record.price || record.totalServiceFees || 0
   )
 
+  // Wire requests: use amountPaid admin entered as the authoritative total even before marking paid.
+  const wireMode = Boolean(record?.wirePaymentRequested) && paidTotal > 0
   const totalAmt = isAirline
-    ? (paidConfirmed && paidTotal > 0 ? Math.max(paidTotal, computedAirlineTotal) : computedAirlineTotal)
+    ? (wireMode ? paidTotal : (paidConfirmed && paidTotal > 0 ? Math.max(paidTotal, computedAirlineTotal) : computedAirlineTotal))
     : (paidConfirmed && paidTotal > 0 ? paidTotal : fallbackTotal)
   const unitPrice = isAirline ? Number((totalAmt / holderCount).toFixed(2)) : totalAmt
   const planDesc     = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan','').replace(' Plan','')}`
@@ -1788,8 +2159,13 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   const wireRequested = Boolean(record?.wirePaymentRequested || record?.invoiceStatus === 'Wire Requested')
   const defaultPaymentMethod = record?.invoiceDraft?.paymentMethod || (isAirline ? (wireRequested ? 'wire' : 'card') : 'card')
 
+  // initialStep === 'select' means this is a brand-new generate flow (no existing invoice yet).
+  // Don't show "Invoice Generated" badge or "Edit Invoice" header until admin actually saves.
+  const isNewInvoice = initialStep === 'select'
+  const hasInvoice = !isNewInvoice && hasExistingInvoice(record)
+
   const [paymentMethodSel, setPaymentMethodSel] = useState(
-    initialStep === 'edit' ? defaultPaymentMethod : ''
+    initialStep === 'edit' ? defaultPaymentMethod : (isAirline ? 'wire' : 'card')
   )
   const [step, setStep] = useState(initialStep)
   const autoPreviewFired = useRef(false)
@@ -1936,10 +2312,11 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     setSavingInvoice(true)
     setSaveError('')
     const payload = {
-      invoiceNumber:    inv.invoiceNumber,
-      invoiceStatus:    'Generated',
-      invoiceGenerated: true,
-      invoiceDraft:     inv,
+      invoiceNumber:       inv.invoiceNumber,
+      invoiceStatus:       'Generated',
+      invoiceGenerated:    true,
+      invoiceDraft:        inv,
+      wireInvoicePurpose:  record._wireInvoicePurpose || null,
     }
     try {
       await onSaveInvoice(record._id, type, payload)
@@ -1985,7 +2362,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
-                  {hasExistingInvoice(record) ? 'Edit Invoice' : 'Invoice Generator'} · Admin
+                  {hasInvoice ? 'Edit Invoice' : 'Invoice Generator'} · Admin
                 </p>
                 <h2 className="text-base font-extrabold text-slate-900 leading-tight">
                   {record.airlineName || [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Record'}
@@ -1993,7 +2370,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {hasExistingInvoice(record) && (
+              {hasInvoice && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 text-[10px] font-bold">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                   Invoice Generated
@@ -2043,7 +2420,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 <button onClick={handleProceed} disabled={!paymentMethodSel}
                   style={paymentMethodSel ? { background: '#0000ff' } : {}}
                   className="inline-flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl text-sm transition disabled:opacity-40 disabled:bg-slate-300">
-                  {hasExistingInvoice(record) ? 'Edit Invoice →' : 'Generate Invoice →'}
+                  {hasInvoice ? 'Edit Invoice →' : 'Generate Invoice →'}
                 </button>
               </div>
             </div>
@@ -2067,7 +2444,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                 </div>
               )}
 
-              {hasExistingInvoice(record) && (
+              {hasInvoice && (
                 <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <svg className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <div>
@@ -2205,7 +2582,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   }
                   Preview PDF
                 </button>
-                {(!hasExistingInvoice(record) || hasInvoiceChanges) && (
+                {(!hasInvoice || hasInvoiceChanges) && (
                   <button
                     onClick={handleSaveInvoice}
                     disabled={savingInvoice || previewLoading}
@@ -2215,7 +2592,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                     {(savingInvoice || previewLoading)
                       ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>Saving…</>
                       : <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        {hasExistingInvoice(record) ? 'Save Changes' : 'Generate Invoice'}
+                        {hasInvoice ? 'Save Changes' : 'Generate Invoice'}
                       </>
                     }
                   </button>
@@ -3182,65 +3559,79 @@ export default function AdminDashboard() {
 
   const handleSaveInvoice = async (id, type, payload) => {
     try {
-      // Validate/save against canonical payment/invoice records first so
-      // duplicate invoice-number errors are shown before registration updates.
-      let paidDoc = null
-      try {
-        const paymentsRes = await getPaymentsByRegistration(id)
-        const payments = paymentsRes.data?.data || []
-        paidDoc = payments.find(p => p.isPaid) || payments[0] || null
-      } catch (_) { /* non-critical lookup */ }
+      const model = type === 'airline' ? 'Airlines' : 'Individual'
+      const wirePurpose = payload.wireInvoicePurpose  // 'renewal' | 'holder-upgrade' | null
 
-      let invDoc = null
-      try {
-        const invDocRes = await getInvoiceByRegistration(id)
-        invDoc = (invDocRes.data?.data || [])[0] || null
-      } catch (_) { /* non-critical lookup */ }
+      if (wirePurpose) {
+        // Wire renewal/upgrade: always create a new dedicated Invoice doc.
+        // Never reuse the current-plan Invoice doc — that would destroy it.
+        await createAdminInvoiceDoc(id, model, payload.invoiceDraft, payload.invoiceNumber, wirePurpose)
+      } else {
+        // Standard flow: prefer updating existing Payment/Invoice doc.
+        let paidDoc = null
+        try {
+          const paymentsRes = await getPaymentsByRegistration(id)
+          const payments = paymentsRes.data?.data || []
+          paidDoc = payments.find(p => p.isPaid) || payments[0] || null
+        } catch { /* non-critical */ }
 
-      if (paidDoc?._id && payload.invoiceDraft) {
-        await savePaymentInvoiceDraft(paidDoc._id, payload.invoiceDraft, payload.invoiceNumber)
-      } else if (invDoc?._id) {
-        await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        let invDoc = null
+        try {
+          const invDocRes = await getInvoiceByRegistration(id)
+          const allInvDocs = invDocRes.data?.data || []
+          const realDocs = allInvDocs.filter(d => !d._source)
+          invDoc = realDocs.find(d => d.invoiceNumber === payload.invoiceNumber)
+            || realDocs.find(d => d.adminGenerated)
+            || realDocs.find(d => !d.paymentId)
+            || realDocs[0]
+            || null
+        } catch { /* non-critical */ }
+
+        if (paidDoc?._id && payload.invoiceDraft) {
+          await savePaymentInvoiceDraft(paidDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        } else if (invDoc?._id) {
+          await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        } else {
+          await createAdminInvoiceDoc(id, model, payload.invoiceDraft, payload.invoiceNumber)
+        }
+
+        // Best-effort sync Invoice doc when Payment path ran first.
+        try {
+          if (paidDoc?._id && invDoc?._id) {
+            await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+          }
+        } catch (invSyncErr) {
+          console.warn('[handleSaveInvoice] Invoice doc sync warning:', invSyncErr.message)
+        }
       }
 
       const registrationUpdate = {
-        invoiceStatus: payload.invoiceStatus,
+        invoiceStatus:    payload.invoiceStatus,
         invoiceGenerated: payload.invoiceGenerated,
-        invoiceNumber: payload.invoiceNumber,
-        invoiceDraft: payload.invoiceDraft,
+        invoiceNumber:    payload.invoiceNumber,
+        invoiceDraft:     payload.invoiceDraft,
       }
+
+      const mergeRecord = (x, saved) => ({
+        ...x, ...saved,
+        invoiceDraft:  payload.invoiceDraft,
+        invoiceNumber: payload.invoiceNumber,
+      })
 
       if (type === 'airline') {
         const res = await updateAirlinesSubscription(id, registrationUpdate)
         const saved = res.data?.data || {}
-        setAirlines(p => p.map(x => x._id === id
-          ? { ...x, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber }
-          : x
-        ))
+        setAirlines(p => p.map(x => x._id === id ? mergeRecord(x, saved) : x))
         setInvoiceModal(prev => prev && prev.record._id === id
-          ? { ...prev, record: { ...prev.record, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber } }
-          : prev
-        )
+          ? { ...prev, record: mergeRecord(prev.record, saved) } : prev)
+        setViewRec(prev => prev && prev._id === id ? mergeRecord(prev, saved) : prev)
       } else {
         const res = await updateIndividual(id, registrationUpdate)
         const saved = res.data?.data || {}
-        setIndividuals(p => p.map(x => x._id === id
-          ? { ...x, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber }
-          : x
-        ))
+        setIndividuals(p => p.map(x => x._id === id ? mergeRecord(x, saved) : x))
         setInvoiceModal(prev => prev && prev.record._id === id
-          ? { ...prev, record: { ...prev.record, ...saved, invoiceDraft: payload.invoiceDraft, invoiceNumber: payload.invoiceNumber } }
-          : prev
-        )
-      }
-
-      // Keep Invoice doc in sync as best-effort when Payment save path ran first.
-      try {
-        if (paidDoc?._id && invDoc?._id) {
-          await saveInvoiceDraftToDoc(invDoc._id, payload.invoiceDraft, payload.invoiceNumber)
-        }
-      } catch (invSyncErr) {
-        console.warn('[handleSaveInvoice] Invoice doc sync warning:', invSyncErr.message)
+          ? { ...prev, record: mergeRecord(prev.record, saved) } : prev)
+        setViewRec(prev => prev && prev._id === id ? mergeRecord(prev, saved) : prev)
       }
 
       showToast('Invoice saved — user will see updated invoice')
@@ -3262,41 +3653,60 @@ export default function AdminDashboard() {
     }, 50)
   }
 
-  // Resolve (and immediately persist) an invoice number before opening any invoice modal.
-  // This prevents the number from incrementing every time the modal is opened without saving.
-  const resolveInvoiceNumber = async (record, type) => {
+  // Resolve an invoice number before opening any invoice modal.
+  // persist=false (generate flow): number generated in-memory only, not written to DB until admin saves.
+  // persist=true (edit flow): number persisted to Registration doc immediately (default).
+  const resolveInvoiceNumber = async (record, type, persist = true) => {
     let resolved = record
 
-    // 1. Already on the record — use it.
-    if (!resolved.invoiceNumber) {
-      // 2. Check Invoice collection (covers Stripe-paid records).
-      try {
-        const invRes = await getInvoiceByRegistration(record._id)
-        const existingNum = (invRes.data?.data || [])[0]?.invoiceNumber
-        if (existingNum) {
+    // Always check Invoice collection first — it is the canonical source of truth.
+    // Sync invoice number AND draft data so the modal opens with the latest saved data.
+    // For wire renewal/upgrade invoices, filter to same-purpose docs so we don't
+    // accidentally reuse the current-plan's invoice number.
+    const wireInvoicePurpose = record._wireInvoicePurpose || null
+    try {
+      const invRes = await getInvoiceByRegistration(record._id)
+      const realInvDocs = (invRes.data?.data || []).filter(d => !d._source)
+      // Wire purpose: only consider Invoice docs matching that purpose (new renewal/upgrade invoice).
+      // Standard: prefer admin-generated doc, fall back to first real doc.
+      const invDoc = wireInvoicePurpose
+        ? (realInvDocs.find(d => d.purpose === wireInvoicePurpose && d.adminGenerated) || null)
+        : (realInvDocs.find(d => d.adminGenerated) || realInvDocs[0])
+      if (invDoc) {
+        const existingNum = invDoc.invoiceNumber
+        if (existingNum && existingNum !== resolved.invoiceNumber) {
           resolved = { ...resolved, invoiceNumber: existingNum }
-          if (type === 'airline') setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
-          else setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
+          if (!wireInvoicePurpose) {
+            // Only sync invoice number back to registration for non-wire-purpose flows
+            if (type === 'airline') setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
+            else setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: existingNum } : x))
+          }
         }
-      } catch (_) { /* fall through */ }
+        // Merge Invoice doc draft into record so the modal reads canonical data.
+        if (invDoc.draft) {
+          resolved = { ...resolved, invoiceDraft: { ...invDoc.draft, invoiceNumber: invDoc.invoiceNumber } }
+        }
+      }
+    } catch { /* fall through */ }
 
-      // 3. Still no number — generate one and persist.
-      if (!resolved.invoiceNumber) {
+    // Still no number — generate one. Only persist to DB when persist=true (edit/preview flow).
+    if (!resolved.invoiceNumber) {
         try {
           const genRes = await generateInvoiceNumber()
           const newNum = genRes.data?.invoiceNumber
           if (newNum) {
-            if (type === 'airline') {
-              await updateAirlinesSubscription(record._id, { invoiceNumber: newNum })
-              setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
-            } else {
-              await updateIndividual(record._id, { invoiceNumber: newNum })
-              setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+            if (persist) {
+              if (type === 'airline') {
+                await updateAirlinesSubscription(record._id, { invoiceNumber: newNum })
+                setAirlines(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+              } else {
+                await updateIndividual(record._id, { invoiceNumber: newNum })
+                setIndividuals(p => p.map(x => x._id === record._id ? { ...x, invoiceNumber: newNum } : x))
+              }
             }
             resolved = { ...resolved, invoiceNumber: newNum }
           }
-        } catch (_) { /* fall through */ }
-      }
+        } catch { /* fall through */ }
     }
 
     // 4. Also resolve nextRenewal.invoiceNumber if a queued plan exists and
@@ -3327,7 +3737,7 @@ export default function AdminDashboard() {
   }
 
   const openInvoiceGenerate = async (record, type) => {
-    const resolved = await resolveInvoiceNumber(record, type)
+    const resolved = await resolveInvoiceNumber(record, type, false)
     setInvoiceModal({ record: resolved, type, initialStep: 'select', autoPreview: false, previewOnly: false })
   }
 
@@ -3442,6 +3852,7 @@ export default function AdminDashboard() {
             setAirlines(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))
             setViewRec(updated)
           }}
+          onGenerateInvoice={r => openInvoiceGenerate(r, 'airline')}
         />
       )}
       {editRec && editType === 'individual' && <IndividualEditModal record={editRec} saving={saving} onClose={() => { setEditRec(null); setEditType(null) }} onSave={(id, data) => handleSave(id, data, 'individual')} />}
@@ -3463,7 +3874,7 @@ export default function AdminDashboard() {
       <div className="mb-4 text-center">
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Admin Control Center</p>
         <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wide text-slate-900">Registrations Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-2 capitalize">Manage all pilot and airline operator registrations.</p>
+        
       </div>
 
       {loadErr && (

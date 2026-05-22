@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // ── Certificate Holder sub-schema ──
 const CertificateHolderSchema = new mongoose.Schema({
   fullName: { type: String, required: true, trim: true },
-  dateOfBirth: { type: Date, required: true },
+  dateOfBirth: { type: Date, required: false },
   certificateType: {
     type: String,
     required: true,

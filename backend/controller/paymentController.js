@@ -629,7 +629,7 @@ exports.createPaymentIntent = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount:               amountCents,
       currency:             'usd',
-      payment_method_types: ['card', 'link'],
+      payment_method_types: ['card', 'us_bank_account'],
       description:          `Subscription — ${registrationModel} ${registrationId}`,
       metadata,
     });

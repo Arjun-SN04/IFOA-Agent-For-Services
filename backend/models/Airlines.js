@@ -83,6 +83,9 @@ const AirlinesSchema = new mongoose.Schema({
   paymentEmail: { type: String, default: '' },
   wirePaymentRequested: { type: Boolean, default: false, index: true },
   wirePaymentRequestedAt: { type: Date, default: null },
+  wireRequestPurpose: { type: String, default: null },
+  wireRequestRenewalPlan: { type: String, default: null },
+  wireRequestAdditionalCount: { type: Number, default: null },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'failed'],

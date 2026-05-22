@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import PaymentModal from '../payment/PaymentModal'
+import { LegalModal } from '../legal/LegalModal'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -63,6 +64,7 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
   const navigate = useNavigate()
   const [errors, setErrors]             = useState({})
   const [localError, setLocalError]     = useState('')
+  const [legalModal, setLegalModal]     = useState(null)
   const [paymentMethod, setPaymentMethod] = useState(data.paymentMethod || 'card') // 'card' | 'wire'
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
@@ -381,20 +383,22 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
         </div>
       </div>}
 
+      <LegalModal open={!!legalModal} onClose={() => setLegalModal(null)} type={legalModal} />
+
       {/* Terms */}
       {!isExistingSubmission && <div className={`rounded-[26px] border p-5 ${errors.agreedToTerms ? 'border-red-200 bg-red-50/70' : 'border-slate-200 bg-slate-50/80'}`}>
         <label className="flex cursor-pointer items-start gap-3">
           <input type="checkbox" checked={data.agreedToTerms || false} onChange={(e) => update({ agreedToTerms: e.target.checked })} className="mt-1 h-4 w-4 accent-blue-600" />
           <span className="text-sm leading-6 text-slate-700">
             I confirm the submitted information is accurate, and I agree to the{' '}
-            <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">Terms of Service</a>
+            <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setLegalModal('terms') }} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 transition">Terms of Service</button>
             {' '}and{' '}
-            <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">Privacy Policy</a>.
+            <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setLegalModal('privacy') }} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 transition">Privacy Policy</button>.
           </span>
         </label>
         {errors.agreedToTerms && (
           <p className="mt-3 flex items-center gap-2 text-xs font-medium text-red-600">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />{errors.agreedToTerms}
+            {errors.agreedToTerms}
           </p>
         )}
       </div>}

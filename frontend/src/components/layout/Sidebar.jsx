@@ -27,7 +27,7 @@ const userNav = [
       { to: '/dashboard', label: 'Dashboard', exact: true, icon: <OverviewIcon /> },
       { to: '/dashboard/profile', label: 'My Profile', icon: <ProfileIcon /> },
       { to: '/dashboard/subscription', label: 'Subscription', icon: <SubscriptionIcon /> },
-      { to: '/dashboard/documents', label: 'Documents', icon: <DocumentIcon /> },
+
     ],
   },
   {

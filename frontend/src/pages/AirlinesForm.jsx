@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from '../components/Navbar'
@@ -270,6 +270,13 @@ export default function AirlinesForm() {
   const formRef = useRef(null)
 
   const update = (fields) => setFormData((prev) => ({ ...prev, ...fields }))
+
+  useEffect(() => {
+    if (user?.logoUrl && !formData.logoUrl) {
+      update({ logoUrl: user.logoUrl })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.logoUrl])
 
   const scrollToForm = () =>
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })

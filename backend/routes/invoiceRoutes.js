@@ -12,10 +12,13 @@
  */
 const express  = require('express');
 const router   = express.Router();
-const Invoice  = require('../models/Invoice');
-const Payment  = require('../models/Payment');
-const Renewal  = require('../models/Renewal');
-const auth     = require('../middleware/auth');
+const Invoice             = require('../models/Invoice');
+const Payment             = require('../models/Payment');
+const Renewal             = require('../models/Renewal');
+const Individual          = require('../models/Individual');
+const Airlines            = require('../models/Airlines');
+const AirlinesSubscription = require('../models/AirlinesSubscription');
+const auth                = require('../middleware/auth');
 const {
   generateInvoiceNumber,
   isInvoiceNumberTaken,
@@ -185,6 +188,136 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
   }
 });
 
+// ── POST /api/invoices/admin-create (admin) ──────────────────────────────────
+// Creates a canonical Invoice doc for registrations that have no prior Invoice
+// (e.g. wire-transfer / admin-only registrations where no payment flow ran).
+// Idempotent: if an Invoice with the same invoiceNumber already exists for this
+// registration it updates the draft rather than creating a duplicate.
+router.post('/admin-create', auth, adminOnly, async (req, res) => {
+  try {
+    const { registrationId, registrationModel, draft, invoiceNumber, purpose } = req.body;
+    if (!registrationId || !registrationModel) {
+      return res.status(400).json({ success: false, message: 'registrationId and registrationModel required.' });
+    }
+
+    const norm = normalizeInvoiceNumber(invoiceNumber);
+    // renewal and holder-upgrade invoices are additive — they must NOT reuse the
+    // current-plan Invoice doc. Only match by exact invoice number; never fall back
+    // to the generic adminGenerated doc, and never delete sibling Invoice docs.
+    const isAdditive = purpose === 'renewal' || purpose === 'holder-upgrade';
+
+    // Find any existing admin-generated Invoice doc for this registration.
+    // Prefer exact match on invoiceNumber; fall back to any adminGenerated doc
+    // (only for non-additive/initial invoices).
+    let existing = norm
+      ? await Invoice.findOne({ registrationId, invoiceNumber: norm })
+      : null;
+    if (!existing && !isAdditive) {
+      existing = await Invoice.findOne({ registrationId, adminGenerated: true, paymentId: null })
+        .sort({ createdAt: -1 });
+    }
+
+    if (existing) {
+      const oldExistingNum = existing.invoiceNumber;
+      if (norm && norm !== oldExistingNum) {
+        const takenByOther = await Invoice.findOne({
+          invoiceNumber:  norm,
+          registrationId: { $ne: registrationId },
+        });
+        if (takenByOther) {
+          return res.status(400).json({ success: false, message: 'Invoice number already exists. Please use a different value.' });
+        }
+        // Delete any sibling admin-generated doc that already carries this number
+        // (leftover duplicate from previous saves).
+        await Invoice.deleteMany({
+          invoiceNumber:  norm,
+          registrationId,
+          _id:            { $ne: existing._id },
+          paymentId:      null,
+        });
+        existing.invoiceNumber = norm;
+      }
+
+      existing.draft = { ...draft, invoiceNumber: existing.invoiceNumber };
+      existing.markModified('draft');
+      existing.adminGenerated = true;
+      if (purpose) existing.purpose = purpose;
+      if (draft?.lineItems?.length) {
+        existing.lineItems = draft.lineItems;
+        const t = draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0);
+        existing.totalAmount = t;
+        existing.subtotal    = t;
+      }
+
+      // For initial invoices only: clean up orphan admin-generated docs for this registration.
+      // Renewal/upgrade invoices are additive and must not touch sibling Invoice docs.
+      if (!isAdditive) {
+        await Invoice.deleteMany({
+          registrationId,
+          _id:       { $ne: existing._id },
+          adminGenerated: true,
+          paymentId: null,
+        });
+      }
+
+      await existing.save();
+
+      // Sync invoiceNumber only if this is the active subscription invoice
+      // (reg.invoiceNumber matches the old number, meaning reg points to this invoice).
+      try {
+        const regModel = existing.registrationModel === 'Individual'            ? Individual
+                       : existing.registrationModel === 'AirlinesSubscription'  ? AirlinesSubscription
+                       : Airlines;
+        const regDoc = await regModel.findById(existing.registrationId).select('invoiceNumber').lean();
+        if (!regDoc?.invoiceNumber || regDoc.invoiceNumber === oldExistingNum) {
+          await regModel.findByIdAndUpdate(existing.registrationId, {
+            $set: { invoiceNumber: existing.invoiceNumber },
+          });
+        }
+      } catch (_) { /* non-critical */ }
+
+      return res.json({ success: true, data: existing });
+    }
+
+    const lineItems = draft?.lineItems || [];
+    const totalAmount = lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0);
+    const now = new Date();
+    const payable = new Date(now); payable.setDate(payable.getDate() + 30);
+
+    const inv = await Invoice.create({
+      invoiceNumber:     norm || await generateInvoiceNumber(),
+      registrationId,
+      registrationModel,
+      status:            'paid',
+      adminGenerated:    true,
+      purpose:           purpose || 'payment',
+      draft:             { ...draft, invoiceNumber: norm },
+      issueDate:         draft?.issueDate   ? new Date(draft.issueDate)  : now,
+      payableBy:         draft?.payableBy   ? new Date(draft.payableBy)  : payable,
+      paidAt:            now,
+      recipientName:     draft?.recipientName     || '',
+      recipientCompany:  draft?.recipientCompany  || '',
+      recipientContact:  draft?.recipientName     || '',
+      recipientAddress1: draft?.recipientAddress1 || '',
+      recipientAddress2: draft?.recipientAddress2 || '',
+      recipientCountry:  draft?.recipientCountry  || '',
+      paymentMethod:     draft?.paymentMethod     || '',
+      lineItems,
+      subtotal:    totalAmount,
+      tax:         0,
+      totalAmount,
+      currency:    'USD',
+    });
+
+    res.json({ success: true, data: inv });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Invoice number already exists.' });
+    }
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── PATCH /api/invoices/:id/draft (admin) ────────────────────────────────────
 // Admin saves edits from the invoice editor into the canonical Invoice doc.
 // Also syncs Payment.invoiceDraft for backward compatibility.
@@ -197,30 +330,47 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
 
     const requestedInvoiceNumber = normalizeInvoiceNumber(invoiceNumber);
-    if (requestedInvoiceNumber && requestedInvoiceNumber !== invoice.invoiceNumber) {
-      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
-        excludeInvoiceId: invoice._id,
-        excludePaymentId: invoice.paymentId || null,
+    // Capture old number BEFORE modifying — needed for Registration sync check below.
+    const oldInvoiceNumber = invoice.invoiceNumber;
+
+    if (requestedInvoiceNumber && requestedInvoiceNumber !== oldInvoiceNumber) {
+      const sibling = await Invoice.findOne({
+        invoiceNumber:  requestedInvoiceNumber,
+        registrationId: invoice.registrationId,
+        _id:            { $ne: invoice._id },
       });
-      if (alreadyUsed) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invoice number already exists. Please use a different value.',
+      if (sibling) {
+        await sibling.deleteOne();
+      } else {
+        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
+          excludeInvoiceId:         invoice._id,
+          excludePaymentId:         invoice.paymentId || null,
+          excludeRegistrationId:    invoice.registrationId || null,
+          excludeRegistrationModel: invoice.registrationModel || null,
         });
+        if (alreadyUsed) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invoice number already exists. Please use a different value.',
+          });
+        }
       }
       invoice.invoiceNumber = requestedInvoiceNumber;
     }
 
     if (draft) {
-      // Always embed invoiceNumber into the draft payload so both admin and
-      // user PDF generation can read it directly from the draft without a
-      // separate lookup. Falls back to the invoice's own number if not set.
       invoice.draft = {
         ...draft,
         invoiceNumber: draft.invoiceNumber || invoiceNumber || invoice.invoiceNumber,
       };
-      // Mixed-type fields require explicit markModified so Mongoose detects the change.
       invoice.markModified('draft');
+
+      if (draft.lineItems?.length) {
+        const newTotal = draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0);
+        invoice.lineItems   = draft.lineItems;
+        invoice.totalAmount = newTotal;
+        invoice.subtotal    = newTotal;
+      }
     }
 
     invoice.adminGenerated = true;
@@ -230,13 +380,26 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
     if (invoice.paymentId) {
       try {
         await Payment.findByIdAndUpdate(invoice.paymentId, {
-          $set: {
-            invoiceDraft:  invoice.draft,
-            invoiceNumber: invoice.invoiceNumber,
-          },
+          $set: { invoiceDraft: invoice.draft, invoiceNumber: invoice.invoiceNumber },
         });
       } catch (_) { /* non-critical */ }
     }
+
+    // Sync Registration doc's invoiceNumber only if this Invoice is the one the
+    // Registration currently points to (i.e. it IS the active subscription invoice).
+    // Renewal invoices share the same registrationId but reg.invoiceNumber points to
+    // the original subscription — editing a renewal must NOT overwrite that pointer.
+    try {
+      const regModel = invoice.registrationModel === 'Individual'            ? Individual
+                     : invoice.registrationModel === 'AirlinesSubscription'  ? AirlinesSubscription
+                     : Airlines;
+      const regDoc = await regModel.findById(invoice.registrationId).select('invoiceNumber').lean();
+      if (!regDoc?.invoiceNumber || regDoc.invoiceNumber === oldInvoiceNumber) {
+        await regModel.findByIdAndUpdate(invoice.registrationId, {
+          $set: { invoiceNumber: invoice.invoiceNumber },
+        });
+      }
+    } catch (_) { /* non-critical */ }
 
     res.json({ success: true, data: invoice });
   } catch (err) {

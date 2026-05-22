@@ -467,7 +467,7 @@ exports.sendOtp = async (req, res) => {
 // Body: { email, code, password, role, firstName, lastName, airlineName }
 exports.verifyOtpAndSignup = async (req, res) => {
   try {
-    const { email, code, password, role, firstName, lastName, airlineName } = req.body;
+    const { email, code, password, role, firstName, lastName, airlineName, logoUrl } = req.body;
     if (!email || !code) return res.status(400).json({ message: 'email and code are required.' });
     if (!password || !role) return res.status(400).json({ message: 'password and role are required.' });
     if (role === 'admin') return res.status(403).json({ message: 'Admin accounts cannot be self-registered.' });
@@ -487,6 +487,7 @@ exports.verifyOtpAndSignup = async (req, res) => {
     const user = await User.create({
       email, password, role, firstName, lastName,
       airlineName: role === 'airline' ? airlineName.trim() : '',
+      logoUrl: role === 'airline' && logoUrl ? logoUrl : '',
     });
     const token = signToken(user);
     res.status(201).json({ token, user: publicUser(user) });

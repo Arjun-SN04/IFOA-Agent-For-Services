@@ -54,6 +54,7 @@ export const setAirlinesRenewalInvoice     = (id, invoiceNumber) => API.patch(`/
 export const updateIndividualRenewalDetails = (id, data) => API.patch(`/individuals/${id}/renewal-details`, data)
 export const updateAirlinesRenewalDetails   = (id, data) => API.patch(`/airlines/${id}/renewal-details`, data)
 export const markAirlinesPaid               = (id)       => API.patch(`/airlines/${id}/mark-paid`)
+export const activateWirePayment            = (id)       => API.patch(`/airlines/${id}/activate-wire`)
 export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
 export const createAdminAirlineForm         = (data)     => API.post('/airlines/admin/create-form', data)
 export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines/${id}/request-invoice`, data)
@@ -102,6 +103,9 @@ export const getInvoiceByRegistration  = (regId)      => API.get(`/invoices/by-r
 // Admin saves edits into the canonical Invoice doc (+ syncs to Payment.invoiceDraft)
 export const saveInvoiceDraftToDoc     = (invoiceId, draft, invoiceNumber) =>
   API.patch(`/invoices/${invoiceId}/draft`, { draft, invoiceNumber })
+// Admin creates a new canonical Invoice doc when none exists (wire/no-payment registrations)
+export const createAdminInvoiceDoc = (registrationId, registrationModel, draft, invoiceNumber, purpose) =>
+  API.post('/invoices/admin-create', { registrationId, registrationModel, draft, invoiceNumber, purpose })
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)

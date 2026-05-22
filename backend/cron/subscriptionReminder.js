@@ -49,7 +49,10 @@ async function runReminders() {
 
     for (const doc of airlines) {
       try {
-        await sendExpiryReminder(doc, true, days);
+        const actualDays = doc.expirationDate
+          ? Math.ceil((new Date(doc.expirationDate) - Date.now()) / MS_PER_DAY)
+          : days;
+        await sendExpiryReminder(doc, true, actualDays);
         await Airlines.findByIdAndUpdate(doc._id, { $set: { [field]: new Date() } });
       } catch (e) {
         console.error(`[reminderCron] airline ${doc._id} ${days}d failed:`, e.message);
@@ -58,7 +61,10 @@ async function runReminders() {
 
     for (const doc of individuals) {
       try {
-        await sendExpiryReminder(doc, false, days);
+        const actualDays = doc.expirationDate
+          ? Math.ceil((new Date(doc.expirationDate) - Date.now()) / MS_PER_DAY)
+          : days;
+        await sendExpiryReminder(doc, false, actualDays);
         await Individual.findByIdAndUpdate(doc._id, { $set: { [field]: new Date() } });
       } catch (e) {
         console.error(`[reminderCron] individual ${doc._id} ${days}d failed:`, e.message);

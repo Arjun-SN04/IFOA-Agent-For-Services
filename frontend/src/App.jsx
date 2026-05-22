@@ -24,7 +24,6 @@ const SeedAdminLoginPage  = lazy(() => import('./pages/SeedAdminLoginPage'))
 const UserDashboard       = lazy(() => import('./pages/dashboard/UserDashboard'))
 const ProfilePage         = lazy(() => import('./pages/dashboard/ProfilePage'))
 const SubscriptionPage    = lazy(() => import('./pages/dashboard/SubscriptionPage'))
-const DocumentsPage       = lazy(() => import('./pages/dashboard/DocumentsPage'))
 const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'))
 
 // Tiny blank-slate while a lazy chunk loads — no spinner flash
@@ -155,7 +154,6 @@ function App() {
                 <Route path="/dashboard" element={<UserDashboard />} />
                 <Route path="/dashboard/profile" element={<ProfilePage />} />
                 <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
-                <Route path="/dashboard/documents" element={<DocumentsPage />} />
                 <Route path="/dashboard/settings" element={<SettingsPage />} />
               </Route>
             </Route>

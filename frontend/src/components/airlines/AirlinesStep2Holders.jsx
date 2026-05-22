@@ -66,10 +66,10 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
     const errs = holders.map(h => {
       const e = {}
       if (!h.fullName?.trim())              e.fullName              = 'Required'
-      if (!h.dateOfBirth?.trim())           e.dateOfBirth           = 'Required'
       if (!h.certificateType)               e.certificateType       = 'Required'
       if (!h.faaCertificateNumber?.trim())  e.faaCertificateNumber  = 'Required'
       if (!h.iacraFtnNumber?.trim())        e.iacraFtnNumber        = 'Required'
+      if (h.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(h.email.trim())) e.email = 'Invalid email address'
       if (h.hasSecondaryCertificate) {
         if (!h.secondaryCertificateType)    e.secondaryCertificateType = 'Required'
       }
@@ -181,7 +181,7 @@ export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
                   {errors[i]?.fullName && <p className="text-red-500 text-xs">{errors[i].fullName}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Date of Birth <span className="text-red-400">*</span></label>
+                  <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">Date of Birth</label>
                   <input type="date" value={h.dateOfBirth || ''}
                     onChange={e => onChange(i, 'dateOfBirth', e.target.value)}
                     data-field="dateOfBirth"

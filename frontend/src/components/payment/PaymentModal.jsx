@@ -171,6 +171,27 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
   const [phase,         setPhase]        = useState('form')
   const [invoice,       setInvoice]      = useState(null)
 
+  // Rename Stripe's "US bank account" tab label to "Bank" via DOM patch.
+  // Stripe renders tab buttons in the host page DOM (not in an iframe),
+  // so we can find and rewrite the text node after the element mounts.
+  useEffect(() => {
+    if (!elementsReady) return
+    const patch = () => {
+      document.querySelectorAll('[class*="TabLabel"],[class*="tab-label"],[role="tab"]').forEach(el => {
+        el.childNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() === 'US bank account') {
+            node.textContent = 'Bank'
+          }
+        })
+        if (el.textContent.trim() === 'US bank account') el.textContent = 'Bank'
+      })
+    }
+    patch()
+    const obs = new MutationObserver(patch)
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true })
+    return () => obs.disconnect()
+  }, [elementsReady])
+
   const fetchCanonicalInvoice = async (token) => {
     try {
       const res = await fetch(`${BASE_URL}/invoices/by-registration/${registrationId}`, {
@@ -330,14 +351,14 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
         </div>
       </div>
 
-      {/* Stripe PaymentElement — card + Link, amount locked by clientSecret */}
+      {/* Stripe PaymentElement — shows all methods enabled in Stripe Dashboard (card, bank, Link …) */}
       <div className="min-h-[140px]">
         <PaymentElement
           onReady={() => setElementsReady(true)}
           options={{
             layout: { type: 'tabs', defaultCollapsed: false },
             fields: { billingDetails: { name: 'auto', email: 'auto' } },
-            terms: { card: 'never' },
+            terms: { card: 'never', usBankAccount: 'always' },
           }}
         />
       </div>

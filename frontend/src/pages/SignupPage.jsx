@@ -1,10 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import logo from '../assets/IFOA_USA_white.png'
 import { Lock, ShieldCheck, MapPin } from 'lucide-react'
 import OtpTimer from '../components/OtpTimer'
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 const roles = [
   { value: 'individual', label: 'Individual Pilot / Dispatcher', desc: 'Part 61/65 certificate holders' },
@@ -190,6 +192,30 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showOtp, setShowOtp] = useState(false)
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoErr, setLogoErr] = useState('')
+  const logoFileRef = useRef(null)
+
+  const handleLogoFile = useCallback(async (file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setLogoErr('Only image files accepted.'); return }
+    if (file.size > 2 * 1024 * 1024) { setLogoErr('Image must be under 2 MB.'); return }
+    setLogoErr('')
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('logo', file)
+      const res = await fetch(`${BASE_URL}/airlines/upload-logo`, { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.message || 'Upload failed.')
+      setLogoUrl(json.url)
+    } catch (e) {
+      setLogoErr(e.message || 'Upload failed.')
+    } finally {
+      setLogoUploading(false)
+    }
+  }, [])
 
   const inputStyle = {
     borderColor: '#e2e8f0',
@@ -220,6 +246,7 @@ export default function SignupPage() {
     const user = await verifyOtpAndSignup(email.trim().toLowerCase(), code, {
       password, role, firstName, lastName,
       airlineName: role === 'airline' ? airlineName.trim() : undefined,
+      logoUrl: role === 'airline' ? logoUrl : undefined,
     })
     setShowOtp(false)
     if (from && from !== '/signup' && from !== '/login') {
@@ -298,24 +325,58 @@ export default function SignupPage() {
                 </div>
               </div>
 
-              {/* Airline Name */}
+              {/* Airline Name + Logo */}
               {role === 'airline' && (
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
-                    Airline / Company Name <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={airlineName}
-                    onChange={e => setAirlineName(e.target.value)}
-                    placeholder="e.g. Skyline Airways Inc."
-                    className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition"
-                    style={inputStyle}
-                    onFocus={focusStyle}
-                    onBlur={blurStyle}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#64748b' }}>
+                      Airline / Company Name <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={airlineName}
+                      onChange={e => setAirlineName(e.target.value)}
+                      placeholder="e.g. Skyline Airways Inc."
+                      className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition"
+                      style={inputStyle}
+                      onFocus={focusStyle}
+                      onBlur={blurStyle}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: '#64748b' }}>
+                      Company Logo <span className="font-normal normal-case" style={{ color: '#94a3b8' }}>(optional)</span>
+                    </label>
+                    <p className="text-[11px] mb-2" style={{ color: '#94a3b8' }}>Upload your company logo — visible to admin and on your profile.</p>
+                    <div className="flex items-center gap-3">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="Company logo" className="w-12 h-12 rounded-xl object-contain flex-shrink-0" style={{ border: '1px solid #e2e8f0', background: '#f8fafc' }} />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ border: '2px dashed #e2e8f0', background: '#f8fafc' }}>
+                          <svg className="w-5 h-5" style={{ color: '#cbd5e1' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-1">
+                        <input ref={logoFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleLogoFile(e.target.files[0])} />
+                        <button type="button" onClick={() => logoFileRef.current?.click()} disabled={logoUploading}
+                          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
+                          style={{ borderColor: '#e2e8f0', background: 'white', color: '#475569' }}>
+                          {logoUploading ? (
+                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.2" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                          )}
+                          {logoUploading ? 'Uploading…' : logoUrl ? 'Change Logo' : 'Upload Logo'}
+                        </button>
+                        {logoErr && <p className="text-xs" style={{ color: '#ef4444' }}>{logoErr}</p>}
+                        <p className="text-[10px]" style={{ color: '#94a3b8' }}>PNG, JPG, WebP · Max 2 MB</p>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
 
               {/* Name */}

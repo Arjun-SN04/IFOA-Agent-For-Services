@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import PaymentModal from '../payment/PaymentModal'
+import { LegalModal } from '../legal/LegalModal'
 
 function SummaryItem({ label, value, mono = false }) {
   return (
@@ -98,6 +99,7 @@ function AlreadySubmittedBanner({ paymentStatus }) {
 
 export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPaidAndFinish, submitting, error, isBlocked, existingPaymentStatus, existingRecord }) {
   const [errors, setErrors]                 = useState({})
+  const [legalModal, setLegalModal]         = useState(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [registrationId, setRegistrationId] = useState(null)
   // Amount in cents for display in PaymentModal (backend independently recomputes from DB for actual charge)
@@ -259,20 +261,22 @@ export default function Step4Payment({ data, update, onBack, onSubmit, onMarkPai
             </div>
           </section>
 
+          <LegalModal open={!!legalModal} onClose={() => setLegalModal(null)} type={legalModal} />
+
           {/* Terms */}
           <section className={`rounded-[26px] border p-5 sm:p-6 ${errors.agreedToTerms ? 'border-red-200 bg-red-50/70' : 'border-slate-200 bg-slate-50/80'}`}>
             <label className="flex cursor-pointer items-start gap-3">
               <input type="checkbox" checked={data.agreedToTerms} onChange={(e) => update({ agreedToTerms: e.target.checked })} className="mt-1 h-4 w-4 accent-blue-600" />
               <span className="text-sm leading-6 text-slate-700">
                 I confirm the submitted information is accurate, and I agree to the{' '}
-                <a href="/terms" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">Terms of Service</a>
+                <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setLegalModal('terms') }} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 transition">Terms of Service</button>
                 {' '}and{' '}
-                <a href="/privacy" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">Privacy Policy</a>.
+                <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setLegalModal('privacy') }} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 transition">Privacy Policy</button>.
               </span>
             </label>
             {errors.agreedToTerms && (
               <p className="mt-3 flex items-center gap-2 text-xs font-medium text-red-600">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />{errors.agreedToTerms}
+                {errors.agreedToTerms}
               </p>
             )}
           </section>

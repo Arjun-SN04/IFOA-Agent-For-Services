@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LegalCheckboxes from '../legal/LegalModal'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 
@@ -126,6 +127,10 @@ const sectionClass = 'rounded-2xl border border-gray-100 bg-white p-6 shadow-sm 
 export default function Step1PersonalInfo({ data, update, onNext }) {
   const [errors, setErrors] = useState({})
   const [phoneCountry, setPhoneCountry] = useState(COUNTRY_TO_ISO2[data.country] || 'us')
+  const [agreedTerms,   setAgreedTerms]   = useState(false)
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false)
+  const [termsError,    setTermsError]    = useState(false)
+  const [privacyError,  setPrivacyError]  = useState(false)
 
   const validate = () => {
     const nextErrors = {}
@@ -133,7 +138,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
     if (!data.subscriptionPlan) nextErrors.subscriptionPlan = 'Select a subscription plan.'
     if (!data.firstName.trim()) nextErrors.firstName = 'First name is required.'
     if (!data.lastName.trim()) nextErrors.lastName = 'Last name is required.'
-    if (!data.dateOfBirth) nextErrors.dateOfBirth = 'Date of birth is required.'
+
     if (!data.phone || data.phone.length < 7) nextErrors.phone = 'Enter a valid phone number.'
     if (!data.email.trim()) nextErrors.email = 'Email is required.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) nextErrors.email = 'Enter a valid email address.'
@@ -279,7 +284,7 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
             />
           </Field>
 
-          <Field label="Date of Birth" required error={errors.dateOfBirth}>
+          <Field label="Date of Birth" error={errors.dateOfBirth}>
             <input
               id="field-dateOfBirth"
               type="date"
@@ -388,9 +393,23 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
         </div>
       </section>
 
+      <LegalCheckboxes
+        agreedTerms={agreedTerms}
+        agreedPrivacy={agreedPrivacy}
+        onChangeTerms={() => { setAgreedTerms(v => !v); setTermsError(false) }}
+        onChangePrivacy={() => { setAgreedPrivacy(v => !v); setPrivacyError(false) }}
+        termsError={termsError}
+        privacyError={privacyError}
+      />
+
       <div className="flex justify-end border-t border-slate-100 pt-4">
         <button
           onClick={() => {
+            const te = !agreedTerms
+            const pe = !agreedPrivacy
+            setTermsError(te)
+            setPrivacyError(pe)
+            if (te || pe) return
             if (validate()) onNext()
           }}
           className="inline-flex items-center gap-2 rounded-xl px-7 py-3 text-sm font-bold text-white transition-all duration-150 shadow-sm active:scale-95"

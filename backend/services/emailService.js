@@ -331,20 +331,92 @@ async function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
   const expiry = doc.expirationDate
     ? new Date(doc.expirationDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
     : '';
-  const entity = isAirline ? (doc.airlineName || 'your company') : 'your';
+
+  const isExpired = daysLeft <= 0;
+  const firstLine = isExpired
+    ? `This is a friendly reminder that your subscription with IFOA USA, your Agent for Service, has expired on <strong>${expiry}</strong>.`
+    : `Please be advised that your subscription with IFOA USA, your Agent for Service, is expiring in <strong>${daysLeft} day${daysLeft !== 1 ? 's' : ''}</strong>, on <strong>${expiry}</strong>.`;
 
   return wrap(`
     <mj-text>Dear ${escHtml(name)},</mj-text>
-    <mj-text>This is a friendly reminder that <strong>${escHtml(entity)}</strong> subscription with IFOA USA is expiring in <strong>${daysLeft} days</strong> on <strong>${expiry}</strong>.</mj-text>
+    <mj-text>${firstLine}</mj-text>
     <mj-text><strong>Current Plan:</strong> ${escHtml(plan)}</mj-text>
     <mj-text><strong>Email:</strong> ${escHtml(email)}</mj-text>
-    <mj-text><strong>Expiry Date:</strong> ${expiry}</mj-text>
-    <mj-text>To continue receiving U.S. Agent for Service coverage without interruption, please renew your subscription before the expiry date. You can renew directly from your dashboard — no need to fill in the registration form again.</mj-text>
+    <mj-text><strong>${isExpired ? 'Expired On' : 'Expiry Date'}:</strong> ${expiry}</mj-text>
+    <mj-text>To continue receiving U.S. Agent for Service coverage without interruption, please renew your subscription${isExpired ? '' : ' before the expiry date'}. You can renew directly from your dashboard — no need to fill in the registration form again.</mj-text>
     <mj-button background-color="#cc0000" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://theifoa.com'}/dashboard/subscription">
-      Renew Subscription
+      ${isExpired ? 'Renew Now' : 'Renew Subscription'}
     </mj-button>
     <mj-text>If you have any questions, feel free to contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</mj-text>
     <mj-text padding="0">Warm regards,<br /><strong>The IFOA USA Team</strong></mj-text>
+  `);
+}
+
+// ── Wire payment request — admin notification (sent to self) ──────────────────
+async function buildWireRequestAdminNotificationHtml(doc) {
+  const airline   = doc.airlineName || [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Unknown';
+  const email     = doc.email || doc.paymentEmail || '—';
+  const purpose   = doc.wireRequestPurpose || 'initial';
+  const requestedAt = doc.wirePaymentRequestedAt
+    ? new Date(doc.wirePaymentRequestedAt).toLocaleString('en-US', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' })
+    : new Date().toLocaleString('en-US', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  const purposeLabel = purpose === 'renewal' ? 'Subscription Renewal'
+    : purpose === 'holder-upgrade'            ? 'Holder Upgrade'
+    : 'Initial Registration';
+
+  let detailRows = '';
+  if (purpose === 'initial') {
+    const plan     = fmtPlan(doc.subscriptionPlan || '—', doc.multiYearCount);
+    const holders  = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+    const ppc      = doc.pricePerCertificate || doc.pricePerCert || 0;
+    const total    = ppc && holders ? `$${(ppc * holders).toFixed(2)}` : '—';
+    detailRows = `
+      <strong>Plan:</strong> ${escHtml(plan)}<br />
+      <strong>Certificate Holders:</strong> ${holders}<br />
+      <strong>Price per Certificate:</strong> $${Number(ppc).toFixed(2)}<br />
+      <strong>Estimated Total:</strong> ${total}`;
+  } else if (purpose === 'renewal') {
+    const currentPlan = fmtPlan(doc.subscriptionPlan || '—', doc.multiYearCount);
+    const renewPlan   = fmtPlan(doc.wireRequestRenewalPlan || '—', null);
+    const holders     = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+    detailRows = `
+      <strong>Current Plan:</strong> ${escHtml(currentPlan)}<br />
+      <strong>Requested Renewal Plan:</strong> ${escHtml(renewPlan)}<br />
+      <strong>Certificate Holders:</strong> ${holders}`;
+  } else if (purpose === 'holder-upgrade') {
+    const plan       = fmtPlan(doc.subscriptionPlan || '—', doc.multiYearCount);
+    const current    = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+    const additional = Number(doc.wireRequestAdditionalCount || 0);
+    detailRows = `
+      <strong>Plan:</strong> ${escHtml(plan)}<br />
+      <strong>Current Holder Count:</strong> ${current}<br />
+      <strong>Additional Holders Requested:</strong> +${additional}<br />
+      <strong>New Total:</strong> ${current + additional}`;
+  }
+
+  return wrap(`
+    <mj-text font-size="17px" font-weight="bold" color="#0f172a" padding="0 0 12px 0">Wire Payment Request Received</mj-text>
+    <mj-text>A new wire transfer payment request has been submitted. Please review and generate an invoice for the airline.</mj-text>
+    <mj-table border="1px solid #e0e0e0" cellpadding="0" cellspacing="0">
+      <tr style="background:#f7f7f7;border-bottom:1px solid #e0e0e0;">
+        <td style="padding:10px 16px;font-size:12px;font-weight:bold;color:#555555;letter-spacing:0.05em;">REQUEST DETAILS — ${escHtml(purposeLabel.toUpperCase())}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;font-size:13px;line-height:2.2;">
+          <strong>Airline / Company:</strong> ${escHtml(airline)}<br />
+          <strong>Contact Email:</strong> ${escHtml(email)}<br />
+          <strong>Request Type:</strong> ${escHtml(purposeLabel)}<br />
+          <strong>Requested At:</strong> ${escHtml(requestedAt)}<br />
+          ${detailRows}
+        </td>
+      </tr>
+    </mj-table>
+    <mj-text>Please log in to the admin dashboard to review this request, generate the invoice, and mark the payment once received.</mj-text>
+    <mj-button background-color="#0000ff" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://theifoa.com'}/admin">
+      Open Admin Dashboard
+    </mj-button>
+    <mj-text padding="0">— IFOA USA Automated Notification</mj-text>
   `);
 }
 
@@ -455,11 +527,29 @@ async function sendAirlineHolderUpgradeConfirmation(doc, additionalCount, newPpc
 async function sendExpiryReminder(doc, isAirline, daysLeft) {
   const recipients = collectRecipients(doc.paymentEmail, doc.email);
   if (!recipients.length) return;
-  const entity = isAirline ? (doc.airlineName || 'Your Company') : 'Your';
+  const entity  = isAirline ? (doc.airlineName || 'Your Company') : 'Your';
+  const isExpired = daysLeft <= 0;
+  const subject = isExpired
+    ? `IFOA USA — ${entity} Subscription Has Expired`
+    : `IFOA USA — ${entity} Subscription Expires in ${daysLeft} Day${daysLeft !== 1 ? 's' : ''}`;
   await sendMail({
     to:      recipients.join(', '),
-    subject: `IFOA USA — ${entity} Subscription Expires in ${daysLeft} Days`,
+    subject,
     html:    await buildExpiryReminderHtml(doc, isAirline, daysLeft),
+  });
+}
+
+async function sendWireRequestAdminNotification(doc) {
+  const adminEmail = process.env.SMTP_USER;
+  if (!adminEmail) return;
+  const airline = doc.airlineName || [doc.firstName, doc.lastName].filter(Boolean).join(' ') || 'Airline';
+  const purposeLabel = doc.wireRequestPurpose === 'renewal'        ? 'Renewal'
+    : doc.wireRequestPurpose === 'holder-upgrade' ? 'Holder Upgrade'
+    : 'Initial';
+  await sendMail({
+    to:      adminEmail,
+    subject: `Wire Payment Request — ${airline} [${purposeLabel}]`,
+    html:    await buildWireRequestAdminNotificationHtml(doc),
   });
 }
 
@@ -479,5 +569,6 @@ module.exports = {
   sendAirlineRenewalConfirmation,
   sendAirlineHolderUpgradeConfirmation,
   sendExpiryReminder,
+  sendWireRequestAdminNotification,
   sendOtpEmail,
 };

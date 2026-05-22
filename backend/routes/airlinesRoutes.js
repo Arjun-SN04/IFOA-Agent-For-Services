@@ -26,6 +26,7 @@ const {
   markAirlinesInvoiceGenerated,
   requestAirlineInvoice,
   renewAirlinesSubscription,
+  activateWirePayment,
 } = require('../controller/airlinesController');
 
 // 5 MB file size limit; only accept Excel MIME types
@@ -70,7 +71,7 @@ function requireOwnership(req, res, next) {
 
 // ── Logo upload (Cloudinary) ─────────────────────────────────────────────────
 // Standalone upload — returns a URL (used during signup before record exists)
-router.post('/upload-logo', authMiddleware, imageUpload.single('logo'), async (req, res) => {
+router.post('/upload-logo', imageUpload.single('logo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
   try {
     const result = await uploadBuffer(req.file.buffer, {
@@ -131,6 +132,7 @@ router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, update
 // wire invoice request — owner or admin
 router.patch('/:id/request-invoice',        authMiddleware, requireOwnership, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
+router.patch('/:id/activate-wire', authMiddleware, requireAdmin, activateWirePayment);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 // renew — owner or admin (additional ownership check inside controller)
@@ -223,8 +225,7 @@ router.post('/:id/holders/:holderId/convert', authMiddleware, requireOwnership, 
     const firstName = nameParts[0] || 'Holder';
     const lastName  = nameParts.slice(1).join(' ') || '—';
 
-    // Password = fullName lowercased, no spaces: "John Smith" → "johnsmith"
-    const rawPassword = (snapshot.fullName || 'holder').toLowerCase().replace(/\s+/g, '');
+    const rawPassword = '12345678';
 
     // Map holder certificate type to Individual enum (same values, direct mapping)
     const primaryCertificate = snapshot.certificateType || 'Part 61 - Pilot';

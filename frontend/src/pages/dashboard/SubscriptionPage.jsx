@@ -155,9 +155,7 @@ async function fetchPaymentRecord(registrationId, token, preferredInvoiceNumber,
 }
 
 function PlanBadge({ plan }) {
-  const p = (plan || '').toLowerCase()
-  const color = p.includes('unlimited') ? '#6ee7b7' : '#f1f5f9'
-  return <span className='text-sm font-bold' style={{ color }}>{plan || 'Unknown Plan'}</span>
+  return <span className='text-sm font-bold' style={{ color: 'rgba(255,255,255,0.92)' }}>{plan || 'Unknown Plan'}</span>
 }
 
 function PayBadge({ status }) {
@@ -672,7 +670,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                             <input className={inpSm} placeholder="Full legal name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
                             <input type="date" className={inpSm + ' [color-scheme:light]'} value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
                           </div>
                           <div className="flex flex-col gap-1">
@@ -791,7 +789,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                     <input className={inp} placeholder="Middle name" value={form.middleName} onChange={(e) => setField('middleName', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth <span className="text-red-400">*</span></label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
                     <input type="date" className={inp + ' [color-scheme:light]'} value={form.dateOfBirth} onChange={(e) => setField('dateOfBirth', e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -1008,7 +1006,6 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
     const errs = rows.map(h => {
       const e = {}
       if (!h.fullName?.trim()) e.fullName = 'Required'
-      if (!h.dateOfBirth) e.dateOfBirth = 'Required'
       if (!h.certificateType) e.certificateType = 'Required'
       if (!h.iacraFtnNumber?.trim()) e.iacraFtnNumber = 'Required'
       return e
@@ -1086,7 +1083,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
                   {errors[i]?.fullName && <p className="text-red-500 text-xs mt-0.5">{errors[i].fullName}</p>}
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Date of Birth *</label>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Date of Birth</label>
                   <input type="date" value={h.dateOfBirth}
                     onChange={e => onChange(i, 'dateOfBirth', e.target.value)} className={inp(errors[i]?.dateOfBirth)} />
                   {errors[i]?.dateOfBirth && <p className="text-red-500 text-xs mt-0.5">{errors[i].dateOfBirth}</p>}
@@ -1395,11 +1392,10 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
               className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
               Cancel
             </button>
-            <button
-              onClick={() => setShowPayment(true)}
-              className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 py-3 text-sm font-bold text-white transition"
-            >
-              Proceed to Payment
+            <button onClick={() => setShowPayment(true)}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition"
+              style={{ background: '#0000ff' }}>
+              Proceed to Payment →
             </button>
           </div>
         </div>
@@ -1611,7 +1607,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="bg-white">
+        <div className="bg-white overflow-y-auto flex-1 min-h-0">
           {/* Credentials slim row */}
           <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
             <div className="flex items-center gap-2.5">
@@ -1759,24 +1755,27 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         </div>
 
         {/* Footer — sticky at bottom */}
-        <div className="bg-white border-t border-slate-100 px-5 py-4 flex gap-3 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => setShowPayment(true)}
-            disabled={chargedCents <= 0 || !selectionValid}
-            title={!selectionValid ? `Select at least 1 holder to keep` : undefined}
-            className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-all"
-          >
-            Proceed to Payment
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-            </svg>
-          </button>
+        <div className="bg-white border-t border-slate-100 px-5 py-4 flex-shrink-0">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setShowPayment(true)}
+              disabled={chargedCents <= 0 || !selectionValid}
+              title={!selectionValid ? `Select at least 1 holder to keep` : undefined}
+              className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl disabled:opacity-60 px-4 py-2.5 text-sm font-bold text-white transition-all"
+              style={{ background: '#0000ff' }}
+            >
+              {isAirline ? 'Pay with Card' : 'Proceed to Payment'}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2250,6 +2249,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
   const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmt   = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
 
+
   const isHolderUpgrade = (doc) =>
     doc.purpose === 'holder-upgrade' ||
     (doc.lineItems || doc.draft?.lineItems || []).some(
@@ -2270,19 +2270,24 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
   }
 
   const handleView = (doc) => {
+    const draftLines = doc.draft?.lineItems
+    const lineItems  = draftLines?.length ? draftLines : (doc.lineItems || [])
+    const amount = lineItems.length
+      ? lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0)
+      : doc.totalAmount
     const invoice = {
       invoiceNumber:    doc.invoiceNumber,
       paidAt:           doc.paidAt || doc.issueDate || doc.createdAt,
       subscriptionPlan: doc.subscriptionPlan || reg?.subscriptionPlan,
       expirationDate:   doc.expirationDate || null,
-      amount:           doc.totalAmount,
-      name:             doc.recipientName || doc.recipientCompany || `${reg?.firstName || ''} ${reg?.lastName || ''}`.trim(),
+      amount,
+      name:             (doc.draft?.recipientName || doc.recipientName || doc.draft?.recipientCompany || doc.recipientCompany || `${reg?.firstName || ''} ${reg?.lastName || ''}`.trim()),
       email:            doc.recipientEmail || reg?.email || '',
-      address:          doc.recipientAddress1 || reg?.addressLine1 || '',
+      address:          doc.draft?.recipientAddress1 || doc.recipientAddress1 || reg?.addressLine1 || '',
       isAirline:        doc.isAirline ?? (reg?.airlineName ? true : false),
-      airlineName:      doc.recipientCompany || reg?.airlineName || '',
-      pricePerCert:     doc.lineItems?.[0]?.unitPrice || null,
-      holderCount:      doc.lineItems?.[0]?.quantity || null,
+      airlineName:      doc.draft?.recipientCompany || doc.recipientCompany || reg?.airlineName || '',
+      pricePerCert:     lineItems[0]?.unitPrice || null,
+      holderCount:      lineItems[0]?.quantity || null,
       invoiceDraft:     doc.draft || null,
       paymentId:        doc.stripePaymentIntentId || null,
       _invoiceDocId:    doc._id,
@@ -3269,7 +3274,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Date of Birth <span className="text-red-500">*</span></label>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Date of Birth</label>
                   <input type="date" value={editHolderForm.dateOfBirth || ''}
                     onChange={e => setEditHolderForm(f => ({ ...f, dateOfBirth: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition" />

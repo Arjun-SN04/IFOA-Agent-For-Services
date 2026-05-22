@@ -240,7 +240,7 @@ export default function AdminIndividualForm() {
             <Field label="Last Name"><input required value={formData.lastName} onChange={(e) => set('lastName', e.target.value)} className="input" style={inputStyle} /></Field>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <Field label="Date of Birth"><input required type="date" value={formData.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} className="input" style={inputStyle} /></Field>
+            <Field label="Date of Birth"><input type="date" value={formData.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Email"><input required type="email" value={formData.email} onChange={(e) => set('email', e.target.value)} className="input" style={inputStyle} /></Field>
             <Field label="Phone"><input required type="text" value={formData.phone} onChange={(e) => set('phone', e.target.value)} className="input" style={inputStyle} /></Field>
           </div>

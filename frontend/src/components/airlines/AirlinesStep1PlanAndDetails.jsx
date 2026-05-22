@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import LegalCheckboxes from '../legal/LegalModal'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 const PhoneInput = PhoneInputLib.default || PhoneInputLib
@@ -141,69 +141,6 @@ function CountrySelect({ value, onChange, error }) {
   )
 }
 
-function LogoUpload({ logoUrl, onUpload, token }) {
-  const fileRef = useRef(null)
-  const [uploading, setUploading] = useState(false)
-  const [err, setErr] = useState('')
-
-  const handleFile = async (file) => {
-    if (!file) return
-    if (!file.type.startsWith('image/')) { setErr('Only image files accepted.'); return }
-    if (file.size > 2 * 1024 * 1024) { setErr('Image must be under 2 MB.'); return }
-    setErr('')
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      fd.append('logo', file)
-      const res = await fetch(`${BASE_URL}/airlines/upload-logo`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.message || 'Upload failed.')
-      onUpload(json.url)
-    } catch (e) {
-      setErr(e.message || 'Upload failed.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-4">
-      {logoUrl ? (
-        <img src={logoUrl} alt="Company logo" className="w-16 h-16 rounded-xl object-contain border border-gray-200 bg-white flex-shrink-0" />
-      ) : (
-        <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center flex-shrink-0">
-          <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-          </svg>
-        </div>
-      )}
-      <div className="flex flex-col gap-1.5">
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => handleFile(e.target.files[0])} />
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
-          {uploading ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-              <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-            </svg>
-          )}
-          {uploading ? 'Uploading…' : logoUrl ? 'Change Logo' : 'Upload Logo'}
-        </button>
-        {err && <p className="text-red-500 text-xs">{err}</p>}
-        <p className="text-[11px] text-gray-400">PNG, JPG, WebP · Max 2 MB</p>
-      </div>
-    </div>
-  )
-}
-
 // Scroll to the first element with a given id, with a small offset for the sticky header
 function scrollToField(id) {
   setTimeout(() => {
@@ -222,6 +159,10 @@ function scrollToField(id) {
 export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
   const { user, token } = useAuth()
   const [errors, setErrors] = useState({})
+  const [agreedTerms,   setAgreedTerms]   = useState(false)
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false)
+  const [termsError,    setTermsError]    = useState(false)
+  const [privacyError,  setPrivacyError]  = useState(false)
   const [phoneCountry, setPhoneCountry] = useState(
     (data.country && COUNTRY_TO_ISO2[data.country]) || 'us'
   )
@@ -410,15 +351,6 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
         </div>
       </div>
 
-      {/* ── 3b. Company Logo ── */}
-      <div>
-        <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest mb-1">
-          Company Logo <span className="text-gray-400 font-normal normal-case text-xs">(optional)</span>
-        </h3>
-        <p className="text-[11px] text-gray-400 mb-3">Upload your company logo — visible to admin and on your profile.</p>
-        <LogoUpload logoUrl={data.logoUrl} onUpload={url => update({ logoUrl: url })} token={token} />
-      </div>
-
       {/* ── 4. Address ── */}
       <div>
         <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest mb-4">Address <span className="text-red-400">*</span></h3>
@@ -552,9 +484,26 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
         </div>
       </div>
 
+      {/* ── Legal agreements ── */}
+      <LegalCheckboxes
+        agreedTerms={agreedTerms}
+        agreedPrivacy={agreedPrivacy}
+        onChangeTerms={() => { setAgreedTerms(v => !v); setTermsError(false) }}
+        onChangePrivacy={() => { setAgreedPrivacy(v => !v); setPrivacyError(false) }}
+        termsError={termsError}
+        privacyError={privacyError}
+      />
+
       {/* ── Next button ── */}
       <div className="flex justify-end pt-6 border-t border-gray-100">
-        <button onClick={() => { if (validate()) onNext() }}
+        <button onClick={() => {
+          const te = !agreedTerms
+          const pe = !agreedPrivacy
+          setTermsError(te)
+          setPrivacyError(pe)
+          if (te || pe) return
+          if (validate()) onNext()
+        }}
           className="inline-flex items-center gap-2 px-8 py-3 active:scale-95 text-white font-bold rounded-xl transition-all duration-150 shadow-sm hover:-translate-y-px"
           style={{ background: '#0000ff' }}
           onMouseEnter={e => e.currentTarget.style.background='#0000e6'}
