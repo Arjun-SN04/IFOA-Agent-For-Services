@@ -80,6 +80,7 @@ export function buildPDFPayload(inv) {
     return {
       ...inv.invoiceDraft,
       invoiceNumber: inv.invoiceDraft.invoiceNumber || inv.invoiceNumber,
+      paymentId:     inv.invoiceDraft.paymentId     || inv.paymentId || null,
     }
   }
 
@@ -113,6 +114,7 @@ export function buildPDFPayload(inv) {
     recipientAddress2: '',
     recipientCountry:  '',
     paymentMethod:     inv.paymentMethodType || 'card',
+    paymentId:         inv.paymentId || null,
     lineItems: [
       {
         description: planDesc,

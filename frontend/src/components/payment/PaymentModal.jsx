@@ -48,62 +48,113 @@ const ELEMENTS_APPEARANCE = {
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 // ── Payment Success Screen ────────────────────────────────────────────────────
-function PaymentSuccessScreen({ amount, onViewInvoice }) {
+function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
   const [show, setShow] = useState(false)
   useEffect(() => { const t = setTimeout(() => setShow(true), 60); return () => clearTimeout(t) }, [])
 
+  const fmtDate = (d) => d
+    ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null
+  const fmtAmt = (v) => typeof v === 'number'
+    ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+    : null
+
+  const planName  = invoice?.subscriptionPlan || null
+  const paidAt    = fmtDate(invoice?.paidAt || new Date())
+  const expiresAt = fmtDate(invoice?.expirationDate)
+  const invNum    = invoice?.invoiceNumber || null
+  const txId      = invoice?.paymentId || null
+  const displayAmt = invoice?.amount != null
+    ? fmtAmt(invoice.amount)
+    : amount ? `$${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : null
+  const recipientName = invoice?.isAirline
+    ? (invoice?.airlineName || invoice?.name)
+    : invoice?.name
+  const recipientEmail = invoice?.email
+
+  const rows = [
+    invNum    && { label: 'Invoice', value: invNum },
+    planName  && { label: 'Plan', value: planName.replace(' Subscription Plan', '').replace(' Plan', '') },
+    paidAt    && { label: 'Paid On', value: paidAt },
+    expiresAt && { label: 'Expires', value: expiresAt },
+    !expiresAt && { label: 'Expires', value: 'Never (Unlimited)' },
+    recipientEmail && { label: 'Email', value: recipientEmail },
+    txId      && { label: 'Transaction', value: txId, mono: true },
+  ].filter(Boolean)
+
   return (
-    <div className={`flex flex-col items-center justify-center px-6 py-10 text-center transition-all duration-500 ${
-      show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-    }`}>
-      <div className="relative mb-6">
-        <div
-          className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-200"
-          style={{ animation: show ? 'pmPopIn 0.4s cubic-bezier(0.34,1.56,0.64,1)' : 'none' }}
-        >
-          <svg
-            className="w-12 h-12 text-white"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.8}
-            style={{
-              strokeDasharray: 40,
-              strokeDashoffset: show ? 0 : 40,
-              transition: 'stroke-dashoffset 0.45s ease 0.25s',
-            }}
+    <div className={`transition-all duration-500 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+      {/* Top success strip */}
+      <div className="px-6 pt-8 pb-6 text-center border-b border-slate-100">
+        <div className="relative inline-flex mb-5">
+          <div
+            className="w-16 h-16 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-100"
+            style={{ animation: show ? 'pmPopIn 0.4s cubic-bezier(0.34,1.56,0.64,1)' : 'none' }}
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.8}
+              style={{
+                strokeDasharray: 36,
+                strokeDashoffset: show ? 0 : 36,
+                transition: 'stroke-dashoffset 0.45s ease 0.25s',
+              }}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div className="absolute inset-0 rounded-2xl border-2 border-emerald-300 opacity-0"
+            style={{ animation: show ? 'pmRipple 1s ease-out 0.35s forwards' : 'none' }} />
         </div>
-        <div className="absolute inset-0 rounded-full border-4 border-emerald-400 opacity-0"
-          style={{ animation: show ? 'pmRipple 1s ease-out 0.3s forwards' : 'none' }} />
-        <div className="absolute inset-0 rounded-full border-4 border-emerald-300 opacity-0"
-          style={{ animation: show ? 'pmRipple 1s ease-out 0.55s forwards' : 'none' }} />
+
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600 mb-1">Payment Successful</p>
+        {displayAmt && (
+          <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-1">{displayAmt}</p>
+        )}
+        {recipientName && (
+          <p className="text-sm text-slate-500 mt-1">{recipientName}</p>
+        )}
+        <p className="text-xs text-slate-400 mt-1">Confirmation email will be sent shortly.</p>
       </div>
 
-      <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-600 mb-2">Payment Successful</p>
-      <h3 className="text-2xl font-black text-gray-900 mb-1">All done!</h3>
-      {amount && (
-        <p className="text-sm text-gray-500 mb-1">
-          ${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} charged successfully
-        </p>
+      {/* Detail rows */}
+      {rows.length > 0 && (
+        <div className="px-5 py-4">
+          <div className="rounded-2xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+            {rows.map(({ label, value, mono }) => (
+              <div key={label} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex-shrink-0">{label}</span>
+                <span className={`text-right font-semibold text-slate-700 ${mono ? 'font-mono text-[10px] break-all' : 'text-xs truncate max-w-[200px]'}`}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
-      <p className="text-sm text-gray-400 mb-8">
-        Your subscription is now active. A confirmation email will be sent shortly.
-      </p>
 
-      <button
-        onClick={onViewInvoice}
-        className="inline-flex items-center gap-2 text-white font-bold px-8 py-3 rounded-xl text-sm transition-all shadow-md hover:-translate-y-0.5"
-        style={{ background: '#0000ff' }}
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-        </svg>
-        View &amp; Download Invoice
-      </button>
+      {/* Actions */}
+      <div className="px-5 pb-6 flex flex-col gap-2.5">
+        <button
+          onClick={onViewInvoice}
+          className="w-full inline-flex items-center justify-center gap-2 text-white font-bold px-5 py-3 rounded-xl text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+          style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e293b 100%)' }}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+          </svg>
+          View &amp; Download Invoice
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full inline-flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold px-5 py-2.5 rounded-xl text-sm transition-all border border-slate-200"
+        >
+          Close
+        </button>
+      </div>
 
       <style>{`
         @keyframes pmPopIn  { 0%{transform:scale(0.4);opacity:0} 100%{transform:scale(1);opacity:1} }
-        @keyframes pmRipple { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.7);opacity:0} }
+        @keyframes pmRipple { 0%{transform:scale(1);opacity:0.5} 100%{transform:scale(1.9);opacity:0} }
       `}</style>
     </div>
   )
@@ -144,7 +195,7 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
       expirationDate:    invDoc.expirationDate || null,
       amount:            invDoc.totalAmount ?? invDoc.subtotal ?? 0,
       currency:          invDoc.currency || 'USD',
-      paymentId:         invDoc.paymentId || fallbackPaymentId || '—',
+      paymentId:         invDoc.stripePaymentIntentId || fallbackPaymentId || '—',
       name:              invDoc.recipientName || invDoc.recipientCompany || '',
       email:             invDoc.recipientEmail || '',
       phone:             invDoc.recipientPhone || '',
@@ -240,7 +291,9 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
     return (
       <PaymentSuccessScreen
         amount={amount}
+        invoice={invoice}
         onViewInvoice={() => setPhase('invoice')}
+        onClose={onCancel}
       />
     )
   }
@@ -391,7 +444,7 @@ export function serverPaymentToInvoice(paymentDoc) {
     expirationDate:   snap.expirationDate  || null,
     amount:           paymentDoc.amountDollars ?? snap.totalPaid ?? 0,
     currency:         paymentDoc.currency || 'USD',
-    paymentId:        paymentDoc.stripePaymentIntentId || paymentDoc._id || '—',
+    paymentId:        paymentDoc.stripePaymentIntentId || null,
     name:             snap.name || '—',
     email:            snap.email || '—',
     phone:            snap.phone || '',

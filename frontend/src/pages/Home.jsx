@@ -4,8 +4,6 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 import Footer from '../components/layout/footer'
-import classicStamp from '../assets/Classic-Stamp.png'
-import dgrCrewImg from '../assets/DGR-Crew.jpg'
 import { Plane, Zap, Lock, Monitor, MapPin, User } from 'lucide-react'
 
 // ── Color tokens ──────────────────────────────────────────────────────────────

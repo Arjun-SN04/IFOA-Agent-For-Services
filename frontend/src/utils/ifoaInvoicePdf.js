@@ -115,6 +115,14 @@ export async function generateIFOAInvoicePDF(inv) {
   const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
 
   txt('Invoice  ' + displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
+  if (inv.paymentId && inv.paymentId !== '—') {
+    const txLabel = 'txn: '
+    const txLabelW = fontReg.widthOfTextAtSize(txLabel, 7.5)
+    const txValW   = fontReg.widthOfTextAtSize(String(inv.paymentId), 7.5)
+    const txX      = ML + W - txLabelW - txValW
+    txt(txLabel, txX, Y, { size: 7.5, color: MID })
+    txt(String(inv.paymentId), txX + txLabelW, Y, { size: 7.5, color: DARK })
+  }
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
@@ -128,7 +136,7 @@ export async function generateIFOAInvoicePDF(inv) {
   txt(fmtD(inv.issueDate), ML + 60, Y, { size: 8 })
   txt('payable by:', ML + 220, Y, { size: 8, color: MID })
   txt(fmtD(inv.payableBy), ML + 300, Y, { size: 8 })
-  Y -= 6
+  Y -= 13
   line(ML, Y, ML + W, Y, BORDER, 0.4)
   Y -= 26
 

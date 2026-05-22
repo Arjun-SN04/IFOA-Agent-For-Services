@@ -635,6 +635,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
       recipientAddress2: d.recipientAddress2 || inv.recipientAddress2 || '',
       recipientCountry:  d.recipientCountry  || inv.recipientCountry || '',
       paymentMethod:     d.paymentMethod     || inv.paymentMethod || '',
+      paymentId:         inv.stripePaymentIntentId || null,
       lineItems:         d.lineItems?.length ? d.lineItems : (inv.lineItems?.length ? inv.lineItems : (snapshotLineItems || [])),
     }
   }

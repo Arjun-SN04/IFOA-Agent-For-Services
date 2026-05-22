@@ -98,23 +98,31 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
       Invoice.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
       Renewal.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
       Payment.find({ registrationId: regId, isPaid: true })
-        .select('_id invoiceNumber invoiceDraft invoiceSnapshot amountDollars paidAt paymentMethodType createdAt updatedAt purpose')
+        .select('_id invoiceNumber invoiceDraft invoiceSnapshot amountDollars paidAt paymentMethodType createdAt updatedAt purpose stripePaymentIntentId')
         .sort({ createdAt: -1 }).lean(),
     ]);
 
-    // Build a paymentId → purpose map so Invoice docs created before the `purpose`
-    // field existed can inherit the correct purpose from their linked Payment doc.
-    const paymentPurposeMap = {};
+    // Build paymentId → { purpose, stripePaymentIntentId } map
+    const paymentMetaMap = {};
     for (const p of payments) {
-      if (p.purpose) paymentPurposeMap[String(p._id)] = p.purpose;
+      paymentMetaMap[String(p._id)] = {
+        purpose:               p.purpose,
+        stripePaymentIntentId: p.stripePaymentIntentId || '',
+      };
     }
 
-    // Enrich Invoice docs: if purpose is missing/default and a linked Payment has
-    // a more specific purpose (e.g. 'holder-upgrade'), inherit it.
+    // Enrich Invoice docs: inherit purpose + stripePaymentIntentId from linked Payment doc.
     for (const inv of invoices) {
-      if ((!inv.purpose || inv.purpose === 'payment') && inv.paymentId) {
-        const inherited = paymentPurposeMap[String(inv.paymentId)];
-        if (inherited && inherited !== 'payment') inv.purpose = inherited;
+      if (inv.paymentId) {
+        const meta = paymentMetaMap[String(inv.paymentId)];
+        if (meta) {
+          if ((!inv.purpose || inv.purpose === 'payment') && meta.purpose && meta.purpose !== 'payment') {
+            inv.purpose = meta.purpose;
+          }
+          if (!inv.stripePaymentIntentId && meta.stripePaymentIntentId) {
+            inv.stripePaymentIntentId = meta.stripePaymentIntentId;
+          }
+        }
       }
     }
 
@@ -155,16 +163,17 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
         return true;
       })
       .map(p => ({
-        _id:              p._id,
-        _source:          'payment',
-        invoiceNumber:    p.invoiceNumber || p.invoiceDraft?.invoiceNumber || '',
-        totalAmount:      p.amountDollars || 0,
-        createdAt:        p.createdAt,
-        paidAt:           p.paidAt,
-        paymentMethod:    p.paymentMethodType || '',
-        purpose:          p.purpose || '',
-        draft:            p.invoiceDraft || null,
-        invoiceSnapshot:  p.invoiceSnapshot || null,
+        _id:                    p._id,
+        _source:                'payment',
+        invoiceNumber:          p.invoiceNumber || p.invoiceDraft?.invoiceNumber || '',
+        totalAmount:            p.amountDollars || 0,
+        createdAt:              p.createdAt,
+        paidAt:                 p.paidAt,
+        paymentMethod:          p.paymentMethodType || '',
+        purpose:                p.purpose || '',
+        draft:                  p.invoiceDraft || null,
+        invoiceSnapshot:        p.invoiceSnapshot || null,
+        stripePaymentIntentId:  p.stripePaymentIntentId || '',
       }));
 
     const all = [...invoices, ...renewalItems, ...paymentItems]

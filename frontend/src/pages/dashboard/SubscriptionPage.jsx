@@ -1298,13 +1298,12 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
         additionalHolderCount={additionalCount}
         onClose={() => {
           setShowPayment(false)
+          forceUnlockScroll()
+          onClose()
         }}
         onSuccess={async (inv, updatedReg) => {
           const latest = await fetchLatestUpgradeState(updatedReg || sub)
           await Promise.resolve(onSaved(latest))
-          setShowPayment(false)
-          forceUnlockScroll()
-          onClose()
         }}
       />
     )
@@ -1478,7 +1477,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         .filter(h => !selectedHolderIds.has(String(h._id)))
         .map(h => String(h._id))
     : null
-  const selectionValid = !isDecreasingHolders || selectedHolderIds.size === exactCount
+  const selectionValid = !isDecreasingHolders || selectedHolderIds.size >= 1
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -1551,10 +1550,9 @@ function RenewModal({ sub, role, onClose, onSaved }) {
         renewalMultiYearCount={plan === 'Multiple Years Subscription Plan' ? multiYearRenewCount : undefined}
         renewalExactCount={isAirline ? exactCount : undefined}
         renewalHoldersToRemove={holdersToRemove}
-        onClose={() => setShowPayment(false)}
+        onClose={() => { setShowPayment(false); onClose() }}
         onSuccess={(inv, updatedReg) => {
           onSaved(updatedReg || currentSub)
-          onClose()
         }}
       />
     )
@@ -1707,7 +1705,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
                   <p className="text-xs font-bold text-slate-800">Select Holders to Keep</p>
                   <p className={`text-[10px] mt-0.5 ${selectionValid ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {selectedHolderIds.size} of {exactCount} selected
-                    {!selectionValid && ` — select ${exactCount - selectedHolderIds.size} more`}
+                    {!selectionValid && ` — select at least 1`}
                   </p>
                 </div>
                 {selectionValid && (
@@ -1771,7 +1769,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
           <button
             onClick={() => setShowPayment(true)}
             disabled={chargedCents <= 0 || !selectionValid}
-            title={!selectionValid ? `Select exactly ${exactCount} holders to keep` : undefined}
+            title={!selectionValid ? `Select at least 1 holder to keep` : undefined}
             className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-all"
           >
             Proceed to Payment
@@ -1796,7 +1794,7 @@ function RenewModal({ sub, role, onClose, onSaved }) {
             </svg>
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Select Holders to Keep</p>
-              <p className={`text-[10px] mt-0.5 tabular-nums font-semibold ${selectedHolderIds.size === exactCount ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <p className={`text-[10px] mt-0.5 tabular-nums font-semibold ${selectedHolderIds.size >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {selectedHolderIds.size} / {exactCount} selected
               </p>
             </div>
@@ -1850,11 +1848,13 @@ function RenewModal({ sub, role, onClose, onSaved }) {
             })}
           </div>
           {/* Footer hint */}
-          <div className={`px-4 py-3 border-t border-slate-100 flex-shrink-0 ${selectedHolderIds.size === exactCount ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-            {selectedHolderIds.size === exactCount ? (
-              <p className="text-[10px] font-semibold text-emerald-700">Selection complete — ready to proceed</p>
+          <div className={`px-4 py-3 border-t border-slate-100 flex-shrink-0 ${selectedHolderIds.size >= 1 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+            {selectedHolderIds.size >= 1 ? (
+              <p className="text-[10px] font-semibold text-emerald-700">
+                {selectedHolderIds.size === exactCount ? 'Selection complete — ready to proceed' : `${selectedHolderIds.size} selected — remaining ${exactCount - selectedHolderIds.size} slot${exactCount - selectedHolderIds.size !== 1 ? 's' : ''} can be filled later`}
+              </p>
             ) : (
-              <p className="text-[10px] text-amber-700">Select {exactCount - selectedHolderIds.size} more holder{exactCount - selectedHolderIds.size !== 1 ? 's' : ''} to continue</p>
+              <p className="text-[10px] text-amber-700">Select at least 1 holder to continue</p>
             )}
           </div>
         </div>
@@ -2202,7 +2202,6 @@ export default function SubscriptionPage() {
             setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
             setSub((prev) => (prev?._id === updated._id ? updated : prev))
             invalidate(`subs_${user?.id || user?.email}`)
-            setRenewTarget(null)
           }}
         />
       )}
@@ -2235,7 +2234,6 @@ export default function SubscriptionPage() {
               setSub((prev) => (prev?._id === latest._id ? latest : prev))
               cacheSet(`subs_${user?.id || user?.email}`, [latest])
             } catch { void 0 }
-            setUpgradeTarget(null)
           }}
         />
       )}
@@ -2286,6 +2284,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
       pricePerCert:     doc.lineItems?.[0]?.unitPrice || null,
       holderCount:      doc.lineItems?.[0]?.quantity || null,
       invoiceDraft:     doc.draft || null,
+      paymentId:        doc.stripePaymentIntentId || null,
       _invoiceDocId:    doc._id,
     }
     onViewSingle(invoice)
@@ -2382,7 +2381,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
     s.nextRenewal.activationDate && new Date(s.nextRenewal.activationDate) <= new Date() &&
     !s._autoActivateFailed
 
-  const showRenew = active && !isUnlimited && !hasQueuedRenewalDue &&
+  const showRenew = active && !isUnlimited && !hasQueuedRenewalDue && !s.nextRenewal?.paidAt &&
     (daysToExpiry === null || daysToExpiry <= 60)
 
   const [cachedInvoiceDocs, setCachedInvoiceDocs] = useState(null)
@@ -3096,21 +3095,47 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <p className="text-[10px] text-emerald-500 font-mono">Invoice: {renewalInvoiceNum}</p>
                     <button
-                      onClick={() => onViewInvoice?.({
-                        invoiceNumber:    renewalInvoiceNum,
-                        paidAt:           nr.paidAt,
-                        subscriptionPlan: nr.plan,
-                        multiYearCount:   nr.multiYearCount || null,
-                        expirationDate:   nr.expiresAt || null,
-                        amount:           nr.price,
-                        name:             isAirline ? (s.airlineName || '') : `${s.firstName || ''} ${s.lastName || ''}`.trim(),
-                        email:            s.email || s.contactEmail || '',
-                        address:          s.addressLine1 || '',
-                        isAirline,
-                        airlineName:      s.airlineName || '',
-                        pricePerCert:     s.pricePerCertificate || null,
-                        holderCount:      nr.committedCount || s.committedCount || s.certificateHolders?.length || null,
-                      })}
+                      onClick={() => {
+                        const renewalDoc = cachedInvoiceDocs?.find(
+                          d => d.purpose === 'renewal' &&
+                            (d.invoiceNumber === renewalInvoiceNum || d.invoiceNumber === nr.invoiceNumber)
+                        )
+                        if (renewalDoc) {
+                          onViewInvoice?.({
+                            invoiceNumber:    renewalDoc.invoiceNumber,
+                            paidAt:           renewalDoc.paidAt || renewalDoc.issueDate || renewalDoc.createdAt,
+                            subscriptionPlan: renewalDoc.subscriptionPlan || nr.plan || s.subscriptionPlan,
+                            multiYearCount:   nr.multiYearCount || null,
+                            expirationDate:   renewalDoc.expirationDate || nr.expiresAt || null,
+                            amount:           renewalDoc.totalAmount,
+                            name:             renewalDoc.recipientName || renewalDoc.recipientCompany || (isAirline ? (s.airlineName || '') : `${s.firstName || ''} ${s.lastName || ''}`.trim()),
+                            email:            renewalDoc.recipientEmail || s.email || s.contactEmail || '',
+                            address:          renewalDoc.recipientAddress1 || s.addressLine1 || '',
+                            isAirline:        renewalDoc.isAirline ?? isAirline,
+                            airlineName:      renewalDoc.recipientCompany || s.airlineName || '',
+                            pricePerCert:     renewalDoc.lineItems?.[0]?.unitPrice || null,
+                            holderCount:      renewalDoc.lineItems?.[0]?.quantity || null,
+                            invoiceDraft:     renewalDoc.draft || null,
+                            paymentId:        renewalDoc.stripePaymentIntentId || null,
+                            _invoiceDocId:    renewalDoc._id,
+                          })
+                        } else {
+                          onViewInvoice?.({
+                            invoiceNumber:    renewalInvoiceNum,
+                            paidAt:           nr.paidAt,
+                            subscriptionPlan: nr.plan,
+                            multiYearCount:   nr.multiYearCount || null,
+                            expirationDate:   nr.expiresAt || null,
+                            amount:           nr.price,
+                            name:             isAirline ? (s.airlineName || '') : `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                            email:            s.email || s.contactEmail || '',
+                            address:          s.addressLine1 || '',
+                            isAirline,
+                            airlineName:      s.airlineName || '',
+                            holderCount:      nr.committedCount || s.committedCount || s.certificateHolders?.length || null,
+                          })
+                        }
+                      }}
                       className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 border border-emerald-300 bg-white rounded-md px-2 py-0.5 hover:bg-emerald-50 transition"
                     >
                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>

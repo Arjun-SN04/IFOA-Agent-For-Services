@@ -356,8 +356,8 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.subscriptionPlan        = activePlan;
     update.subscriptionDate        = base;
     if (newExpiry)  update.expirationDate        = newExpiry;
-    // Keep current active invoice number immutable once saved.
-    if (!doc.invoiceNumber && paymentDoc.invoiceNumber) {
+    // Always update invoiceNumber so ACTIVE badge reflects the latest renewal invoice.
+    if (paymentDoc.invoiceNumber) {
       update.invoiceNumber = paymentDoc.invoiceNumber;
     }
     update.stripePaymentIntentId   = paymentDoc.stripePaymentIntentId;
@@ -367,11 +367,16 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.isFormCompleted         = true;
     // nextRenewal/nextRenewalId cleared via $unset below — do NOT put them in $set
     if (renewalMultiYearCount)     update.multiYearCount = renewalMultiYearCount;
-    // Airline: update committed holder count if user changed it at renewal time
+    // Airline: update committed holder count + pricePerCertificate if user changed it at renewal time
     if (renewalExactCount && registrationModel !== 'Individual') {
-      update.committedCount    = renewalExactCount;
-      update.holderCountValue  = String(renewalExactCount);
-      update.holderCount       = holderRangeFromCount(renewalExactCount);
+      update.committedCount       = renewalExactCount;
+      update.holderCountValue     = String(renewalExactCount);
+      update.holderCount          = holderRangeFromCount(renewalExactCount);
+      const renewalPpc            = tierPpcForPlan(activePlan, Math.max(3, renewalExactCount));
+      if (renewalPpc > 0) {
+        update.pricePerCertificate = renewalPpc;
+        update.pricePerCert        = renewalPpc;
+      }
     }
     if (registrationModel === 'Individual') {
       const PLAN_PRICES = { '1 Year Subscription Plan': 69, 'Unlimited Plan': 299 };
