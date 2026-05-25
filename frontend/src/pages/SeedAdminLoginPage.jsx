@@ -125,15 +125,6 @@ export default function SeedAdminLoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm" style={{ color: '#64748b' }}>
-                Need to create an admin account?{' '}
-                <Link to="/seed-admin-signup" className="font-semibold transition-colors" style={{ color: '#0000ff' }}>
-                  Sign up here
-                </Link>
-              </p>
-            </div>
-
             <div className="mt-4 text-center">
               <Link to="/" className="text-xs transition-colors" style={{ color: '#94a3b8' }}>
                 ← Back to home
