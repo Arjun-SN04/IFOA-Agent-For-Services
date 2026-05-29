@@ -344,7 +344,7 @@ async function buildExpiryReminderHtml(doc, isAirline, daysLeft) {
     <mj-text><strong>Email:</strong> ${escHtml(email)}</mj-text>
     <mj-text><strong>${isExpired ? 'Expired On' : 'Expiry Date'}:</strong> ${expiry}</mj-text>
     <mj-text>To continue receiving U.S. Agent for Service coverage without interruption, please renew your subscription${isExpired ? '' : ' before the expiry date'}. You can renew directly from your dashboard — no need to fill in the registration form again.</mj-text>
-    <mj-button background-color="#cc0000" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://theifoa.com'}/dashboard/subscription">
+    <mj-button background-color="#cc0000" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://agent.theifoa.com'}/dashboard/subscription">
       ${isExpired ? 'Renew Now' : 'Renew Subscription'}
     </mj-button>
     <mj-text>If you have any questions, feel free to contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</mj-text>
@@ -413,7 +413,7 @@ async function buildWireRequestAdminNotificationHtml(doc) {
       </tr>
     </mj-table>
     <mj-text>Please log in to the admin dashboard to review this request, generate the invoice, and mark the payment once received.</mj-text>
-    <mj-button background-color="#0000ff" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://theifoa.com'}/admin">
+    <mj-button background-color="#0000ff" color="#ffffff" border-radius="8px" font-size="14px" font-weight="bold" inner-padding="12px 28px" href="${process.env.FRONTEND_URL || 'https://agent.theifoa.com'}/admin">
       Open Admin Dashboard
     </mj-button>
     <mj-text padding="0">— IFOA USA Automated Notification</mj-text>
