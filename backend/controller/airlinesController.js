@@ -393,20 +393,53 @@ exports.addHoldersToSubscription = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Subscription not found' });
 
-    const { newHolders } = req.body;
+    const { newHolders, holderGroupId } = req.body;
     if (!Array.isArray(newHolders) || newHolders.length === 0)
       return res.status(400).json({ success: false, message: 'newHolders array is required' });
 
+    // ── Holder-group assignment ───────────────────────────────────────────────
+    // When holderGroupId is supplied the new holders belong to that paid plan
+    // batch; capacity is the group's own count. Otherwise they fill the base plan
+    // (committedCount minus all group slots).
+    const targetGroupId = holderGroupId || null;
+    if (targetGroupId) {
+      const group = doc.holderGroups.id(targetGroupId);
+      if (!group)
+        return res.status(400).json({ success: false, message: 'Holder group not found.' });
+      const usedInGroup = doc.certificateHolders.filter(
+        h => String(h.holderGroupId || '') === String(targetGroupId),
+      ).length;
+      const groupRemaining = group.count - usedInGroup;
+      if (groupRemaining <= 0)
+        return res.status(400).json({ success: false, message: `This plan group is full (${group.count} slot${group.count !== 1 ? 's' : ''}).` });
+      const toAdd = newHolders.slice(0, groupRemaining).map(h => ({ ...h, holderGroupId: targetGroupId }));
+      doc.certificateHolders.push(...toAdd);
+      await doc.save();
+      return res.json({
+        success:        true,
+        data:           doc,
+        addedCount:     toAdd.length,
+        extraAmountDue: 0, // already paid when the group was purchased
+        totalHolders:   doc.certificateHolders.length,
+        committedCount: doc.committedCount,
+        remainingSlots: group.count - (usedInGroup + toAdd.length),
+      });
+    }
+
+    // Base-plan capacity excludes slots reserved by holder groups, and only
+    // counts holders that belong to the base plan (holderGroupId == null).
+    const totalGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
+    const baseCommitted   = Math.max(0, (doc.committedCount || doc.certificateHolders.length) - totalGroupSlots);
+    const baseFilled      = doc.certificateHolders.filter(h => !h.holderGroupId).length;
+
     if (doc.subscriptionPlan === 'Unlimited Plan') {
       // Unlimited plan: holders are pre-paid, slots are already committed.
-      // Allow adding holders up to committedCount — no extra billing needed.
-      const currentCount   = doc.certificateHolders.length;
-      const committedCount = doc.committedCount || currentCount;
-      const remainingSlots = committedCount - currentCount;
+      // Allow adding holders up to base committed count — no extra billing needed.
+      const remainingSlots = baseCommitted - baseFilled;
       if (remainingSlots <= 0)
         return res.status(400).json({
           success: false,
-          message: `No remaining slots. Committed: ${committedCount}, current holders: ${currentCount}`,
+          message: `No remaining base-plan slots. Committed: ${baseCommitted}, filled: ${baseFilled}`,
         });
       const toAdd = newHolders.slice(0, remainingSlots);
       doc.certificateHolders.push(...toAdd);
@@ -418,18 +451,16 @@ exports.addHoldersToSubscription = async (req, res) => {
         extraAmountDue: 0,
         totalHolders:   doc.certificateHolders.length,
         committedCount: doc.committedCount,
-        remainingSlots: committedCount - doc.certificateHolders.length,
+        remainingSlots: remainingSlots - toAdd.length,
       });
     }
 
-    const currentCount   = doc.certificateHolders.length;
-    const committedCount = doc.committedCount || currentCount;
-    const remainingSlots = committedCount - currentCount;
+    const remainingSlots = baseCommitted - baseFilled;
 
     if (remainingSlots <= 0)
       return res.status(400).json({
         success: false,
-        message: `No remaining slots. Committed: ${committedCount}, current holders: ${currentCount}`,
+        message: `No remaining base-plan slots. Committed: ${baseCommitted}, filled: ${baseFilled}`,
       });
 
     const toAdd      = newHolders.slice(0, remainingSlots);
@@ -446,7 +477,7 @@ exports.addHoldersToSubscription = async (req, res) => {
       extraAmountDue: extraAmount,
       totalHolders:   doc.certificateHolders.length,
       committedCount: doc.committedCount,
-      remainingSlots: committedCount - doc.certificateHolders.length,
+      remainingSlots: remainingSlots - toAdd.length,
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

@@ -109,31 +109,23 @@ exports.getMe = async (req, res) => {
 };
 
 // POST /api/auth/seed-admin-signup
-// SECURED: requires SEED_ADMIN_SECRET env var in request body to prevent public abuse.
+// Open admin signup — reachable only by directly visiting /seed-admin-signup
+// (the URL is not linked from the login page). No seed secret, no one-admin cap.
 exports.seedAdminSignup = async (req, res) => {
   try {
-    // Guard — reject unless the caller knows the server-side secret
-    const SEED_SECRET = process.env.SEED_ADMIN_SECRET;
-    if (!SEED_SECRET) {
-      return res.status(503).json({ message: 'Admin seeding is not enabled on this server.' });
-    }
-    if (req.body.seedSecret !== SEED_SECRET) {
-      return res.status(403).json({ message: 'Invalid seed secret.' });
-    }
-
     const { email, password, firstName, lastName } = req.body;
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required.' });
     if (password.length < 8)
       return res.status(400).json({ message: 'Password must be at least 8 characters.' });
 
-    // Only allow one admin to be seeded — prevents repeated calls
-    const adminExists = await User.findOne({ role: 'admin' });
-    if (adminExists)
-      return res.status(409).json({ message: 'An admin account already exists. Use the login endpoint.' });
+    const normalEmail = email.toLowerCase();
+    const existing = await User.findOne({ $or: [{ email: normalEmail }, { secondaryEmails: normalEmail }] });
+    if (existing)
+      return res.status(409).json({ message: 'This email is already associated with an account.' });
 
     const admin = await User.create({
-      email: email.toLowerCase(),
+      email: normalEmail,
       password,
       role: 'admin',
       firstName: firstName || 'IFOA',
@@ -410,6 +402,12 @@ function generateOtpCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+// Strip any whitespace/non-digits so the stored and submitted codes always
+// compare cleanly (guards against spaces, newlines or autofill artefacts).
+function normalizeCode(code) {
+  return String(code || '').replace(/\D/g, '');
+}
+
 async function createAndSendOtp(email, purpose) {
   const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
@@ -422,7 +420,7 @@ async function createAndSendOtp(email, purpose) {
 async function verifyOtp(email, code, purpose) {
   const record = await OTP.findOne({
     email:   email.toLowerCase(),
-    code,
+    code:    normalizeCode(code),
     purpose,
     used:    false,
     expiresAt: { $gt: new Date() },

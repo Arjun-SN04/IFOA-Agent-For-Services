@@ -18,7 +18,58 @@ const CertificateHolderSchema = new mongoose.Schema({
   secondaryCertificateType:     { type: String, default: '' },
   secondaryFaaCertificateNumber:{ type: String, default: '' },
   secondaryIacraFtnNumber:      { type: String, default: '' },
+  // Links this holder to a holderGroup (a paid plan batch). null => belongs to
+  // the airline's original/base plan (the registration plan).
+  holderGroupId:                { type: mongoose.Schema.Types.ObjectId, default: null },
 });
+
+// A holder group = one "Expand Holder Count" purchase. Each group carries its OWN
+// plan, count, price and expiry, independent of the airline's base plan. Holders
+// filled in later are assigned to a group via holder.holderGroupId.
+const HolderGroupSchema = new mongoose.Schema({
+  plan: {
+    type: String,
+    enum: ['1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan'],
+    required: true,
+  },
+  multiYearCount:   { type: Number, default: null },
+  count:            { type: Number, required: true },   // slots purchased in this batch
+  pricePerCert:     { type: Number, required: true },
+  amount:           { type: Number, required: true },   // total charged for this batch
+  // 'paid' for Stripe upgrades; admin-added groups may be 'pending' until the
+  // admin marks them paid (which generates the invoice).
+  paymentStatus:    { type: String, enum: ['paid', 'pending'], default: 'paid' },
+  addedByAdmin:     { type: Boolean, default: false },
+  subscriptionDate: { type: Date,   default: Date.now },
+  expirationDate:   { type: Date,   default: null },    // null for Unlimited
+  paymentId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', default: null },
+  invoiceNumber:    { type: String, default: '' },
+
+  // Queued renewal for THIS group — set when the airline renews the group before
+  // its expiry. Activates automatically on activationDate (= current expiry).
+  nextRenewal: {
+    plan:            { type: String, default: null },
+    count:           { type: Number, default: null },
+    pricePerCert:    { type: Number, default: null },
+    price:           { type: Number, default: null },
+    paidAt:          { type: Date,   default: null },
+    activationDate:  { type: Date,   default: null },
+    expiresAt:       { type: Date,   default: null },
+    invoiceNumber:   { type: String, default: null },
+    holdersToRemove: { type: [String], default: null },
+  },
+
+  // Last activated renewal snapshot for this group (history / display).
+  lastRenewal: {
+    plan:           { type: String, default: null },
+    count:          { type: Number, default: null },
+    paidAt:         { type: Date,   default: null },
+    activationDate: { type: Date,   default: null },
+    expiresAt:      { type: Date,   default: null },
+    price:          { type: Number, default: null },
+    invoiceNumber:  { type: String, default: null },
+  },
+}, { timestamps: true });
 
 const AirlinesSchema = new mongoose.Schema({
   // Status (managed by admin)
@@ -71,6 +122,11 @@ const AirlinesSchema = new mongoose.Schema({
 
   // Certificate holders (array)
   certificateHolders: { type: [CertificateHolderSchema], default: [] },
+
+  // Holder groups — one entry per "Expand Holder Count" purchase. Each is an
+  // independent plan batch (own plan/expiry/price). Original registration holders
+  // are NOT in a group (holderGroupId = null).
+  holderGroups: { type: [HolderGroupSchema], default: [] },
 
   // committedCount = exact number selected in Step 1 (holderCountValue)
   // This is the "slots" the airline committed to and will be billed for

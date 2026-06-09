@@ -58,6 +58,9 @@ export const activateWirePayment            = (id)       => API.patch(`/airlines
 export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
 export const createAdminAirlineForm         = (data)     => API.post('/airlines/admin/create-form', data)
 export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines/${id}/request-invoice`, data)
+// Admin manual holder-upgrade (increase committed count + create a holder group)
+export const adminHolderUpgrade             = (id, data) => API.post(`/airlines/${id}/admin-holder-upgrade`, data)
+export const markHolderGroupPaid            = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/mark-paid`)
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
 export const createPaymentIntent = (registrationId, registrationModel) =>

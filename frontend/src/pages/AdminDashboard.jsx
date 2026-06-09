@@ -34,7 +34,19 @@ import {
   activateQueuedRenewal,
   activateWirePayment,
   sendRenewalReminders,
+  adminHolderUpgrade,
+  markHolderGroupPaid,
 } from '../services/api'
+
+// Convert a raw backend/Mongoose error into a short, user-friendly message.
+function friendlySaveError(e) {
+  const raw = e?.response?.data?.message || e?.message || ''
+  if (/Cast to embedded failed|certificateHolders|CastError/i.test(raw))
+    return 'Could not save certificate holders. Please make sure every holder has a Full Name, Certificate Type and IACRA FTN, then try again.'
+  if (/duplicate key|E11000/i.test(raw)) return 'That value is already in use. Please use a different one.'
+  if (/validation failed/i.test(raw)) return 'Some required fields are missing or invalid. Please review the form and try again.'
+  return raw && raw.length <= 140 ? raw : 'Something went wrong while saving. Please try again.'
+}
 
 // ── Shared country data for admin edit modals ────────────────────────────────
 const ADMIN_COUNTRY_TO_ISO2 = {
@@ -651,7 +663,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
       recipientAddress2: d.recipientAddress2 || inv.recipientAddress2 || '',
       recipientCountry:  d.recipientCountry  || inv.recipientCountry || '',
       paymentMethod:     d.paymentMethod     || inv.paymentMethod || '',
-      paymentId:         inv.stripePaymentIntentId || null,
+      paymentId:         d.paymentId || inv.stripePaymentIntentId || null,
       lineItems:         d.lineItems?.length ? d.lineItems : (inv.lineItems?.length ? inv.lineItems : (snapshotLineItems || [])),
     }
   }
@@ -832,7 +844,14 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
             const purposeCls = inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
               : 'bg-slate-800 border-slate-700 text-white'
             const planLabel = inv.subscriptionPlan || inv.plan || ''
-            const isActiveInvoice = activeInvoiceNum && inv.invoiceNumber === activeInvoiceNum
+            // Holder-upgrade invoices are tied to a holder group — their live status
+            // (Active / Expired / Pending) is derived dynamically from that group.
+            const _now = Date.now()
+            const _grp = (record?.holderGroups || []).find(g => g.invoiceNumber && g.invoiceNumber === inv.invoiceNumber)
+            const _grpExpired = _grp && _grp.plan !== 'Unlimited Plan' && _grp.expirationDate && new Date(_grp.expirationDate).getTime() <= _now
+            const _grpPending = _grp && _grp.paymentStatus === 'pending'
+            const _grpActive = _grp && !_grpPending && (_grp.plan === 'Unlimited Plan' || (_grp.expirationDate && new Date(_grp.expirationDate).getTime() > _now))
+            const isActiveInvoice = (activeInvoiceNum && inv.invoiceNumber === activeInvoiceNum) || _grpActive
             return (
             <div key={String(inv._id)} className={`rounded-xl border px-4 py-3 transition-all ${isActiveInvoice ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}>
               <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -847,6 +866,16 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                         Active
                       </span>
                     )}
+                    {_grpExpired && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700">
+                        Expired
+                      </span>
+                    )}
+                    {_grpPending && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700">
+                        Pending
+                      </span>
+                    )}
                   </div>
                   <p className="text-[10px] text-slate-500 mt-0.5">{fmtInvDate(inv.paidAt || inv.createdAt)}</p>
                   {planLabel && <p className="text-[10px] text-slate-400 mt-0.5">{planLabel}</p>}
@@ -855,6 +884,11 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                       ? inv.draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0)
                       : inv.totalAmount
                   )}</p>
+                  {(inv.draft?.paymentId || inv.stripePaymentIntentId) && (() => {
+                    const raw = String(inv.draft?.paymentId || inv.stripePaymentIntentId)
+                    const clean = /^admin[_-]|^manual/i.test(raw) ? `MANUAL ${inv.invoiceNumber || ''}`.trim() : raw
+                    return <p className="text-[10px] text-slate-400 mt-0.5">Payment ID: <span className="font-mono text-slate-500 break-all">{clean}</span></p>
+                  })()}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {hasPdf(inv) && (
@@ -1438,9 +1472,166 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
   )
 }
 
+// ─── Admin Holder Count Modal (manual upgrade / reduction) ──────────────────────
+const ADMIN_ONE_YEAR_PPC  = { '3 to 5': 60, '5 to 10': 55, 'More than 10': 49 }
+const ADMIN_UNLIMITED_PPC = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 }
+function adminTierPpc(plan, count) {
+  const range = count <= 5 ? '3 to 5' : count <= 10 ? '5 to 10' : 'More than 10'
+  return plan === 'Unlimited Plan' ? ADMIN_UNLIMITED_PPC[range] : ADMIN_ONE_YEAR_PPC[range]
+}
+
+function AdminHolderCountModal({ record, onClose, onSaved }) {
+  const committed = Number(record.committedCount || record.holderCountValue || record.certificateHolders?.length || 0)
+  const holders = record.certificateHolders || []
+  const [mode, setMode] = useState('increase')
+  // increase
+  const [plan, setPlan] = useState('1 Year Subscription Plan')
+  const [addCount, setAddCount] = useState(1)
+  const [paid, setPaid] = useState(true)
+  // decrease — keep selection
+  const [keep, setKeep] = useState(() => new Set(holders.map(h => String(h._id))))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const newTotal = committed + addCount
+  const ppc = adminTierPpc(plan, Math.max(3, newTotal))
+  const amount = ppc * addCount
+
+  const toggleKeep = (id) => setKeep(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+
+  const planShort = (p) => p === 'Unlimited Plan' ? 'Unlimited' : '1 Year'
+
+  const submit = async () => {
+    setBusy(true); setErr('')
+    try {
+      if (mode === 'increase') {
+        const res = await adminHolderUpgrade(record._id, { plan, additionalCount: addCount, paid })
+        onSaved(res.data?.data)
+      } else {
+        const keptHolders = holders.filter(h => keep.has(String(h._id)))
+        if (keptHolders.length === 0) { setErr('Keep at least one holder.'); setBusy(false); return }
+        const res = await updateAirlinesSubscription(record._id, {
+          certificateHolders: keptHolders,
+          committedCount: keptHolders.length,
+          holderCountValue: String(keptHolders.length),
+        })
+        onSaved(res.data?.data)
+      }
+      onClose()
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed.')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[61] flex items-start justify-center p-4 pt-16 overflow-y-auto">
+        <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
+          className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8" onClick={e => e.stopPropagation()}>
+          <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between bg-slate-50">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder Count</p>
+              <h3 className="text-base font-extrabold text-slate-900">Manage Holders</h3>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100">✕</button>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</div>}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setMode('increase')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${mode === 'increase' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'}`}>Increase</button>
+              <button onClick={() => setMode('decrease')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${mode === 'decrease' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'}`}>Decrease</button>
+            </div>
+            <p className="text-[11px] text-slate-500">Current committed: <span className="font-bold text-slate-800">{committed}</span> · holders on file: {holders.length}</p>
+
+            {mode === 'increase' ? (
+              <>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Plan for these holders</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['1 Year Subscription Plan', 'Unlimited Plan'].map(p => (
+                      <button key={p} onClick={() => setPlan(p)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${plan === p ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{planShort(p)}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+                  <span className="text-xs font-semibold text-slate-500">Holders to add</span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setAddCount(c => Math.max(1, c - 1))} className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 font-bold">−</button>
+                    <span className="text-lg font-black w-6 text-center">{addCount}</span>
+                    <button onClick={() => setAddCount(c => c + 1)} className="w-8 h-8 rounded-full border border-slate-200 bg-slate-50 font-bold">+</button>
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-900 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Amount</p>
+                    <p className="text-[10px] text-white/70">${ppc}/cert × {addCount}</p>
+                  </div>
+                  <span className="text-xl font-black text-white">${amount.toFixed(2)}</span>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Payment</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setPaid(true)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${paid ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'}`}>Paid (invoice)</button>
+                    <button onClick={() => setPaid(false)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${!paid ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-600'}`}>Pending</button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">{paid ? 'Generates an invoice now; airline can see it.' : 'No invoice yet — mark paid later to generate it.'}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-slate-500">Untick holders to remove. Committed count becomes the number kept.</p>
+                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200">
+                  {holders.length === 0 && <p className="px-3 py-4 text-xs text-slate-400 text-center">No holders on file.</p>}
+                  {holders.map((h, i) => (
+                    <label key={String(h._id || i)} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50">
+                      <input type="checkbox" checked={keep.has(String(h._id))} onChange={() => toggleKeep(String(h._id))} className="w-4 h-4 accent-blue-600" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{h.fullName || '(unnamed)'}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{h.iacraFtnNumber || h.faaCertificateNumber || ''}{h.holderGroupId ? ' · upgrade' : ''}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] font-bold text-slate-700">Keeping {keep.size} of {holders.length}</p>
+              </>
+            )}
+          </div>
+
+          <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50 flex gap-2.5">
+            <button onClick={onClose} disabled={busy} className="flex-1 rounded-xl border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-600">Cancel</button>
+            <button onClick={submit} disabled={busy} className="flex-1 rounded-xl py-2 text-sm font-bold text-white" style={{ background: '#0000ff' }}>
+              {busy ? 'Saving…' : mode === 'increase' ? (paid ? 'Add & Generate Invoice' : 'Add (Pending)') : 'Apply Reduction'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
 // ─── Airline View Modal ────────────────────────────────────────────────────────
 function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerateInvoice }) {
   const [showInvoices, setShowInvoices] = useState(false)
+  const [showHolderCount, setShowHolderCount] = useState(false)
+  const [markingPaidId, setMarkingPaidId] = useState(null)
+
+  const handleMarkGroupPaid = async (groupId) => {
+    setMarkingPaidId(groupId)
+    try {
+      const res = await markHolderGroupPaid(record._id, groupId)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Failed to mark paid.')
+    } finally {
+      setMarkingPaidId(null)
+    }
+  }
+
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1513,13 +1704,79 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <ViewField label="Payment Email" value={record.paymentEmail} />
               </div>
             </div>
-            {record.certificateHolders?.length > 0 && (
+            {Array.isArray(record.holderGroups) && record.holderGroups.length > 0 && (() => {
+              const planShort = (plan, years) =>
+                plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
+                : plan === 'Unlimited Plan' ? 'Unlimited'
+                : plan === '1 Year Subscription Plan' ? '1 Year' : (plan || '—')
+              return (
+                <div className="border-t border-slate-100 pt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <SectionHead label={`Holder Upgrade Plans (${record.holderGroups.length})`} />
+                    <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-50 transition">Manage Holder Count</button>
+                  </div>
+                  <div className="space-y-2">
+                    {record.holderGroups.map((g, gi) => {
+                      const filled = (record.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
+                      const pending = g.paymentStatus === 'pending'
+                      return (
+                        <div key={String(g._id || gi)} className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-2.5 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                              {planShort(g.plan, g.multiYearCount)} <span className="text-slate-400 font-semibold">upgrade</span>
+                              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${pending ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>{pending ? 'Pending' : 'Paid'}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">${g.pricePerCert}/cert · ${Number(g.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} · {g.plan === 'Unlimited Plan' ? 'No expiry' : (g.expirationDate ? `expires ${fmtDate(g.expirationDate)}` : '—')}{g.invoiceNumber ? ` · ${g.invoiceNumber}` : ''}</p>
+                            {g.nextRenewal?.paidAt && (
+                              <p className="text-[10px] font-bold text-emerald-700 mt-0.5">Renewal queued — {planShort(g.nextRenewal.plan)} activates {g.nextRenewal.activationDate ? fmtDate(g.nextRenewal.activationDate) : 'at expiry'}</p>
+                            )}
+                            {pending && (
+                              <button onClick={() => handleMarkGroupPaid(g._id)} disabled={markingPaidId === String(g._id)}
+                                className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-2.5 py-1 text-[10px] font-bold text-white transition">
+                                {markingPaidId === String(g._id) ? 'Generating…' : 'Mark Paid & Generate Invoice'}
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-600 flex-shrink-0">{filled}/{g.count}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+            {(!record.holderGroups || record.holderGroups.length === 0) && (
+              <div className="border-t border-slate-100 pt-5">
+                <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-50 transition">Manage Holder Count</button>
+              </div>
+            )}
+            {record.certificateHolders?.length > 0 && (() => {
+              const planShort = (plan, years) =>
+                plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
+                : plan === 'Unlimited Plan' ? 'Unlimited'
+                : plan === '1 Year Subscription Plan' ? '1 Year' : (plan || '—')
+              const groups = record.holderGroups || []
+              const holderPlan = (h) => {
+                if (h.holderGroupId) {
+                  const g = groups.find(grp => String(grp._id) === String(h.holderGroupId))
+                  if (g) return { label: planShort(g.plan, g.multiYearCount), isGroup: true }
+                }
+                return { label: planShort(record.subscriptionPlan, record.multiYearCount), isGroup: false }
+              }
+              return (
               <div className="border-t border-slate-100 pt-5">
                 <SectionHead label={`Certificate Holders (${record.certificateHolders.length})`} />
                 <div className="space-y-3">
                   {record.certificateHolders.map((h, i) => (
                     <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Holder #{i + 1}</p>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder #{i + 1}</p>
+                        {(() => { const p = holderPlan(h); return (
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${p.isGroup ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                            {p.label}{p.isGroup ? ' · upgrade' : ''}
+                          </span>
+                        )})()}
+                      </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         <ViewField label="Full Name" value={h.fullName} />
                         <ViewField label="Date of Birth" value={h.dateOfBirth ? fmtDate(h.dateOfBirth) : '—'} />
@@ -1538,7 +1795,8 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                   ))}
                 </div>
               </div>
-            )}
+              )
+            })()}
             {record.wirePaymentRequested && (
               <WireRequestSection record={record} onRecordUpdated={onRecordUpdated} onGenerateInvoice={onGenerateInvoice} />
             )}
@@ -1574,6 +1832,13 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
           )}
         </AnimatePresence>
       </div>
+      {showHolderCount && (
+        <AdminHolderCountModal
+          record={record}
+          onClose={() => setShowHolderCount(false)}
+          onSaved={(updated) => onRecordUpdated?.(updated)}
+        />
+      )}
     </AnimatePresence>
   )
 }
@@ -1732,10 +1997,50 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const setHolder = (idx, field, value) =>
     setForm(p => ({ ...p, certificateHolders: p.certificateHolders.map((h, i) => i === idx ? { ...h, [field]: value } : h) }))
+  // Admin can add holders up to the committed count.
+  const committedSlots = Number(form.committedCount || form.holderCountValue || form.certificateHolders?.length || 0)
+  const holdersCount   = form.certificateHolders?.length || 0
+  const canAddHolder   = holdersCount < committedSlots
+  const addHolder = () => setForm(p => ({
+    ...p,
+    certificateHolders: [...(p.certificateHolders || []), {
+      fullName: '', dateOfBirth: '', certificateType: '', certificateStatus: 'EXISTING',
+      faaCertificateNumber: '', iacraFtnNumber: '', email: '',
+      hasSecondaryCertificate: false, secondaryCertificateType: '',
+      secondaryFaaCertificateNumber: '', secondaryIacraFtnNumber: '', holderGroupId: '',
+    }],
+  }))
+  const removeHolder = (idx) => setForm(p => ({
+    ...p, certificateHolders: p.certificateHolders.filter((_, i) => i !== idx),
+  }))
+  const groupOpts = form.holderGroups || []
+  const groupLabel = (g) => (g.plan === 'Unlimited Plan' ? 'Unlimited' : g.plan === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year') + ' upgrade'
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
   const handleSave = async () => {
-    try { setErr(''); await onSave(record._id, form); onClose() }
-    catch (e) { setErr(e?.response?.data?.message || 'Save failed.') }
+    setErr('')
+    // Drop fully-blank holder rows; normalise empty optional fields so they cast cleanly.
+    const rawHolders = form.certificateHolders || []
+    const nonEmpty = rawHolders.filter(h =>
+      (h.fullName && h.fullName.trim()) || (h.iacraFtnNumber && h.iacraFtnNumber.trim()) ||
+      (h.faaCertificateNumber && h.faaCertificateNumber.trim())
+    )
+    // Required-field check with a friendly message (schema needs name + type + FTN).
+    const missing = nonEmpty.findIndex(h => !h.fullName?.trim() || !h.certificateType || !h.iacraFtnNumber?.trim())
+    if (missing !== -1) {
+      setErr(`Holder #${missing + 1}: please fill in Full Name, Certificate Type and IACRA FTN before saving.`)
+      return
+    }
+    const cleanHolders = nonEmpty.map(h => ({
+      ...h,
+      holderGroupId: h.holderGroupId ? h.holderGroupId : null, // '' breaks ObjectId cast
+      dateOfBirth:   h.dateOfBirth ? h.dateOfBirth : null,
+    }))
+    try {
+      await onSave(record._id, { ...form, certificateHolders: cleanHolders })
+      onClose()
+    } catch (e) {
+      setErr(friendlySaveError(e))
+    }
   }
   return (
     <AnimatePresence>
@@ -1785,6 +2090,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                       onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
                       className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
                   </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Holder Count</span> in the view screen.</p>
                 </Field>
                 <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
                   value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
@@ -1843,12 +2149,29 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 <div className="sm:col-span-2"><Field label="Payment Email"><input className={inputCls} type="email" placeholder="billing@email.com" value={form.paymentEmail || ''} onChange={e => set('paymentEmail', e.target.value)} /></Field></div>
               </div>
             </div>
-            {form.certificateHolders?.length > 0 && (
-              <div><SectionHead label={`Certificate Holders (${form.certificateHolders.length})`} />
+            {(
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <SectionHead label={`Certificate Holders (${holdersCount}/${committedSlots})`} />
+                </div>
                 <div className="space-y-4">
-                  {form.certificateHolders.map((h, idx) => (
+                  {form.certificateHolders?.map((h, idx) => (
                     <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3">Holder #{idx + 1}</p>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder #{idx + 1}</p>
+                        <button type="button" onClick={() => removeHolder(idx)}
+                          className="text-[10px] font-bold text-red-500 hover:text-red-700 border border-red-200 hover:bg-red-50 rounded-md px-2 py-1 transition">Remove</button>
+                      </div>
+                      {groupOpts.length > 0 && (
+                        <div className="mb-3">
+                          <Field label="Plan">
+                            <select className={selectCls} value={h.holderGroupId ? String(h.holderGroupId) : ''} onChange={e => setHolder(idx, 'holderGroupId', e.target.value)}>
+                              <option value="">Base plan</option>
+                              {groupOpts.map((g, gi) => <option key={String(g._id || gi)} value={String(g._id)}>{groupLabel(g)} ({g.count} slots)</option>)}
+                            </select>
+                          </Field>
+                        </div>
+                      )}
                       <div className="grid sm:grid-cols-2 gap-3">
                         <Field label="Full Name"><input className={inputCls} value={h.fullName || ''} onChange={e => setHolder(idx, 'fullName', e.target.value)} /></Field>
                         <Field label="Date of Birth"><input className={inputCls} type="date" value={h.dateOfBirth ? String(h.dateOfBirth).slice(0,10) : ''} onChange={e => setHolder(idx, 'dateOfBirth', e.target.value)} /></Field>
@@ -1877,6 +2200,10 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                     </div>
                   ))}
                 </div>
+                <button type="button" onClick={addHolder} disabled={!canAddHolder}
+                  className={`mt-3 w-full rounded-xl border-2 border-dashed py-2.5 text-sm font-bold transition ${canAddHolder ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-slate-200 text-slate-300 cursor-not-allowed'}`}>
+                  {canAddHolder ? '+ Add Certificate Holder' : `All ${committedSlots} committed slots filled`}
+                </button>
               </div>
             )}
             <div><SectionHead label="Payment & Invoice" />
@@ -2012,6 +2339,15 @@ async function generateIFOAInvoicePDF(inv) {
   const displayInvoiceNumber = rawInvoiceNumber.replace(/^Invoice\s+/i, '')
 
   txt('Invoice  ' + displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
+  // Payment reference (txn). Admin/manual payments show a clean "MANUAL <inv#>"
+  // instead of the raw internal id; real Stripe intents print as-is.
+  if (inv.paymentId && inv.paymentId !== '—') {
+    const rawTxn = String(inv.paymentId)
+    const txnValue = (/^admin[_-]|^manual/i.test(rawTxn))
+      ? `MANUAL${displayInvoiceNumber ? ' ' + displayInvoiceNumber : ''}`
+      : rawTxn
+    txtR('txn: ' + txnValue, ML + W, Y + 1, { size: 7.5, color: MID })
+  }
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)
   Y -= 14
@@ -2186,6 +2522,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     recipientAddress2: [record.city, record.state, record.postalCode].filter(Boolean).join(' '),
     recipientCountry:  record.country || '',
     paymentMethod:     initialStep === 'edit' ? defaultPaymentMethod : '',
+    paymentId:         record?.stripePaymentIntentId || record?.invoiceDraft?.paymentId || null,
     lineItems: [
       {
         description: planDesc,
@@ -3461,7 +3798,7 @@ export default function AdminDashboard() {
       }
       showToast('Record updated successfully')
     } catch (e) {
-      showToast(e?.response?.data?.message || 'Save failed', 'error')
+      showToast(friendlySaveError(e), 'error')
       throw e
     } finally {
       setSaving(false)
@@ -3813,19 +4150,19 @@ export default function AdminDashboard() {
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
-            className={`fixed top-6 right-6 z-[100] flex items-center gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}
+            className={`fixed top-6 right-6 z-[100] flex items-start gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white max-w-sm w-[calc(100vw-3rem)] sm:w-auto ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}
           >
             {toast.type === 'error' && (
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+              <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
             )}
-            {toast.type === 'airline' && <Plane className="w-4 h-4 flex-shrink-0" />}
+            {toast.type === 'airline' && <Plane className="w-4 h-4 flex-shrink-0 mt-0.5" />}
             {toast.type === 'individual' && (
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="3.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.582-6 8-6s8 2 8 6" /></svg>
+              <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="8" r="3.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M4 20c0-4 3.582-6 8-6s8 2 8 6" /></svg>
             )}
             {toast.type === 'success' && (
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             )}
-            {toast.msg}
+            <span className="leading-snug break-words">{toast.msg}</span>
           </motion.div>
         )}
       </AnimatePresence>

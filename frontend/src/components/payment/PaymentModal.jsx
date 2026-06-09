@@ -11,10 +11,10 @@ import {
 import InvoiceModal from './InvoiceModal'
 
 const BACKDROP = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } }
-const PANEL    = {
-  hidden:  { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0,  scale: 1, transition: { type: 'spring', stiffness: 340, damping: 28 } },
-  exit:    { opacity: 0, y: 10, scale: 0.98, transition: { duration: 0.16, ease: 'easeIn' } },
+const PANEL = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 340, damping: 28 } },
+  exit: { opacity: 0, y: 10, scale: 0.98, transition: { duration: 0.16, ease: 'easeIn' } },
 }
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
@@ -59,11 +59,11 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
     ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
     : null
 
-  const planName  = invoice?.subscriptionPlan || null
-  const paidAt    = fmtDate(invoice?.paidAt || new Date())
+  const planName = invoice?.subscriptionPlan || null
+  const paidAt = fmtDate(invoice?.paidAt || new Date())
   const expiresAt = fmtDate(invoice?.expirationDate)
-  const invNum    = invoice?.invoiceNumber || null
-  const txId      = invoice?.paymentId || null
+  const invNum = invoice?.invoiceNumber || null
+  const txId = invoice?.paymentId || null
   const displayAmt = invoice?.amount != null
     ? fmtAmt(invoice.amount)
     : amount ? `$${(amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : null
@@ -73,27 +73,27 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
   const recipientEmail = invoice?.email
 
   const rows = [
-    invNum    && { label: 'Invoice', value: invNum },
-    planName  && { label: 'Plan', value: planName.replace(' Subscription Plan', '').replace(' Plan', '') },
-    paidAt    && { label: 'Paid On', value: paidAt },
+    invNum && { label: 'Invoice', value: invNum },
+    planName && { label: 'Plan', value: planName.replace(' Subscription Plan', '').replace(' Plan', '') },
+    paidAt && { label: 'Paid On', value: paidAt },
     expiresAt && { label: 'Expires', value: expiresAt },
     !expiresAt && { label: 'Expires', value: 'Never (Unlimited)' },
     recipientEmail && { label: 'Email', value: recipientEmail },
-    txId      && { label: 'Transaction', value: txId, mono: true },
+    txId && { label: 'Transaction', value: txId, mono: true },
   ].filter(Boolean)
 
   return (
     <div className={`transition-all duration-500 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
       {/* Top success strip */}
-      <div className="px-6 pt-8 pb-6 text-center border-b border-slate-100">
-        <div className="relative inline-flex mb-5">
+      <div className="px-6 pt-5 pb-3 text-center border-b border-slate-100">
+        <div className="relative inline-flex mb-3">
           <div
-            className="w-16 h-16 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-100"
+            className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-100"
             style={{ animation: show ? 'pmPopIn 0.4s cubic-bezier(0.34,1.56,0.64,1)' : 'none' }}
           >
             <svg
-              className="w-8 h-8 text-white"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.8}
+              className="w-6 h-6 text-white"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}
               style={{
                 strokeDasharray: 36,
                 strokeDashoffset: show ? 0 : 36,
@@ -107,24 +107,24 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
             style={{ animation: show ? 'pmRipple 1s ease-out 0.35s forwards' : 'none' }} />
         </div>
 
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600 mb-1">Payment Successful</p>
+        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-600 mb-0.5">Payment Successful</p>
         {displayAmt && (
-          <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-1">{displayAmt}</p>
+          <p className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-0.5">{displayAmt}</p>
         )}
         {recipientName && (
-          <p className="text-sm text-slate-500 mt-1">{recipientName}</p>
+          <p className="text-xs font-semibold text-slate-600 mt-0.5">{recipientName}</p>
         )}
-        <p className="text-xs text-slate-400 mt-1">Confirmation email will be sent shortly.</p>
+        <p className="text-[10px] text-slate-400 mt-0.5">Confirmation email will be sent shortly.</p>
       </div>
 
       {/* Detail rows */}
       {rows.length > 0 && (
-        <div className="px-5 py-4">
-          <div className="rounded-2xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+        <div className="px-5 py-2">
+          <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
             {rows.map(({ label, value, mono }) => (
-              <div key={label} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex-shrink-0">{label}</span>
-                <span className={`text-right font-semibold text-slate-700 ${mono ? 'font-mono text-[10px] break-all' : 'text-xs truncate max-w-[200px]'}`}>{value}</span>
+              <div key={label} className="flex items-center justify-between px-3.5 py-1.5 gap-3">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 flex-shrink-0">{label}</span>
+                <span className={`text-right font-semibold text-slate-700 ${mono ? 'font-mono text-[9px] break-all' : 'text-xs truncate max-w-[200px]'}`}>{value}</span>
               </div>
             ))}
           </div>
@@ -132,13 +132,13 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
       )}
 
       {/* Actions */}
-      <div className="px-5 pb-6 flex flex-col gap-2.5">
+      <div className="px-5 pb-4 flex flex-col gap-2">
         <button
           onClick={onViewInvoice}
-          className="w-full inline-flex items-center justify-center gap-2 text-white font-bold px-5 py-3 rounded-xl text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+          className="w-full inline-flex items-center justify-center gap-2 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all hover:opacity-90 active:scale-[0.98]"
           style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e293b 100%)' }}
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
           </svg>
           View &amp; Download Invoice
@@ -146,12 +146,11 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          className="w-full inline-flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold px-5 py-2.5 rounded-xl text-sm transition-all border border-slate-200"
+          className="w-full inline-flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold px-4 py-2 rounded-lg text-xs transition-all border border-slate-200"
         >
           Close
         </button>
       </div>
-
       <style>{`
         @keyframes pmPopIn  { 0%{transform:scale(0.4);opacity:0} 100%{transform:scale(1);opacity:1} }
         @keyframes pmRipple { 0%{transform:scale(1);opacity:0.5} 100%{transform:scale(1.9);opacity:0} }
@@ -162,14 +161,14 @@ function PaymentSuccessScreen({ amount, invoice, onViewInvoice, onClose }) {
 
 // ── Inner checkout form ───────────────────────────────────────────────────────
 function CheckoutForm({ registrationId, registrationModel, amount, subscriptionData, purpose, onSuccess, onCancel }) {
-  const stripe   = useStripe()
+  const stripe = useStripe()
   const elements = useElements()
-  const [loading,       setLoading]      = useState(false)
-  const [error,         setError]        = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const [elementsReady, setElementsReady] = useState(false)
   // phase: 'form' | 'success' | 'invoice'
-  const [phase,         setPhase]        = useState('form')
-  const [invoice,       setInvoice]      = useState(null)
+  const [phase, setPhase] = useState('form')
+  const [invoice, setInvoice] = useState(null)
 
   // Rename Stripe's "US bank account" tab label to "Bank" via DOM patch.
   // Stripe renders tab buttons in the host page DOM (not in an iframe),
@@ -210,23 +209,23 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
     if (!invDoc) return null
     const lineItem = Array.isArray(invDoc.lineItems) ? invDoc.lineItems[0] : null
     return {
-      invoiceNumber:     invDoc.invoiceNumber || '—',
-      paidAt:            invDoc.paidAt || invDoc.issueDate,
-      subscriptionPlan:  invDoc.subscriptionPlan || '—',
-      expirationDate:    invDoc.expirationDate || null,
-      amount:            invDoc.totalAmount ?? invDoc.subtotal ?? 0,
-      currency:          invDoc.currency || 'USD',
-      paymentId:         invDoc.stripePaymentIntentId || fallbackPaymentId || '—',
-      name:              invDoc.recipientName || invDoc.recipientCompany || '',
-      email:             invDoc.recipientEmail || '',
-      phone:             invDoc.recipientPhone || '',
-      address:           [invDoc.recipientAddress1, invDoc.recipientAddress2, invDoc.recipientCountry].filter(Boolean).join(', '),
-      isAirline:         invDoc.isAirline || registrationModel !== 'Individual',
-      airlineName:       invDoc.recipientCompany || '',
-      pricePerCert:      lineItem?.unitPrice ?? null,
-      holderCount:       lineItem?.quantity ?? null,
-      invoiceDraft:      invDoc.draft || null,
-      _invoiceDocId:     invDoc._id,
+      invoiceNumber: invDoc.invoiceNumber || '—',
+      paidAt: invDoc.paidAt || invDoc.issueDate,
+      subscriptionPlan: invDoc.subscriptionPlan || '—',
+      expirationDate: invDoc.expirationDate || null,
+      amount: invDoc.totalAmount ?? invDoc.subtotal ?? 0,
+      currency: invDoc.currency || 'USD',
+      paymentId: invDoc.stripePaymentIntentId || fallbackPaymentId || '—',
+      name: invDoc.recipientName || invDoc.recipientCompany || '',
+      email: invDoc.recipientEmail || '',
+      phone: invDoc.recipientPhone || '',
+      address: [invDoc.recipientAddress1, invDoc.recipientAddress2, invDoc.recipientCountry].filter(Boolean).join(', '),
+      isAirline: invDoc.isAirline || registrationModel !== 'Individual',
+      airlineName: invDoc.recipientCompany || '',
+      pricePerCert: lineItem?.unitPrice ?? null,
+      holderCount: lineItem?.quantity ?? null,
+      invoiceDraft: invDoc.draft || null,
+      _invoiceDocId: invDoc._id,
     }
   }
 
@@ -261,11 +260,11 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
               Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              paymentIntentId:   paymentIntent.id,
+              paymentIntentId: paymentIntent.id,
               registrationId,
               registrationModel,
-              purpose:           purpose || 'payment',
-              userAgent:         navigator.userAgent,
+              purpose: purpose || 'payment',
+              userAgent: navigator.userAgent,
             }),
           })
           confirmJson = await confirmRes.json()
@@ -294,8 +293,8 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
         const inv = canonicalInvoice
           ? invoiceDocToInvoice(canonicalInvoice, confirmJson.payment?.stripePaymentIntentId || paymentIntent.id)
           : (confirmJson.payment
-              ? serverPaymentToInvoice(confirmJson.payment)
-              : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date()))
+            ? serverPaymentToInvoice(confirmJson.payment)
+            : buildInvoice(subscriptionData, registrationModel, amount, paymentIntent, new Date()))
 
         setInvoice(inv)
         setPhase('success')
@@ -430,53 +429,53 @@ export function buildInvoice(sub, registrationModel, amountCents, paymentIntent,
   })()
 
   return {
-    invoiceNumber:    sub?.invoiceNumber || paymentIntent?.id?.slice(-8).toUpperCase() || '—',
-    paidAt:           now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
+    invoiceNumber: sub?.invoiceNumber || paymentIntent?.id?.slice(-8).toUpperCase() || '—',
+    paidAt: now instanceof Date ? now.toISOString() : new Date(now).toISOString(),
     subscriptionPlan: sub?.subscriptionPlan || '—',
-    expirationDate:   expirationDate ? new Date(expirationDate).toISOString() : null,
-    amount:           amountCents / 100,
-    currency:         'USD',
-    paymentId:        paymentIntent?.id || '—',
+    expirationDate: expirationDate ? new Date(expirationDate).toISOString() : null,
+    amount: amountCents / 100,
+    currency: 'USD',
+    paymentId: paymentIntent?.id || '—',
     name: isAirline
       ? sub?.airlineName || [sub?.firstName, sub?.lastName].filter(Boolean).join(' ')
       : [sub?.firstName, sub?.lastName].filter(Boolean).join(' '),
-    email:   sub?.email || sub?.contactEmail || sub?.paymentEmail || '—',
-    phone:   sub?.phone || sub?.contactPhone || '—',
+    email: sub?.email || sub?.contactEmail || sub?.paymentEmail || '—',
+    phone: sub?.phone || sub?.contactPhone || '—',
     address: [sub?.addressLine1, sub?.city, sub?.state, sub?.postalCode, sub?.country].filter(Boolean).join(', '),
     isAirline,
     pricePerCert: sub?.pricePerCertificate || sub?.pricePerCert || null,
-    holderCount:  sub?.committedCount || sub?.holderCountValue || sub?.certificateHolders?.length || null,
-    primaryCertificate:   sub?.primaryCertificate || null,
+    holderCount: sub?.committedCount || sub?.holderCountValue || sub?.certificateHolders?.length || null,
+    primaryCertificate: sub?.primaryCertificate || null,
     faaCertificateNumber: sub?.faaCertificateNumber || null,
-    iacraTrackingNumber:  sub?.iacraTrackingNumber || null,
+    iacraTrackingNumber: sub?.iacraTrackingNumber || null,
   }
 }
 
 // ── Utility: convert server Payment doc to invoice shape ──────────────────────
 export function serverPaymentToInvoice(paymentDoc) {
   if (!paymentDoc) return null
-  const snap  = paymentDoc.invoiceSnapshot || {}
+  const snap = paymentDoc.invoiceSnapshot || {}
   const draft = paymentDoc.invoiceDraft || null
   return {
-    invoiceNumber:    paymentDoc.invoiceNumber || snap.invoiceNumber || '—',
-    paidAt:           paymentDoc.paidAt || snap.subscriptionDate,
+    invoiceNumber: paymentDoc.invoiceNumber || snap.invoiceNumber || '—',
+    paidAt: paymentDoc.paidAt || snap.subscriptionDate,
     subscriptionPlan: snap.subscriptionPlan || '—',
-    multiYearCount:   snap.multiYearCount  || null,
-    expirationDate:   snap.expirationDate  || null,
-    amount:           paymentDoc.amountDollars ?? snap.totalPaid ?? 0,
-    currency:         paymentDoc.currency || 'USD',
-    paymentId:        paymentDoc.stripePaymentIntentId || null,
-    name:             snap.name || '—',
-    email:            snap.email || '—',
-    phone:            snap.phone || '',
-    address:          snap.address || '',
-    isAirline:        snap.isAirline || false,
-    airlineName:      snap.airlineName || '',
-    pricePerCert:     snap.pricePerCert || null,
-    holderCount:      snap.holderCount || null,
-    primaryCertificate:   snap.primaryCertificate || null,
+    multiYearCount: snap.multiYearCount || null,
+    expirationDate: snap.expirationDate || null,
+    amount: paymentDoc.amountDollars ?? snap.totalPaid ?? 0,
+    currency: paymentDoc.currency || 'USD',
+    paymentId: paymentDoc.stripePaymentIntentId || null,
+    name: snap.name || '—',
+    email: snap.email || '—',
+    phone: snap.phone || '',
+    address: snap.address || '',
+    isAirline: snap.isAirline || false,
+    airlineName: snap.airlineName || '',
+    pricePerCert: snap.pricePerCert || null,
+    holderCount: snap.holderCount || null,
+    primaryCertificate: snap.primaryCertificate || null,
     faaCertificateNumber: snap.faaCertificateNumber || null,
-    iacraTrackingNumber:  snap.iacraTrackingNumber  || null,
+    iacraTrackingNumber: snap.iacraTrackingNumber || null,
     invoiceDraft: draft,
     _paymentDocId: paymentDoc._id,
   }
@@ -486,13 +485,13 @@ export function serverPaymentToInvoice(paymentDoc) {
 export default function PaymentModal({
   registrationId, registrationModel, amount, subscriptionData, purpose,
   onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount,
-  renewalExactCount, additionalHolderCount, renewalHoldersToRemove,
+  renewalExactCount, additionalHolderCount, renewalHoldersToRemove, holderGroupId,
 }) {
-  const [clientSecret,  setClientSecret]  = useState(null)
-  const [fetchError,    setFetchError]    = useState(null)
-  const [loading,       setLoading]       = useState(true)
+  const [clientSecret, setClientSecret] = useState(null)
+  const [fetchError, setFetchError] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [backendAmount, setBackendAmount] = useState(null)
-  const [visible,       setVisible]       = useState(true)
+  const [visible, setVisible] = useState(true)
   const handleClose = () => setVisible(false)
 
   useEffect(() => {
@@ -515,18 +514,19 @@ export default function PaymentModal({
           registrationModel,
           purpose: purpose || 'payment',
         }
-        if (newSubscriptionPlan)    body.newSubscriptionPlan    = newSubscriptionPlan
-        if (renewalMultiYearCount)  body.renewalMultiYearCount  = renewalMultiYearCount
-        if (renewalExactCount)      body.renewalExactCount      = renewalExactCount
+        if (newSubscriptionPlan) body.newSubscriptionPlan = newSubscriptionPlan
+        if (renewalMultiYearCount) body.renewalMultiYearCount = renewalMultiYearCount
+        if (renewalExactCount) body.renewalExactCount = renewalExactCount
         if (renewalHoldersToRemove && renewalHoldersToRemove.length)
           body.renewalHoldersToRemove = renewalHoldersToRemove
-        if (additionalHolderCount)  body.additionalHolderCount  = additionalHolderCount
+        if (additionalHolderCount) body.additionalHolderCount = additionalHolderCount
+        if (holderGroupId) body.holderGroupId = holderGroupId
 
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
-          method:  'POST',
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization:  `Bearer ${localStorage.getItem('ifoa_token') || ''}`,
+            Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}`,
           },
           body: JSON.stringify(body),
         })
@@ -549,75 +549,75 @@ export default function PaymentModal({
 
   return createPortal(
     <AnimatePresence onExitComplete={onClose}>
-    {visible && (
-    <motion.div
-      variants={BACKDROP} initial="hidden" animate="visible" exit="exit"
-      className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-start justify-center pt-10 sm:pt-14 px-4 pb-4" style={{ zIndex: 9999 }}>
-      <motion.div
-        variants={PANEL} initial="hidden" animate="visible" exit="exit"
-        className="w-full max-w-md rounded-3xl bg-white flex flex-col overflow-hidden"
-        style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(82vh, 700px)' }}>
+      {visible && (
+        <motion.div
+          variants={BACKDROP} initial="hidden" animate="visible" exit="exit"
+          className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-start justify-center pt-10 sm:pt-14 px-4 pb-4" style={{ zIndex: 9999 }}>
+          <motion.div
+            variants={PANEL} initial="hidden" animate="visible" exit="exit"
+            className="w-full max-w-md rounded-3xl bg-white flex flex-col overflow-hidden"
+            style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(82vh, 700px)' }}>
 
-        {/* Header */}
-        <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-900">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+            {/* Header */}
+            <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-900">
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Checkout</p>
+                  <p className="text-slate-900 font-black text-[14px] leading-tight">Complete Your Subscription</p>
+                </div>
+              </div>
+              <button onClick={handleClose}
+                className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Secure Checkout</p>
-              <p className="text-slate-900 font-black text-[14px] leading-tight">Complete Your Subscription</p>
-            </div>
-          </div>
-          <button onClick={handleClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-3">
-          {loading && (
-            <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
-              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-                <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-              </svg>
-              <span className="text-sm">Preparing secure checkout…</span>
-            </div>
-          )}
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {loading && (
+                <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+                  </svg>
+                  <span className="text-sm">Preparing secure checkout…</span>
+                </div>
+              )}
 
-          {fetchError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
-              <p className="font-bold mb-1">Failed to initialize payment</p>
-              <p>{fetchError}</p>
-              <button onClick={handleClose} className="mt-3 text-xs font-semibold underline">Close</button>
-            </div>
-          )}
+              {fetchError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+                  <p className="font-bold mb-1">Failed to initialize payment</p>
+                  <p>{fetchError}</p>
+                  <button onClick={handleClose} className="mt-3 text-xs font-semibold underline">Close</button>
+                </div>
+              )}
 
-          {clientSecret && (
-            <Elements
-              stripe={stripePromise}
-              options={{ clientSecret, appearance: ELEMENTS_APPEARANCE }}
-            >
-              <CheckoutForm
-                registrationId={registrationId}
-                registrationModel={registrationModel}
-                amount={backendAmount ?? amount}
-                subscriptionData={subscriptionData}
-                purpose={purpose || 'payment'}
-                onSuccess={onSuccess}
-                onCancel={handleClose}
-              />
-            </Elements>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-    )}
+              {clientSecret && (
+                <Elements
+                  stripe={stripePromise}
+                  options={{ clientSecret, appearance: ELEMENTS_APPEARANCE }}
+                >
+                  <CheckoutForm
+                    registrationId={registrationId}
+                    registrationModel={registrationModel}
+                    amount={backendAmount ?? amount}
+                    subscriptionData={subscriptionData}
+                    purpose={purpose || 'payment'}
+                    onSuccess={onSuccess}
+                    onCancel={handleClose}
+                  />
+                </Elements>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>,
     document.body
   )

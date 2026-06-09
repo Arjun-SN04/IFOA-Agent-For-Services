@@ -28,6 +28,7 @@ const {
   renewAirlinesSubscription,
   activateWirePayment,
 } = require('../controller/airlinesController');
+const { adminHolderUpgrade, markHolderGroupPaid } = require('../controller/paymentController');
 
 // 5 MB file size limit; only accept Excel MIME types
 const upload = multer({
@@ -133,6 +134,9 @@ router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, update
 router.patch('/:id/request-invoice',        authMiddleware, requireOwnership, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
 router.patch('/:id/activate-wire', authMiddleware, requireAdmin, activateWirePayment);
+// admin manual holder-upgrade (increase committed count + create holder group)
+router.post('/:id/admin-holder-upgrade', authMiddleware, requireAdmin, adminHolderUpgrade);
+router.post('/:id/holder-group/:groupId/mark-paid', authMiddleware, requireAdmin, markHolderGroupPaid);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 // renew — owner or admin (additional ownership check inside controller)
@@ -158,6 +162,22 @@ router.patch('/:id/holders/:holderId', authMiddleware, requireOwnership, async (
     allowed.forEach(field => {
       if (req.body[field] !== undefined) holder[field] = req.body[field];
     });
+
+    // Reassign holder to a holder group (or base plan when null/'').
+    if (req.body.holderGroupId !== undefined) {
+      const target = req.body.holderGroupId || null;
+      if (target) {
+        const group = airline.holderGroups.id(target);
+        if (!group) return res.status(400).json({ success: false, message: 'Holder group not found.' });
+        const used = airline.certificateHolders.filter(
+          h => String(h.holderGroupId || '') === String(target) && String(h._id) !== String(holder._id),
+        ).length;
+        if (used >= group.count)
+          return res.status(400).json({ success: false, message: `This plan group is full (${group.count} slot${group.count !== 1 ? 's' : ''}).` });
+      }
+      holder.holderGroupId = target;
+    }
+
     await airline.save();
     return res.json({ success: true, data: airline });
   } catch (err) {

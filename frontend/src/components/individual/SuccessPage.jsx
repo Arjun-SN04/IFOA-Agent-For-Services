@@ -19,7 +19,13 @@ const STEPS = [
 ]
 
 export default function SuccessPage({ name }) {
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [])
+  useEffect(() => {
+    // Clear any scroll-lock leaked by a payment/modal overlay so the full page
+    // (including the action buttons below) is reachable.
+    document.body.style.overflow = ''
+    document.documentElement.style.overflow = ''
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [])
   return (
     <>
     <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fbff_0%,#eef5ff_100%)] px-4 py-14">

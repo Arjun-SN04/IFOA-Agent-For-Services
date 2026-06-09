@@ -436,7 +436,7 @@ async function buildOtpHtml(code, purpose) {
     <mj-text>Use the verification code below to continue. The code expires in <strong>10 minutes</strong>.</mj-text>
     <mj-text align="center" padding="24px 0">
       <div style="display:inline-block;background:#f0f4ff;border:2px solid #0000ff;border-radius:12px;padding:20px 40px;">
-        <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#0000ff;font-family:monospace;">${escHtml(code)}</span>
+        <span style="font-size:36px;font-weight:900;letter-spacing:10px;text-indent:10px;color:#0000ff;font-family:monospace;white-space:nowrap;">${escHtml(code)}</span>
       </div>
     </mj-text>
     <mj-text font-size="13px" color="#64748b">If you did not request this, you can safely ignore this email. Your account will not be affected.</mj-text>

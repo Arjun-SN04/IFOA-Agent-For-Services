@@ -21,10 +21,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { generateIFOAInvoicePDF, triggerInvoiceDownload } from '../../utils/ifoaInvoicePdf'
 
 const INV_BACKDROP = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.18 } }, exit: { opacity: 0, transition: { duration: 0.15 } } }
-const INV_PANEL    = {
-  hidden:  { opacity: 0, y: 12, scale: 0.97 },
+const INV_PANEL = {
+  hidden: { opacity: 0, y: 12, scale: 0.97 },
   visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 340, damping: 28 } },
-  exit:    { opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.15, ease: 'easeIn' } },
+  exit: { opacity: 0, y: 8, scale: 0.98, transition: { duration: 0.15, ease: 'easeIn' } },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ function plusDays(dateIso, days) {
  */
 export function resolveAirlineTotal(inv) {
   const pricePerCert = Number(inv.pricePerCert) || 0
-  const holderCount  = Number(inv.holderCount)  || 0
+  const holderCount = Number(inv.holderCount) || 0
   if (pricePerCert > 0 && holderCount > 0) {
     const years = inv.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(inv.multiYearCount) > 1
       ? Number(inv.multiYearCount)
@@ -76,45 +76,44 @@ export function buildPDFPayload(inv) {
   // Always merge the parent invoiceNumber as a fallback so the PDF never shows
   // a blank or auto-generated number when the admin didn't explicitly set one.
   if (inv.invoiceDraft && typeof inv.invoiceDraft === 'object' &&
-      (inv.invoiceDraft.lineItems?.length || inv.invoiceDraft.invoiceNumber)) {
+    (inv.invoiceDraft.lineItems?.length || inv.invoiceDraft.invoiceNumber)) {
     return {
       ...inv.invoiceDraft,
       invoiceNumber: inv.invoiceDraft.invoiceNumber || inv.invoiceNumber,
-      paymentId:     inv.invoiceDraft.paymentId     || inv.paymentId || null,
+      paymentId: inv.invoiceDraft.paymentId || inv.paymentId || null,
     }
   }
 
   // ── Path 2: build from payment/snapshot fields ────────────────────────────
-  const issueDate   = toIsoDate(inv.paidAt) || toIsoDate(new Date())
-  const quantity    = inv.isAirline ? (Number(inv.holderCount) || 1) : 1
-  const unitPrice   = inv.isAirline
+  const issueDate = toIsoDate(inv.paidAt) || toIsoDate(new Date())
+  const quantity = inv.isAirline ? (Number(inv.holderCount) || 1) : 1
+  const unitPrice = inv.isAirline
     ? (Number(inv.pricePerCert) || Number(inv.amount) || 0)
     : (Number(inv.amount) || 0)
 
   // Always recompute airline total from pricePerCert × holderCount (× years for multi-year)
-  const totalPrice  = inv.isAirline ? resolveAirlineTotal(inv) : (Number(inv.amount) || 0)
+  const totalPrice = inv.isAirline ? resolveAirlineTotal(inv) : (Number(inv.amount) || 0)
 
   const planBase = (inv.subscriptionPlan || '1 Year Plan')
     .replace(' Subscription Plan', '')
     .replace(' Plan', '')
-  const planDesc = `Agent For Service - ${
-    inv.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(inv.multiYearCount) > 1
+  const planDesc = `Agent For Service - ${inv.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(inv.multiYearCount) > 1
       ? `${planBase} (${Number(inv.multiYearCount)} Years)`
       : planBase
-  }`
+    }`
 
   return {
-    invoiceNumber:     inv.invoiceNumber || `INV-${Date.now()}`,
+    invoiceNumber: inv.invoiceNumber || `INV-${Date.now()}`,
     issueDate,
-    payableBy:         plusDays(issueDate, 30),
-    recipientCompany:  inv.isAirline ? (inv.airlineName || inv.name || '') : '',
-    recipientName:     inv.name || '',
-    recipientContact:  inv.name || '',
+    payableBy: plusDays(issueDate, 30),
+    recipientCompany: inv.isAirline ? (inv.airlineName || inv.name || '') : '',
+    recipientName: inv.name || '',
+    recipientContact: inv.name || '',
     recipientAddress1: inv.address || '',
     recipientAddress2: '',
-    recipientCountry:  '',
-    paymentMethod:     inv.paymentMethodType || 'card',
-    paymentId:         inv.paymentId || null,
+    recipientCountry: '',
+    paymentMethod: inv.paymentMethodType || 'card',
+    paymentId: inv.paymentId || null,
     lineItems: [
       {
         description: planDesc,
@@ -128,7 +127,7 @@ export function buildPDFPayload(inv) {
 
 // Export for use by admin dashboard so both use the same PDF generator
 export async function downloadInvoicePDF(inv) {
-  const payload   = buildPDFPayload(inv)
+  const payload = buildPDFPayload(inv)
   const generated = await generateIFOAInvoicePDF(payload)
   triggerInvoiceDownload(generated)
 }
@@ -136,8 +135,8 @@ export async function downloadInvoicePDF(inv) {
 // ── Invoice Preview Modal ─────────────────────────────────────────────────────
 export default function InvoiceModal({ invoice, onClose }) {
   const [downloading, setDownloading] = useState(false)
-  const [previewing,  setPreviewing]  = useState(false)
-  const [visible,     setVisible]     = useState(true)
+  const [previewing, setPreviewing] = useState(false)
+  const [visible, setVisible] = useState(true)
   const handleClose = () => setVisible(false)
 
   if (!invoice) return null
@@ -186,136 +185,136 @@ export default function InvoiceModal({ invoice, onClose }) {
 
   return (
     <AnimatePresence onExitComplete={onClose}>
-    {visible && (
-    <motion.div
-      variants={INV_BACKDROP} initial="hidden" animate="visible" exit="exit"
-      className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <motion.div
-        variants={INV_PANEL} initial="hidden" animate="visible" exit="exit"
-        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+      {visible && (
+        <motion.div
+          variants={INV_BACKDROP} initial="hidden" animate="visible" exit="exit"
+          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            variants={INV_PANEL} initial="hidden" animate="visible" exit="exit"
+            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
 
-        {/* Accent bar */}
-        <div className="h-0.5 w-full bg-slate-200" />
+            {/* Accent bar */}
+            <div className="h-0.5 w-full bg-slate-200" />
 
-        {/* Header */}
-        <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Payment Confirmed</p>
-            <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Your Invoice</h2>
-          </div>
-          <button onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Invoice Preview */}
-        <div className="px-6 py-5 space-y-4">
-
-          {/* Paid status + invoice number */}
-          <div className="flex items-center gap-2.5">
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
-              Paid
-            </span>
-            <span className="text-xs text-slate-300">·</span>
-            <span className="text-xs font-medium text-slate-400 tracking-wide">{invoice.invoiceNumber}</span>
-          </div>
-
-          {/* Summary card */}
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <div className="divide-y divide-slate-100">
-              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription Plan</span>
-                <span className="text-sm font-semibold text-slate-800">{invoice.subscriptionPlan}</span>
+            {/* Header */}
+            <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Payment Confirmed</p>
+                <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Your Invoice</h2>
               </div>
-              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Billed To</span>
-                <span className="text-sm font-semibold text-slate-800">{invoice.name}</span>
-              </div>
-              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Start Date</span>
-                <span className="text-sm font-semibold text-slate-800">{fmt(invoice.paidAt)}</span>
-              </div>
-              <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Expiration</span>
-                <span className={`text-sm font-semibold ${expiry === 'Never (Unlimited)' ? 'text-emerald-600' : 'text-slate-800'}`}>{expiry}</span>
-              </div>
+              <button onClick={handleClose}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            {/* Total row */}
-            <div className="px-4 py-4 flex justify-between items-center bg-slate-900">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Paid</span>
-              <span className="text-xl font-black text-white">
-                ${displayTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+
+            {/* Invoice Preview */}
+            <div className="px-6 py-5 space-y-4">
+
+              {/* Paid status + invoice number */}
+              <div className="flex items-center gap-2.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                  Paid
+                </span>
+                <span className="text-xs text-slate-300">·</span>
+                <span className="text-xs font-medium text-slate-400 tracking-wide">{invoice.invoiceNumber}</span>
+              </div>
+
+              {/* Summary card */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="divide-y divide-slate-100">
+                  <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subscription Plan</span>
+                    <span className="text-sm font-semibold text-slate-800">{invoice.subscriptionPlan}</span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Billed To</span>
+                    <span className="text-sm font-semibold text-slate-800">{invoice.name}</span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Start Date</span>
+                    <span className="text-sm font-semibold text-slate-800">{fmt(invoice.paidAt)}</span>
+                  </div>
+                  <div className="px-4 py-3 flex justify-between items-center bg-white hover:bg-slate-50/60 transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Expiration</span>
+                    <span className={`text-sm font-semibold ${expiry === 'Never (Unlimited)' ? 'text-emerald-600' : 'text-slate-800'}`}>{expiry}</span>
+                  </div>
+                </div>
+                {/* Total row */}
+                <div className="px-4 py-4 flex justify-between items-center bg-slate-900">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Paid</span>
+                  <span className="text-xl font-black text-white">
+                    ${displayTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {invoice.paymentId && (
+                <p className="text-[11px] text-slate-400 text-center">
+                  Payment ID: <span className="font-mono text-slate-500">{invoice.paymentId}</span>
+                </p>
+              )}
             </div>
-          </div>
 
-          {invoice.paymentId && (
-            <p className="text-[11px] text-slate-400 text-center">
-              Payment ID: <span className="font-mono text-slate-500">{invoice.paymentId}</span>
-            </p>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="px-6 pb-6 space-y-2.5">
-          <div className="flex gap-2.5">
-            <button
-              onClick={handlePreview}
-              disabled={previewing || downloading}
-              className="flex-1 inline-flex items-center justify-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
-            >
-              {previewing ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-                  </svg>
-                  Opening…
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  Preview PDF
-                </>
-              )}
-            </button>
-            <button
-              onClick={handleDownload}
-              disabled={downloading || previewing}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
-            >
-              {downloading ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
-                    <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
-                  </svg>
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  Download PDF
-                </>
-              )}
-            </button>
-          </div>
-          <button onClick={handleClose}
-            className="w-full rounded-xl py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition">
-            Close
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-    )}
+            {/* Actions */}
+            <div className="px-6 pb-6 space-y-2.5">
+              <div className="flex gap-2.5">
+                <button
+                  onClick={handlePreview}
+                  disabled={previewing || downloading}
+                  className="flex-1 inline-flex items-center justify-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
+                >
+                  {previewing ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                        <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+                      </svg>
+                      Opening…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Preview PDF
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading || previewing}
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl text-sm transition-all disabled:opacity-60"
+                >
+                  {downloading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
+                        <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
+                      </svg>
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      Download PDF
+                    </>
+                  )}
+                </button>
+              </div>
+              <button onClick={handleClose}
+                className="w-full rounded-xl py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition">
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>
   )
 }

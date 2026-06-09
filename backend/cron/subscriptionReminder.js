@@ -200,14 +200,38 @@ async function activateMaturedRenewals() {
   }
 }
 
+/**
+ * activateMaturedGroupRenewals
+ *
+ * Activates queued holder-group renewals (stored on Airlines.holderGroups[].nextRenewal)
+ * whose activationDate has passed. Independent of the Renewal collection.
+ */
+async function activateMaturedGroupRenewals() {
+  const now = new Date();
+  const { performQueuedGroupRenewals } = require('../controller/paymentController');
+  const airlines = await Airlines.find({
+    'holderGroups.nextRenewal.activationDate': { $lte: now, $ne: null },
+  });
+  if (!airlines.length) return;
+  console.log(`[renewalCron] ${airlines.length} airline(s) with due group renewals`);
+  for (const doc of airlines) {
+    try {
+      await performQueuedGroupRenewals(doc, Airlines);
+    } catch (e) {
+      console.error(`[renewalCron] Group renewal activation failed for ${doc._id}:`, e.message);
+    }
+  }
+}
+
 function startSubscriptionReminderCron() {
   // Run daily at 8:00 AM UTC
   cron.schedule('0 8 * * *', () => {
     console.log('[reminderCron] Running subscription expiry check...');
     runReminders().catch((e) => console.error('[reminderCron] Error:', e.message));
     activateMaturedRenewals().catch((e) => console.error('[renewalCron] Error:', e.message));
+    activateMaturedGroupRenewals().catch((e) => console.error('[renewalCron][group] Error:', e.message));
   });
   console.log('[reminderCron] Scheduled — runs daily at 08:00 UTC');
 }
 
-module.exports = { startSubscriptionReminderCron, activateMaturedRenewals };
+module.exports = { startSubscriptionReminderCron, activateMaturedRenewals, activateMaturedGroupRenewals };

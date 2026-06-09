@@ -116,12 +116,19 @@ export async function generateIFOAInvoicePDF(inv) {
 
   txt('Invoice  ' + displayInvoiceNumber, ML, Y, { size: 12, font: fontBold })
   if (inv.paymentId && inv.paymentId !== '—') {
+    // Admin/manual payments use an internal reference (admin_<ids>) — show a clean
+    // "MANUAL <invoice #>" instead of leaking raw database ids. ASCII only so the
+    // standard PDF font can always encode it.
+    const rawTxn = String(inv.paymentId)
+    const txnValue = (/^admin[_-]/i.test(rawTxn) || /^manual/i.test(rawTxn))
+      ? `MANUAL${displayInvoiceNumber ? ' ' + displayInvoiceNumber : ''}`
+      : rawTxn
     const txLabel = 'txn: '
     const txLabelW = fontReg.widthOfTextAtSize(txLabel, 7.5)
-    const txValW   = fontReg.widthOfTextAtSize(String(inv.paymentId), 7.5)
+    const txValW   = fontReg.widthOfTextAtSize(txnValue, 7.5)
     const txX      = ML + W - txLabelW - txValW
     txt(txLabel, txX, Y, { size: 7.5, color: MID })
-    txt(String(inv.paymentId), txX + txLabelW, Y, { size: 7.5, color: DARK })
+    txt(txnValue, txX + txLabelW, Y, { size: 7.5, color: DARK })
   }
   Y -= 8
   line(ML, Y, ML + W, Y, RED, 1.5)

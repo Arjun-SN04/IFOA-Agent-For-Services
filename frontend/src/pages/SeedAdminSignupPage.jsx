@@ -56,7 +56,6 @@ export default function SeedAdminSignupPage() {
         lastName: form.lastName,
         email: form.email,
         password: form.password,
-        seedSecret: import.meta.env.VITE_SEED_ADMIN_SECRET,
       })
       setSession(data.token, data.user)
       navigate('/admin', { replace: true })
