@@ -144,10 +144,15 @@ async function createOrUpdateInvoice(opts) {
     ? `Agent For Service - Holder Upgrade`
     : `Agent For Service - ${planLabel}`;
 
+  // For multi-year airline plans the line total is pricePerCert × holderCount × years.
+  // Fold the year multiplier into unitPrice (per-holder-for-the-full-term) so the
+  // invoice arithmetic reconciles: quantity × unitPrice === totalPrice. Previously
+  // unitPrice was the single-year per-cert rate, so qty × unit was off by `years`.
+  const airlineUnitPrice = (pricePerCert || amountDollars) * yearMultiplier;
   const lineItems = [{
     description: lineDescription,
     quantity:    isAirline ? holderCount || 1 : 1,
-    unitPrice:   isAirline ? pricePerCert || amountDollars : amountDollars,
+    unitPrice:   isAirline ? airlineUnitPrice : amountDollars,
     totalPrice:  totalAmount,
   }];
 

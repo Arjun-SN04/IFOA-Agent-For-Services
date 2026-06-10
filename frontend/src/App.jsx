@@ -120,6 +120,45 @@ function ScrollToTop() {
 }
 
 function App() {
+  useEffect(() => {
+    const checkScrollLock = () => {
+      const hasModal = Array.from(document.querySelectorAll('.fixed.inset-0')).some(el => {
+        const cls = el.className || '';
+        return (
+          cls.includes('z-50') || 
+          cls.includes('z-[50]') || 
+          cls.includes('z-[60]') || 
+          cls.includes('z-[61]') || 
+          cls.includes('z-[70]') || 
+          cls.includes('z-[71]') || 
+          cls.includes('z-[100]') || 
+          cls.includes('z-[120]') || 
+          cls.includes('bg-slate-900') || 
+          cls.includes('bg-black') || 
+          cls.includes('backdrop-blur') || 
+          el.style.zIndex === '9999' ||
+          el.style.zIndex === '99999'
+        );
+      });
+      
+      if (hasModal) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = '';
+      }
+    };
+
+    checkScrollLock();
+
+    const observer = new MutationObserver(checkScrollLock);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <DataCacheProvider>

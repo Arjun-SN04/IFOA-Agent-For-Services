@@ -59,16 +59,17 @@
   }
 }
 
-/* ── Blue utility overrides (brand alignment) ── */
+/* ── Slate/Charcoal utility overrides for clean/professional monochrome highlights ── */
 .bg-blue-600 { background-color: var(--brand-primary) !important; }
 .hover\:bg-blue-700:hover { background-color: var(--brand-primary-dark) !important; }
-.text-blue-600 { color: var(--brand-primary) !important; }
-.text-blue-700 { color: var(--brand-primary-dark) !important; }
-.border-blue-200 { border-color: #b8b8ff !important; }
-.border-blue-300 { border-color: #9c9cff !important; }
+.text-blue-600 { color: #1e293b !important; }
+.text-blue-700 { color: #0f172a !important; }
+.border-blue-100 { border-color: #e2e8f0 !important; }
+.border-blue-200 { border-color: #cbd5e1 !important; }
+.border-blue-300 { border-color: #94a3b8 !important; }
 .border-blue-500 { border-color: var(--brand-primary-light) !important; }
-.bg-blue-50 { background-color: var(--brand-primary-muted) !important; }
-.bg-blue-100 { background-color: #e5e5ff !important; }
+.bg-blue-50 { background-color: #f1f5f9 !important; }
+.bg-blue-100 { background-color: #e2e8f0 !important; }
 .bg-blue-500 { background-color: var(--brand-primary-light) !important; }
 .focus\:border-blue-500:focus { border-color: var(--brand-primary) !important; }
 
@@ -287,3 +288,23 @@ input[type="date"].focus\:ring-blue-500\/20:focus {
 .react-tel-input .flag-dropdown.open {
   z-index: 9999 !important;
 }
+
+/* ── Custom Sleek Scrollbars for Panels and Modals ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+

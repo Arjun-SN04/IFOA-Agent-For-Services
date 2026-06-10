@@ -21,6 +21,7 @@ const AirlinesSubscription = require('../models/AirlinesSubscription');
 const auth                = require('../middleware/auth');
 const {
   generateInvoiceNumber,
+  peekNextInvoiceNumber,
   isInvoiceNumberTaken,
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
@@ -35,9 +36,12 @@ const adminOnly = (req, res, next) => {
 // Atomically increments the per-year counter and returns a unique number
 // in the format "Invoice US-350-26". Called by the admin invoice modal on open
 // so the form always shows a real DB-backed number — never a random placeholder.
+// Uses peek (no counter increment) so opening + cancelling the modal does not
+// burn a sequence number and leave permanent gaps. The number is only committed
+// when the invoice is actually saved.
 router.get('/generate-number', auth, adminOnly, async (req, res) => {
   try {
-    const invoiceNumber = await generateInvoiceNumber();
+    const invoiceNumber = await peekNextInvoiceNumber();
     res.json({ success: true, invoiceNumber });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

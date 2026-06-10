@@ -563,6 +563,10 @@ exports.updateIndividual = async (req, res) => {
 
     if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
 
+    // Capture the registration's invoice number BEFORE the update so we can sync the
+    // canonical Invoice/Payment docs if an admin renames it (see post-update block).
+    let oldInvoiceNumberForSync = null;
+    let invoiceNumberChanged    = false;
     if (isAdmin && Object.prototype.hasOwnProperty.call(payload, 'invoiceNumber')) {
       const requestedInvoiceNumber = normalizeInvoiceNumber(payload.invoiceNumber);
       const currentDoc = await Individual.findById(req.params.id).select('invoiceNumber');
@@ -578,6 +582,8 @@ exports.updateIndividual = async (req, res) => {
             message: 'Invoice number already exists. Please use a different value.',
           });
         }
+        oldInvoiceNumberForSync = currentInvoiceNumber;
+        invoiceNumberChanged    = true;
       }
       payload.invoiceNumber = requestedInvoiceNumber;
     }
@@ -641,6 +647,39 @@ exports.updateIndividual = async (req, res) => {
     if (!individual)
       return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: individual });
+
+    // ── Sync canonical Invoice + Payment when admin renamed the invoice number ──
+    // Keeps the Invoice doc (and its PDF) aligned with the registration's number
+    // instead of leaving the old number on the canonical record.
+    if (invoiceNumberChanged && payload.invoiceNumber) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const Payment = require('../models/Payment');
+        const newNum  = payload.invoiceNumber;
+        const matchInvoice = oldInvoiceNumberForSync
+          ? { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }
+          : { registrationId: req.params.id, paymentId: null };
+        const targetInvoice = await Invoice.findOne(matchInvoice).sort({ createdAt: 1 });
+        if (targetInvoice) {
+          targetInvoice.invoiceNumber = newNum;
+          if (targetInvoice.draft) {
+            targetInvoice.draft = { ...targetInvoice.draft, invoiceNumber: newNum };
+            targetInvoice.markModified('draft');
+          }
+          await targetInvoice.save();
+          if (targetInvoice.paymentId) {
+            await Payment.findByIdAndUpdate(targetInvoice.paymentId, { $set: { invoiceNumber: newNum } });
+          }
+        } else if (oldInvoiceNumberForSync) {
+          await Payment.updateMany(
+            { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync },
+            { $set: { invoiceNumber: newNum } },
+          );
+        }
+      } catch (syncErr) {
+        console.warn('[updateIndividual] Invoice number sync failed:', syncErr.message);
+      }
+    }
 
     // Send confirmation email when admin activates a subscription for the first time.
     if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaid) {

@@ -645,6 +645,10 @@ exports.updateAirlinesSubscription = async (req, res) => {
     if (payload.email) payload.email = String(payload.email).toLowerCase().trim();
     if (payload.pointOfContactEmail) payload.pointOfContactEmail = String(payload.pointOfContactEmail).toLowerCase().trim();
 
+    // Capture the registration's invoice number BEFORE the update so we can sync the
+    // canonical Invoice/Payment docs if an admin renames it (see post-update block).
+    let oldInvoiceNumberForSync = null;
+    let invoiceNumberChanged    = false;
     if (isAdmin && Object.prototype.hasOwnProperty.call(payload, 'invoiceNumber')) {
       const requestedInvoiceNumber = normalizeInvoiceNumber(payload.invoiceNumber);
       let currentDoc = await Airlines.findById(req.params.id).select('invoiceNumber');
@@ -661,6 +665,8 @@ exports.updateAirlinesSubscription = async (req, res) => {
             message: 'Invoice number already exists. Please use a different value.',
           });
         }
+        oldInvoiceNumberForSync = currentInvoiceNumber;
+        invoiceNumberChanged    = true;
       }
       payload.invoiceNumber = requestedInvoiceNumber;
     }
@@ -796,6 +802,43 @@ exports.updateAirlinesSubscription = async (req, res) => {
     if (!doc)
       return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: doc });
+
+    // ── Sync canonical Invoice + Payment when admin renamed the invoice number ──
+    // The registration's invoiceNumber points at the active subscription invoice.
+    // Without this, the dashboard/registration showed the new number while the
+    // Invoice doc (and its PDF) kept the old one — a number mismatch.
+    if (invoiceNumberChanged && payload.invoiceNumber) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const Payment = require('../models/Payment');
+        const newNum  = payload.invoiceNumber;
+        // Only the invoice the registration was pointing to (old number) follows the
+        // rename — renewal/upgrade invoices for the same registration are untouched.
+        const matchInvoice = oldInvoiceNumberForSync
+          ? { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }
+          : { registrationId: req.params.id, paymentId: null };
+        const targetInvoice = await Invoice.findOne(matchInvoice).sort({ createdAt: 1 });
+        if (targetInvoice) {
+          targetInvoice.invoiceNumber = newNum;
+          if (targetInvoice.draft) {
+            targetInvoice.draft = { ...targetInvoice.draft, invoiceNumber: newNum };
+            targetInvoice.markModified('draft');
+          }
+          await targetInvoice.save();
+          if (targetInvoice.paymentId) {
+            await Payment.findByIdAndUpdate(targetInvoice.paymentId, { $set: { invoiceNumber: newNum } });
+          }
+        } else if (oldInvoiceNumberForSync) {
+          // No Invoice doc, but a Payment may carry the old number directly.
+          await Payment.updateMany(
+            { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync },
+            { $set: { invoiceNumber: newNum } },
+          );
+        }
+      } catch (syncErr) {
+        console.warn('[updateAirlines] Invoice number sync failed:', syncErr.message);
+      }
+    }
 
     // Send confirmation email when admin activates a subscription for the first time.
     if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaidAir) {

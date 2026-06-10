@@ -486,6 +486,7 @@ export default function PaymentModal({
   registrationId, registrationModel, amount, subscriptionData, purpose,
   onClose, onSuccess, newSubscriptionPlan, renewalMultiYearCount,
   renewalExactCount, additionalHolderCount, renewalHoldersToRemove, holderGroupId,
+  mergeTarget,
 }) {
   const [clientSecret, setClientSecret] = useState(null)
   const [fetchError, setFetchError] = useState(null)
@@ -521,6 +522,8 @@ export default function PaymentModal({
           body.renewalHoldersToRemove = renewalHoldersToRemove
         if (additionalHolderCount) body.additionalHolderCount = additionalHolderCount
         if (holderGroupId) body.holderGroupId = holderGroupId
+        // 'base' | '<groupId>' — merge added holders into an existing plan instead of a new group
+        if (mergeTarget) body.mergeTarget = mergeTarget
 
         const res = await fetch(`${BASE_URL}/payments/create-intent`, {
           method: 'POST',
@@ -545,18 +548,18 @@ export default function PaymentModal({
       }
     }
     create()
-  }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount])
+  }, [registrationId, registrationModel, newSubscriptionPlan, renewalMultiYearCount, renewalExactCount, additionalHolderCount, mergeTarget])
 
   return createPortal(
     <AnimatePresence onExitComplete={onClose}>
       {visible && (
         <motion.div
           variants={BACKDROP} initial="hidden" animate="visible" exit="exit"
-          className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-start justify-center pt-10 sm:pt-14 px-4 pb-4" style={{ zIndex: 9999 }}>
+          className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
           <motion.div
             variants={PANEL} initial="hidden" animate="visible" exit="exit"
             className="w-full max-w-md rounded-3xl bg-white flex flex-col overflow-hidden"
-            style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(82vh, 700px)' }}>
+            style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(85vh, 700px)' }}>
 
             {/* Header */}
             <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">

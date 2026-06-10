@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react'
+import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react'
 
 import { useAuth } from '../../context/AuthContext'
 import { useDataCache } from '../../context/DataCacheContext'
@@ -444,11 +444,11 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
   return (
     /* Backdrop */
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-hidden animate-modal-backdrop">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden animate-modal-backdrop">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal card — scrollable internally */}
-      <div ref={modalRef} className="relative z-10 w-full max-w-4xl my-8 rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto animate-modal-panel">
+      <div ref={modalRef} className="relative z-10 w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto animate-modal-panel">
 
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-t-2xl sticky top-0 z-10">
@@ -953,7 +953,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  AddHoldersModal                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function AddHoldersModal({ sub, token, onClose, onSuccess }) {
+function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }) {
   const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
   const API = axios.create({ baseURL: BASE_URL })
   API.interceptors.request.use((config) => {
@@ -965,7 +965,12 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
   const existingHolders = sub.certificateHolders || []
   const holderGroups = sub.holderGroups || []
   // Which plan batch these new holders are filled into ('' = base plan).
-  const [targetGroupId, setTargetGroupId] = useState('')
+  // Pre-scoped to a specific upgrade group when opened from a group card.
+  const [targetGroupId, setTargetGroupId] = useState(
+    initialGroupId && holderGroups.some(g => String(g._id) === String(initialGroupId))
+      ? String(initialGroupId)
+      : ''
+  )
 
   const currentCount = existingHolders.length
   const committedCount = sub.committedCount || currentCount
@@ -1094,6 +1099,22 @@ function AddHoldersModal({ sub, token, onClose, onSuccess }) {
               : `Adding ${holders.length} member${holders.length !== 1 ? 's' : ''}`}
           </span>
         </div>
+
+        {/* Group price summary — shown when scoped to a specific upgrade plan */}
+        {targetGroup && (
+          <div className="px-4 sm:px-6 py-3 border-b border-slate-100 bg-blue-50/40 flex-shrink-0">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-sm font-black text-slate-900">{planShortLabel(targetGroup.plan, targetGroup.multiYearCount)} upgrade</span>
+              <span className="text-sm font-black text-slate-900 tabular-nums">${Number(targetGroup.amount || 0).toFixed(2)}</span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Price / cert</span>${Number(targetGroup.pricePerCert || 0)}</div>
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Slots</span>{filledInTarget} / {targetGroup.count} filled</div>
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Expiry</span>{targetGroup.plan === 'Unlimited Plan' ? 'Never' : (targetGroup.expirationDate ? fmtYMD(targetGroup.expirationDate) : '—')}</div>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">These slots are already paid for — fill them with certificate holders below at no extra charge.</p>
+          </div>
+        )}
 
         {/* Plan batch selector — assign new holders to a paid upgrade group */}
         {holderGroups.length > 0 && (
@@ -1303,8 +1324,30 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
   )
   const [batchYears, setBatchYears] = useState(2) // for Multi-Year
   const [showPayment, setShowPayment] = useState(false)
+  // '' = create a separate independent plan (default). 'base' or a group _id = merge
+  // the added holders into that existing plan (they adopt its expiry).
+  const [mergeTarget, setMergeTarget] = useState('')
 
   const isMultiYear = batchPlan === 'Multiple Years Subscription Plan'
+
+  // Existing plans the added holders can merge INTO — must be the same plan type.
+  const mergeTargets = useMemo(() => {
+    const list = []
+    if (sub.subscriptionPlan === batchPlan)
+      list.push({ id: 'base', label: `Base plan — ${planShortLabel(sub.subscriptionPlan, sub.multiYearCount)}`, expiry: sub.expirationDate })
+        ; (sub.holderGroups || []).forEach((g) => {
+          if (g.plan === batchPlan)
+            list.push({ id: String(g._id), label: `${planShortLabel(g.plan, g.multiYearCount)} plan`, expiry: g.expirationDate })
+        })
+    return list
+  }, [sub, batchPlan])
+
+  // Reset the merge choice whenever the plan changes (eligibility changes).
+  useEffect(() => { setMergeTarget('') }, [batchPlan])
+
+  const mergeExpiry = mergeTarget
+    ? (mergeTargets.find(t => t.id === mergeTarget)?.expiry || null)
+    : null
 
   // Tier-based ppc: derived from NEW total count (currentCount + additionalCount)
   const totalCount = currentCount + additionalCount
@@ -1377,6 +1420,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
         additionalHolderCount={additionalCount}
         newSubscriptionPlan={batchPlan}
         renewalMultiYearCount={isMultiYear ? yearsMult : undefined}
+        mergeTarget={mergeTarget || undefined}
         onClose={() => {
           setShowPayment(false)
           forceUnlockScroll()
@@ -1437,8 +1481,8 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
                   type="button"
                   onClick={() => setBatchPlan(opt.value)}
                   className={`rounded-lg border px-2 py-2 text-xs font-bold transition ${batchPlan === opt.value
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                 >{opt.short}</button>
               ))}
@@ -1456,6 +1500,31 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
               </div>
             )}
           </div>
+
+          {/* Merge vs separate — only when an existing plan of the same type exists */}
+          {mergeTargets.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Attach these holders to</p>
+              <label className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${mergeTarget === '' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === ''} onChange={() => setMergeTarget('')} />
+                <span>
+                  <span className="block text-xs font-bold text-slate-800">New separate plan</span>
+                  <span className="block text-[10px] text-slate-400">Independent — full-length term starting today, its own expiry.</span>
+                </span>
+              </label>
+              {mergeTargets.map((t) => (
+                <label key={t.id} className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${mergeTarget === t.id ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === t.id} onChange={() => setMergeTarget(t.id)} />
+                  <span>
+                    <span className="block text-xs font-bold text-slate-800">Merge into {t.label}</span>
+                    <span className="block text-[10px] text-slate-400">
+                      Shares that plan's dates{t.expiry ? ` — expires ${fmtYMD(t.expiry)}` : (batchPlan === 'Unlimited Plan' ? ' — no expiry' : '')}. Separate invoice.
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {/* Selector */}
           <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-3">
@@ -1726,7 +1795,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
             {/* Expiry chip — light, urgency-coloured */}
             {(() => {
               const expired = daysLeft !== null && daysLeft <= 0
-              const urgent  = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
+              const urgent = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
               const chipCls = expired ? 'bg-red-50 border-red-100' : urgent ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'
               const iconCls = expired ? 'text-red-500' : urgent ? 'text-amber-500' : 'text-slate-400'
               const titleCls = expired ? 'text-red-700' : urgent ? 'text-amber-800' : 'text-slate-800'
@@ -1786,8 +1855,8 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Renewal Plan</p>
                 {plans.map((p) => (
                   <label key={p.value} className={`flex items-center gap-3 px-3.5 py-2 rounded-xl border-2 cursor-pointer transition-all ${plan === p.value
-                      ? 'border-blue-500 bg-blue-50/70'
-                      : 'border-slate-100 hover:border-slate-200 bg-white'
+                    ? 'border-blue-500 bg-blue-50/70'
+                    : 'border-slate-100 hover:border-slate-200 bg-white'
                     }`}>
                     <div className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${plan === p.value ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
                       }`}>
@@ -1838,10 +1907,10 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                   type="button"
                   onClick={() => setShowHolderSelector(v => !v)}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border-2 transition-all ${showHolderSelector
-                      ? 'border-blue-500 bg-blue-50'
-                      : selectionValid
-                        ? 'border-emerald-300 bg-emerald-50/70'
-                        : 'border-amber-300 bg-amber-50/70'
+                    ? 'border-blue-500 bg-blue-50'
+                    : selectionValid
+                      ? 'border-emerald-300 bg-emerald-50/70'
+                      : 'border-amber-300 bg-amber-50/70'
                     }`}
                 >
                   <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -2027,6 +2096,8 @@ export default function SubscriptionPage() {
   const [payTarget, setPayTarget] = useState(null)
   const [payingId, setPayingId] = useState(null)
   const [showAddHolders, setShowAddHolders] = useState(false)
+  // When set, the AddHoldersModal opens pre-scoped to this holder-upgrade group.
+  const [manageGroupId, setManageGroupId] = useState('')
   const [viewInvoice, setViewInvoice] = useState(null)
   const [viewAllInvoices, setViewAllInvoices] = useState(null) // array of invoice docs
   const [editTarget, setEditTarget] = useState(null)
@@ -2252,7 +2323,8 @@ export default function SubscriptionPage() {
                   setPayingId(s._id)
                   setShowPayModal(true)
                 }}
-                onAddHolders={() => { setSub(s); setShowAddHolders(true) }}
+                onAddHolders={() => { setSub(s); setManageGroupId(''); setShowAddHolders(true) }}
+                onManageGroup={(group) => { setSub(s); setManageGroupId(String(group._id || '')); setShowAddHolders(true) }}
                 onUpgrade={() => setUpgradeTarget(s)}
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onViewAllInvoices={(docs, reg) => setViewAllInvoices({ docs, reg })}
@@ -2321,12 +2393,14 @@ export default function SubscriptionPage() {
         <AddHoldersModal
           sub={sub}
           token={token}
-          onClose={() => setShowAddHolders(false)}
+          initialGroupId={manageGroupId}
+          onClose={() => { setShowAddHolders(false); setManageGroupId('') }}
           onSuccess={(result) => {
             setSubs(prev => prev.map(s => s._id === result.data?._id ? result.data : s))
             setSub(result.data)
             cacheSet(`subs_${user?.id || user?.email}`, [result.data])
             setShowAddHolders(false)
+            setManageGroupId('')
           }}
         />
       )}
@@ -2525,7 +2599,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup }) {
   const navigate = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid = s.isPaid === true || s.paymentStatus === 'paid'
@@ -2919,8 +2993,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               <button
                 onClick={onRenew}
                 className={`inline-flex items-center gap-1.5 rounded-xl border-0 px-4 py-1.5 text-[10px] font-bold tracking-wide shadow-sm transition-all duration-150 ${isExpired
-                    ? 'bg-slate-900 text-white hover:bg-slate-800'
-                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-md hover:shadow-blue-200'
+                  ? 'bg-slate-900 text-white hover:bg-slate-800'
+                  : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-md hover:shadow-blue-200'
                   }`}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -2975,11 +3049,91 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               )}
               <Row label="Total Amount" value={money(displayTotal)} />
 
-              {/* ── Holder Upgrade Plans — each expand purchase shown distinctly ── */}
+              {/* ── Subscription Plans — base plan + each added counter plan ── */}
               {Array.isArray(s.holderGroups) && s.holderGroups.length > 0 && (
                 <div className="py-3 border-b border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">Holder Upgrade Plans</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">Subscription Plans</p>
                   <div className="space-y-2">
+                    {/* BASE PLAN — the main subscription that drives the holder capacity */}
+                    {(() => {
+                      const totalGroupSlots = (s.holderGroups || []).reduce((acc, gg) => acc + Number(gg.count || 0), 0)
+                      const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - totalGroupSlots)
+                      const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
+                      const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
+                      const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
+                      const baseExpiry = s.expirationDate ? new Date(s.expirationDate) : null
+                      const baseDays = baseExpiry ? Math.ceil((baseExpiry - new Date()) / (1000 * 60 * 60 * 24)) : null
+                      const baseExpired = !baseUnlimited && baseDays !== null && baseDays <= 0
+                      const baseQueued = !!s.nextRenewal?.paidAt
+                      const baseCanRenew = active && !baseUnlimited && !baseQueued && baseDays !== null && baseDays <= 60
+                      const basePct = Math.min(100, Math.round((baseFilled / Math.max(1, baseCommitted)) * 100))
+                      const baseInv = String(s.invoiceNumber || '').replace(/^invoice\s+/i, '')
+                      return (
+                        <div
+                          role={onAddHolders ? 'button' : undefined}
+                          tabIndex={onAddHolders ? 0 : undefined}
+                          onClick={onAddHolders ? () => onAddHolders() : undefined}
+                          onKeyDown={onAddHolders ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAddHolders() } } : undefined}
+                          title={onAddHolders ? 'View base-plan holders & manage' : undefined}
+                          className={`rounded-xl border-2 border-blue-300 bg-blue-50/50 px-4 py-3 transition ${onAddHolders ? 'cursor-pointer hover:border-blue-400 hover:shadow-md' : ''}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 rounded-full px-2 py-0.5">Base Plan</span>
+                              <span className="text-sm font-black text-slate-900">{planShortLabel(s.subscriptionPlan, s.multiYearCount)}</span>
+                              {baseExpired && <span className="text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5">Expired</span>}
+                              {baseQueued && <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Renewing</span>}
+                            </div>
+                            <span className="text-sm font-black text-slate-900 tabular-nums">{money(basePpc * baseCommitted)}</span>
+                          </div>
+
+                          <div className="mt-2.5">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
+                              <span>{baseFilled} / {baseCommitted} base holders</span>
+                              <span className={baseUnlimited ? 'text-emerald-600' : (baseExpired ? 'text-amber-600' : '')}>
+                                {baseUnlimited ? 'No expiry' : (baseExpiry ? `Expires ${fmtYMD(baseExpiry)}` : '—')}
+                              </span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/70 overflow-hidden">
+                              <div className={`h-full rounded-full ${baseFilled >= baseCommitted ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ width: `${basePct}%` }} />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400">
+                            <span><span className="font-semibold text-slate-500">${basePpc}</span>/cert</span>
+                            {baseInv && <span className="font-mono">Invoice {baseInv}</span>}
+                          </div>
+
+                          <p className="mt-2 text-[10px] text-slate-500 leading-snug">
+                            Main subscription — total holder capacity depends on this plan. Renew it before expiry to keep all plans active.
+                          </p>
+
+                          {baseQueued && (
+                            <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
+                              <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <p className="text-[10px] font-bold text-emerald-700 leading-snug">
+                                {planShortLabel(s.nextRenewal.plan)} renewal queued — activates {s.nextRenewal.activationDate ? fmtYMD(s.nextRenewal.activationDate) : 'at expiry'}
+                              </p>
+                            </div>
+                          )}
+
+                          {baseCanRenew && onRenew && (
+                            <button onClick={(e) => { e.stopPropagation(); onRenew() }}
+                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-600/20 transition">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Renew base plan
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Added counter plans */}
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 pt-1">Added Holder Plans</p>
                     {s.holderGroups.map((g, gi) => {
                       const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
                       const gExpiry = g.expirationDate ? new Date(g.expirationDate) : null
@@ -2991,7 +3145,15 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                       const pct = Math.min(100, Math.round((filled / Math.max(1, g.count)) * 100))
                       const invNum = String(g.invoiceNumber || '').replace(/^invoice\s+/i, '')
                       return (
-                        <div key={String(g._id || gi)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <div
+                          key={String(g._id || gi)}
+                          role={onManageGroup ? 'button' : undefined}
+                          tabIndex={onManageGroup ? 0 : undefined}
+                          onClick={onManageGroup ? () => onManageGroup(g) : undefined}
+                          onKeyDown={onManageGroup ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onManageGroup(g) } } : undefined}
+                          className={`rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition ${onManageGroup ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''}`}
+                          title={onManageGroup ? 'View holders & manage this plan' : undefined}
+                        >
                           {/* Header: plan name + type badge + amount */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -3039,7 +3201,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
 
                           {gCanRenew && onRenewGroup && (
                             <button
-                              onClick={() => onRenewGroup(g)}
+                              onClick={(e) => { e.stopPropagation(); onRenewGroup(g) }}
                               className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-600/20 transition"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -3210,8 +3372,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
               className={`fixed z-50 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xl flex flex-col ${isDesktopPositioned
-                  ? ""
-                  : "top-24 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px] max-h-[calc(100vh-7rem)]"
+                ? ""
+                : "top-24 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px] max-h-[calc(100vh-7rem)]"
                 }`}
               style={popupStyle}
             >
@@ -3279,8 +3441,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                           const pInfo = holderPlanInfo(h, s)
                           return (
                             <span className={`inline-block mt-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${pInfo.isGroup
-                                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                              ? 'bg-blue-50 border-blue-200 text-blue-700'
+                              : 'bg-slate-50 border-slate-200 text-slate-500'
                               }`}>
                               {pInfo.label}{pInfo.isGroup ? ' · upgrade' : ''}
                             </span>

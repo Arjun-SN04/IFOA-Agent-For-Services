@@ -19,6 +19,7 @@ const {
   adminImportIndividualsFromExcel,
   renewIndividual,
 } = require('../controller/individualController');
+const { adminRenew } = require('../controller/paymentController');
 
 // 5 MB file size limit; only accept Excel MIME types
 const upload = multer({
@@ -68,8 +69,13 @@ router.patch('/:id/mark-paid',              authMiddleware, requireAdmin, markIn
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
 router.patch('/:id/renewal-invoice',        authMiddleware, requireAdmin, setRenewalInvoiceNumber);
 router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, updateRenewalDetails);
-// renew — owner or admin (additional ownership check inside controller)
-router.post('/:id/renew',                   authMiddleware, requireOwnership, renewIndividual);
+// renew — ADMIN ONLY. This endpoint extends the plan WITHOUT collecting payment,
+// so it must never be reachable by record owners (that was a free-renewal loophole).
+// Paid self-service renewals go through the Stripe flow: POST /api/payments/create-intent
+// (purpose:'renewal') + /confirm, which applies the renewal only after payment succeeds.
+router.post('/:id/renew',                   authMiddleware, requireAdmin, renewIndividual);
+// Admin renews on the customer's behalf (no payment) + generates invoice.
+router.post('/:id/admin-renew',             authMiddleware, requireAdmin, adminRenew);
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/',    authMiddleware, requireAdmin,     getAllIndividuals);

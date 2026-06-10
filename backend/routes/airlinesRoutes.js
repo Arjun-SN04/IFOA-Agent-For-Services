@@ -29,7 +29,7 @@ const {
   activateWirePayment,
   activateGroupRenewalNow,
 } = require('../controller/airlinesController');
-const { adminHolderUpgrade, markHolderGroupPaid } = require('../controller/paymentController');
+const { adminHolderUpgrade, markHolderGroupPaid, adminRenew } = require('../controller/paymentController');
 
 // 5 MB file size limit; only accept Excel MIME types
 const upload = multer({
@@ -142,8 +142,14 @@ router.post('/:id/holder-group/:groupId/mark-paid', authMiddleware, requireAdmin
 router.post('/:id/holder-group/:groupId/activate-renewal', authMiddleware, requireAdmin, activateGroupRenewalNow);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
-// renew — owner or admin (additional ownership check inside controller)
-router.post('/:id/renew',                   authMiddleware, requireOwnership, renewAirlinesSubscription);
+// renew — ADMIN ONLY. This endpoint extends the plan WITHOUT collecting payment,
+// so it must never be reachable by record owners (that was a free-renewal loophole).
+// Paid self-service renewals go through the Stripe flow: POST /api/payments/create-intent
+// (purpose:'renewal') + /confirm, which applies the renewal only after payment succeeds.
+router.post('/:id/renew',                   authMiddleware, requireAdmin, renewAirlinesSubscription);
+// Admin renews on the customer's behalf (no payment) + generates invoice.
+// Same queued/immediate flow as the Stripe path; admin sets plan/count/price/invoice.
+router.post('/:id/admin-renew',             authMiddleware, requireAdmin, adminRenew);
 
 // ── Holder management (owner or admin) ───────────────────────────────────────
 

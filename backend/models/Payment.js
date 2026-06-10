@@ -102,6 +102,10 @@ const PaymentSchema = new mongoose.Schema({
   renewalMultiYearCount: { type: Number, default: null },  // years for multi-year renewal
   renewalExactCount:     { type: Number, default: null },  // holder count for airline renewal
   renewalHoldersToRemove: { type: [String], default: null }, // holder _ids to remove on activation
+  // Holder-upgrade only: where the bought slots went — 'base' | '<groupId>' | '' (new group).
+  mergeTarget: { type: String, default: '' },
+  // Idempotency guard for holder-upgrade application (confirm + webhook may both run).
+  appliedToRegistration: { type: Boolean, default: false },
 
   // ── Metadata / misc ────────────────────────────────────────────────────────
   description:  { type: String, default: '' },

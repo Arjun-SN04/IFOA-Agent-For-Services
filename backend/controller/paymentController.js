@@ -93,7 +93,13 @@ function computeExpiry(subscriptionPlan, fromDate, multiYearCount) {
     return d;
   }
   if (subscriptionPlan === 'Multiple Years Subscription Plan') {
-    const years = (multiYearCount && multiYearCount > 1) ? multiYearCount : 3;
+    // Fallback MUST match computeAirlinesExpirationDate() in airlinesController.js
+    // (both use 2 = the documented multi-year minimum). Previously this used 3,
+    // so the same airline got a different expiry depending on whether it was
+    // activated via the Stripe path (here) or the wire/manual path. Callers
+    // always pass an explicit count for individuals, so this only fixes the
+    // airline cross-path discrepancy.
+    const years = (multiYearCount && multiYearCount > 1) ? multiYearCount : 2;
     d.setFullYear(d.getFullYear() + years);
     return d;
   }
@@ -137,7 +143,16 @@ async function updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrat
 
     const newCount = Number(updatedReg.committedCount || updatedReg.holderCountValue || 0);
     const newPpc   = Number(updatedReg.pricePerCertificate || updatedReg.pricePerCert || 0);
-    const newTotal = newPpc > 0 && newCount > 0 ? newPpc * newCount : originalPayment.amountDollars;
+    // Multi-year base plans bill pricePerCert × count × years — include the year
+    // multiplier so the refreshed original invoice total matches the active plan
+    // (previously this dropped the years factor and undercounted multi-year totals).
+    const snapPlan = updatedReg.subscriptionPlan || originalPayment.invoiceSnapshot?.subscriptionPlan;
+    const refreshYears = snapPlan === 'Multiple Years Subscription Plan'
+      ? Math.max(2, Number(updatedReg.multiYearCount || originalPayment.invoiceSnapshot?.multiYearCount || 2))
+      : 1;
+    const newTotal = newPpc > 0 && newCount > 0
+      ? newPpc * newCount * refreshYears
+      : originalPayment.amountDollars;
 
     // Update the snapshot in-place so the invoice PDF always reflects the current plan.
     const snap        = { ...(originalPayment.invoiceSnapshot || {}) };
@@ -160,10 +175,13 @@ async function updateOriginalInvoiceAfterHolderUpgrade(registrationId, registrat
     // These are passed as draftOverrides so the draft (what the PDF reads) is
     // also updated — without this, the draft keeps the old quantity/total even
     // though the Invoice root fields are correctly updated.
+    // Fold the year multiplier into unitPrice so quantity × unitPrice === totalPrice.
     const updatedLineItems = [{
-      description: `Agent For Service - ${planLabel}`,
+      description: refreshYears > 1
+        ? `Agent For Service - ${planLabel} (${refreshYears} Years)`
+        : `Agent For Service - ${planLabel}`,
       quantity:    newCount,
-      unitPrice:   newPpc,
+      unitPrice:   newPpc * refreshYears,
       totalPrice:  newTotal,
     }];
 
@@ -532,6 +550,87 @@ async function applyPaymentToRegistration(registrationId, registrationModel, pay
   return Model.findByIdAndUpdate(registrationId, { $set: update }, { new: true });
 }
 
+/**
+ * applyHolderUpgrade
+ *
+ * Applies a paid holder-upgrade to the registration. Idempotent (confirm + webhook
+ * may both fire) via paymentDoc.appliedToRegistration.
+ *
+ *  mergeTarget === 'base'  → grow the base plan capacity (new holders inherit base dates)
+ *  mergeTarget === groupId → grow that group's capacity (new holders inherit its dates)
+ *  mergeTarget falsy       → create a NEW independent group with its own full-length term
+ *
+ * In every case committedCount grows by additionalCount and a SEPARATE invoice
+ * (the Payment doc) already covers the charge. Merge never creates a new group.
+ */
+async function applyHolderUpgrade(registrationId, registrationModel, paymentDoc, meta) {
+  const additionalCount = Number(meta.additionalCount || 0);
+  if (additionalCount < 1) return null;
+
+  // Idempotency — bail if a prior run (confirm or webhook) already applied this payment.
+  const guard = await Payment.findById(paymentDoc._id).select('appliedToRegistration');
+  if (guard?.appliedToRegistration) {
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    return doc;
+  }
+
+  const { doc, Model } = await findRegistration(registrationId, registrationModel);
+  if (!doc || !Model) return null;
+
+  const now        = new Date();
+  const batchPlan  = meta.batchPlan || doc.subscriptionPlan;
+  const batchYears = meta.batchYears || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null);
+  const newPpc     = Number(meta.newPpc || tierPpcForPlan(batchPlan, additionalCount));
+  const mergeTarget = meta.mergeTarget || '';
+  const currentCommitted = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+  const newCount = currentCommitted + additionalCount;
+
+  let updatedReg;
+  if (mergeTarget === 'base') {
+    // Grow base capacity; merged holders fill base slots → inherit base plan/expiry.
+    const set = { committedCount: newCount, holderCountValue: String(newCount) };
+    if (batchPlan === doc.subscriptionPlan) set.pricePerCertificate = newPpc;
+    updatedReg = await Model.findByIdAndUpdate(registrationId, { $set: set }, { new: true });
+  } else if (mergeTarget) {
+    // Grow the target group's capacity; merged holders inherit that group's dates.
+    const grp = doc.holderGroups?.id ? doc.holderGroups.id(mergeTarget) : null;
+    if (grp) {
+      grp.count = Number(grp.count || 0) + additionalCount;
+      doc.committedCount = newCount;
+      doc.holderCountValue = String(newCount);
+      await doc.save();
+      updatedReg = doc;
+    }
+  }
+
+  if (!updatedReg) {
+    // Separate plan (default) — or merge target vanished: create a new independent group.
+    const groupExists = (doc.holderGroups || []).some(g => String(g.paymentId || '') === String(paymentDoc._id));
+    const set = { committedCount: newCount, holderCountValue: String(newCount) };
+    if (batchPlan === doc.subscriptionPlan) set.pricePerCertificate = newPpc;
+    const op = { $set: set };
+    if (!groupExists) {
+      op.$push = {
+        holderGroups: {
+          plan:             batchPlan,
+          multiYearCount:   batchYears,
+          count:            additionalCount,
+          pricePerCert:     newPpc,
+          amount:           paymentDoc.amountDollars,
+          subscriptionDate: now,
+          expirationDate:   computeExpiry(batchPlan, now, batchYears) || null,
+          paymentId:        paymentDoc._id,
+          invoiceNumber:    paymentDoc.invoiceNumber || '',
+        },
+      };
+    }
+    updatedReg = await Model.findByIdAndUpdate(registrationId, op, { new: true });
+  }
+
+  await Payment.findByIdAndUpdate(paymentDoc._id, { $set: { appliedToRegistration: true } });
+  return updatedReg;
+}
+
 // ─── POST /api/payments/create-intent ────────────────────────────────────────
 exports.createPaymentIntent = async (req, res) => {
   try {
@@ -545,6 +644,7 @@ exports.createPaymentIntent = async (req, res) => {
       additionalHolderCount: bodyAdditionalCount, // optional: extra holders being added (holder-upgrade)
       renewalHoldersToRemove: bodyHoldersToRemove, // optional: holder _ids to remove on activation (airline downgrade)
       holderGroupId: bodyHolderGroupId,            // optional: renew a specific holder group instead of the base plan
+      mergeTarget: bodyMergeTarget,                // optional (holder-upgrade): 'base' | '<groupId>' — merge slots into an existing plan
     } = req.body;
 
     if (!registrationId || !registrationModel)
@@ -713,7 +813,10 @@ exports.createPaymentIntent = async (req, res) => {
     if (purpose === 'renewal' && bodyHolderGroupId) metadata.holderGroupId = String(bodyHolderGroupId);
     // computedYears was set inside the amount block; propagate to metadata so
     // confirm/webhook can store it on the Payment doc without re-deriving.
-    if (computedYears) metadata.renewalMultiYearCount = String(computedYears);
+    // Clamp to the SAME Math.max(2, …) the amount calculations applied so the
+    // stored/charged term can never diverge (confirm/webhook build group expiry
+    // from this value, while the amount was charged for the clamped term).
+    if (computedYears) metadata.renewalMultiYearCount = String(Math.max(2, Number(computedYears)));
     // Store the RENEWAL-selected holder count for airline renewals
     if (bodyRenewalCount) metadata.renewalExactCount = String(Number(bodyRenewalCount));
     // Store holder IDs to remove on activation (airline downgrade: user reduced count)
@@ -732,6 +835,15 @@ exports.createPaymentIntent = async (req, res) => {
       // batchPlan mirrors newSubscriptionPlan; set explicitly so confirm/webhook
       // always have the group's plan even when it equals the base plan.
       metadata.batchPlan = _batchPlan;
+      // Merge target — validate it's an existing plan of the SAME type, then persist.
+      if (bodyMergeTarget) {
+        if (bodyMergeTarget === 'base') {
+          if (doc.subscriptionPlan === _batchPlan) metadata.mergeTarget = 'base';
+        } else {
+          const tg = (doc.holderGroups || []).find(g => String(g._id) === String(bodyMergeTarget));
+          if (tg && tg.plan === _batchPlan) metadata.mergeTarget = String(bodyMergeTarget);
+        }
+      }
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -959,6 +1071,7 @@ exports.confirmPayment = async (req, res) => {
       renewalMultiYearCount,
       renewalExactCount,
       renewalHoldersToRemove,
+      mergeTarget: pi.metadata?.mergeTarget || '',
     };
 
     // Use findOneAndUpdate with upsert to prevent duplicate Payment docs under
@@ -995,55 +1108,15 @@ exports.confirmPayment = async (req, res) => {
         ? await applyGroupRenewal(registrationId, registrationModel, paymentDoc, pi.metadata.holderGroupId)
         : await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc);
     } else if (isPurposeHolderUpgrade) {
-      // Increase committedCount by the additional holder count that was paid for
-      // and record an independent holder group carrying its own plan + expiry.
-      const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
-      if (additionalCount > 0) {
-        const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
-        if (freshDoc && freshModel) {
-          const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
-          const newCount  = currentCommitted + additionalCount;
-          // Batch plan (selected in the Expand modal); falls back to the base plan.
-          const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || freshDoc.subscriptionPlan;
-          const batchYears = renewalMultiYearCount || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null);
-          // Use the tier ppc stored in metadata (computed at create-intent time) or recompute it.
-          const newPpc    = pi.metadata?.newPricePerCertificate
-            ? Number(pi.metadata.newPricePerCertificate)
-            : tierPpcForPlan(batchPlan, newCount);
-          const groupExpiry = computeExpiry(batchPlan, now, batchYears);
-
-          // Only refresh the airline-level pricePerCertificate when the batch is on
-          // the SAME plan as the base — cross-plan batches must not corrupt the base rate.
-          const set = {
-            committedCount:   newCount,
-            holderCountValue: String(newCount),
-          };
-          if (batchPlan === freshDoc.subscriptionPlan) set.pricePerCertificate = newPpc;
-
-          updatedReg = await freshModel.findByIdAndUpdate(
-            registrationId,
-            {
-              $set: set,
-              $push: {
-                holderGroups: {
-                  plan:             batchPlan,
-                  multiYearCount:   batchYears,
-                  count:            additionalCount,
-                  pricePerCert:     newPpc,
-                  amount:           amountDollars,
-                  subscriptionDate: now,
-                  expirationDate:   groupExpiry || null,
-                  paymentId:        paymentDoc._id,
-                  invoiceNumber:    paymentDoc.invoiceNumber || '',
-                },
-              },
-            },
-            { new: true }
-          );
-        }
-      } else {
-        updatedReg = doc;
-      }
+      // Apply the bought slots — merge into base/a group, or create a new group.
+      const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
+      updatedReg = await applyHolderUpgrade(registrationId, registrationModel, paymentDoc, {
+        additionalCount: Number(pi.metadata?.additionalHolderCount || 0),
+        batchPlan,
+        batchYears: renewalMultiYearCount || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null),
+        newPpc: pi.metadata?.newPricePerCertificate ? Number(pi.metadata.newPricePerCertificate) : null,
+        mergeTarget: pi.metadata?.mergeTarget || '',
+      }) || doc;
 
     } else {
       updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
@@ -1367,12 +1440,6 @@ exports.stripeWebhook = async (req, res) => {
       } catch (_) { /* non-critical */ }
 
       let invoiceSnapshot;
-      // For holder-upgrade payments we may need to update the registration
-      // committedCount before building the invoice snapshot so the invoice
-      // reflects the new holder count. Track whether we performed the
-      // update here to avoid double-updating later in the webhook flow.
-      let holderUpgradePerformed = false;
-      let updatedRegAfterHolderUpgrade = null;
       if (isPurposeRenewal) {
         const renewalPlan   = pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
         const renewalYears  = webhookRenewalYears || doc.multiYearCount || null;
@@ -1392,38 +1459,22 @@ exports.stripeWebhook = async (req, res) => {
         };
         invoiceSnapshot = buildInvoiceSnapshot(renewalDocObj, registrationModel, amountDollars, renewalBase);
       } else if (isPurposeHolderUpgradeWebhook) {
-        // If this webhook is for adding holders, apply the committedCount
-        // bump immediately so the invoice snapshot uses the new count.
+        // Build the snapshot from the BATCH (added holders only) — no registration
+        // mutation here; the actual application happens via applyHolderUpgrade below.
         const additionalCount = pi.metadata?.additionalHolderCount ? Number(pi.metadata.additionalHolderCount) : 0;
-        if (additionalCount > 0) {
-          const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
-          if (freshDoc && freshModel) {
-            const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || freshDoc.subscriptionPlan;
-            const currentCommitted = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0);
-            const newCount = currentCommitted + additionalCount;
-            const batchPpc = pi.metadata?.newPricePerCertificate ? Number(pi.metadata.newPricePerCertificate) : tierPpcForPlan(batchPlan, newCount);
-            const bumpSet = { committedCount: newCount, holderCountValue: String(newCount) };
-            // Only refresh base PPC when the batch is on the same plan as the base.
-            if (batchPlan === freshDoc.subscriptionPlan) bumpSet.pricePerCertificate = batchPpc;
-            await freshModel.findByIdAndUpdate(registrationId, { $set: bumpSet });
-            updatedRegAfterHolderUpgrade = await freshModel.findById(registrationId);
-            holderUpgradePerformed = true;
-            // Snapshot reflects the BATCH plan + added-holder count (what was paid).
-            const upgradeDocObj = {
-              ...updatedRegAfterHolderUpgrade.toObject(),
-              subscriptionPlan:    batchPlan,
-              committedCount:      additionalCount,
-              holderCountValue:    additionalCount,
-              pricePerCertificate: batchPpc,
-              pricePerCert:        batchPpc,
-            };
-            invoiceSnapshot = buildInvoiceSnapshot(upgradeDocObj, registrationModel, amountDollars, now);
-          } else {
-            invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
-          }
-        } else {
-          invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
-        }
+        const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
+        const batchPpc = pi.metadata?.newPricePerCertificate
+          ? Number(pi.metadata.newPricePerCertificate)
+          : tierPpcForPlan(batchPlan, Math.max(3, additionalCount || 1));
+        const upgradeDocObj = {
+          ...doc.toObject(),
+          subscriptionPlan:    batchPlan,
+          committedCount:      additionalCount || 1,
+          holderCountValue:    additionalCount || 1,
+          pricePerCertificate: batchPpc,
+          pricePerCert:        batchPpc,
+        };
+        invoiceSnapshot = buildInvoiceSnapshot(upgradeDocObj, registrationModel, amountDollars, now);
       } else {
         invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
       }
@@ -1453,6 +1504,7 @@ exports.stripeWebhook = async (req, res) => {
         renewalMultiYearCount: webhookRenewalYears,
         renewalExactCount:     webhookRenewalCount,
         renewalHoldersToRemove: webhookHoldersToRemove,
+        mergeTarget: pi.metadata?.mergeTarget || '',
       };
 
       let paymentDoc;
@@ -1470,50 +1522,14 @@ exports.stripeWebhook = async (req, res) => {
           ? await applyGroupRenewal(registrationId, registrationModel, paymentDoc, pi.metadata.holderGroupId)
           : await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc);
       } else if (isPurposeHolderUpgradeWebhook) {
-        const additionalCount = Number(pi.metadata?.additionalHolderCount || 0);
-        if (additionalCount > 0) {
-          const { doc: freshDoc, Model: freshModel } = await findRegistration(registrationId, registrationModel);
-          if (freshDoc && freshModel) {
-            const batchPlan  = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || freshDoc.subscriptionPlan;
-            const batchYears = webhookRenewalYears || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null);
-            const newCount   = Number(freshDoc.committedCount || freshDoc.holderCountValue || freshDoc.certificateHolders?.length || 0)
-              + (holderUpgradePerformed ? 0 : additionalCount); // early block already bumped when performed
-            const newPpc     = pi.metadata?.newPricePerCertificate
-              ? Number(pi.metadata.newPricePerCertificate)
-              : tierPpcForPlan(batchPlan, newCount);
-            const groupExpiry = computeExpiry(batchPlan, now, batchYears);
-
-            // Guard against duplicate groups if the webhook reprocesses.
-            const groupExists = (freshDoc.holderGroups || []).some(
-              g => String(g.paymentId || '') === String(paymentDoc._id),
-            );
-
-            const set = holderUpgradePerformed
-              ? {}
-              : { committedCount: newCount, holderCountValue: String(newCount) };
-            if (!holderUpgradePerformed && batchPlan === freshDoc.subscriptionPlan) set.pricePerCertificate = newPpc;
-
-            const mongoOp = { $set: set };
-            if (!groupExists) {
-              mongoOp.$push = {
-                holderGroups: {
-                  plan:             batchPlan,
-                  multiYearCount:   batchYears,
-                  count:            additionalCount,
-                  pricePerCert:     newPpc,
-                  amount:           amountDollars,
-                  subscriptionDate: now,
-                  expirationDate:   groupExpiry || null,
-                  paymentId:        paymentDoc._id,
-                  invoiceNumber:    paymentDoc.invoiceNumber || '',
-                },
-              };
-            }
-            updatedRegWebhook = await freshModel.findByIdAndUpdate(registrationId, mongoOp, { new: true });
-          }
-        } else {
-          updatedRegWebhook = doc;
-        }
+        const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
+        updatedRegWebhook = await applyHolderUpgrade(registrationId, registrationModel, paymentDoc, {
+          additionalCount: Number(pi.metadata?.additionalHolderCount || 0),
+          batchPlan,
+          batchYears: webhookRenewalYears || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null),
+          newPpc: pi.metadata?.newPricePerCertificate ? Number(pi.metadata.newPricePerCertificate) : null,
+          mergeTarget: pi.metadata?.mergeTarget || '',
+        }) || doc;
 
       } else {
         updatedRegWebhook = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
@@ -1917,7 +1933,7 @@ async function createGroupInvoiceAndPayment(doc, group) {
 exports.adminHolderUpgrade = async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only.' });
-    const { plan, additionalCount, paid } = req.body;
+    const { plan, additionalCount, paid, mergeTarget } = req.body;
     const addCount = Number(additionalCount);
     if (!addCount || addCount < 1)
       return res.status(400).json({ success: false, message: 'additionalCount must be at least 1.' });
@@ -1934,22 +1950,47 @@ exports.adminHolderUpgrade = async (req, res) => {
     const amount   = ppc * addCount;
     const expiry   = computeExpiry(batchPlan, now, null);
 
+    // Resolve a valid merge target (must be the SAME plan type as the batch).
+    let mergeBase = false;
+    let mergeGroup = null;
+    if (mergeTarget === 'base' && doc.subscriptionPlan === batchPlan) {
+      mergeBase = true;
+    } else if (mergeTarget && mergeTarget !== 'base') {
+      const tg = doc.holderGroups.id(mergeTarget);
+      if (tg && tg.plan === batchPlan) mergeGroup = tg;
+    }
+
     doc.committedCount   = newTotal;
     doc.holderCountValue = String(newTotal);
     if (batchPlan === doc.subscriptionPlan) doc.pricePerCertificate = ppc;
-    doc.holderGroups.push({
-      plan: batchPlan, count: addCount, pricePerCert: ppc, amount,
-      subscriptionDate: now, expirationDate: expiry || null,
-      paymentStatus: paid ? 'paid' : 'pending', addedByAdmin: true,
-    });
+
+    let group; // the unit to invoice against (real group for separate; pseudo for merge)
+    if (mergeBase) {
+      // Grow base capacity — merged holders inherit base plan/dates. No new group.
+      group = { plan: batchPlan, count: addCount, pricePerCert: ppc, amount, subscriptionDate: now };
+    } else if (mergeGroup) {
+      // Grow target group capacity — merged holders inherit its dates. No new group.
+      mergeGroup.count = Number(mergeGroup.count || 0) + addCount;
+      group = { plan: batchPlan, count: addCount, pricePerCert: ppc, amount, subscriptionDate: now };
+    } else {
+      // Separate independent plan (default) — own full-length term.
+      doc.holderGroups.push({
+        plan: batchPlan, count: addCount, pricePerCert: ppc, amount,
+        subscriptionDate: now, expirationDate: expiry || null,
+        paymentStatus: paid ? 'paid' : 'pending', addedByAdmin: true,
+      });
+    }
     await doc.save();
-    const group = doc.holderGroups[doc.holderGroups.length - 1];
+    if (!mergeBase && !mergeGroup) group = doc.holderGroups[doc.holderGroups.length - 1];
 
     if (paid) {
       const { invoiceNumber, paymentId } = await createGroupInvoiceAndPayment(doc, group);
-      group.invoiceNumber = invoiceNumber;
-      group.paymentId     = paymentId;
-      await doc.save();
+      // Only a real (separate) group stores invoice/payment refs on itself.
+      if (!mergeBase && !mergeGroup) {
+        group.invoiceNumber = invoiceNumber;
+        group.paymentId     = paymentId;
+        await doc.save();
+      }
     }
     return res.json({ success: true, data: doc });
   } catch (err) {
@@ -1978,6 +2019,158 @@ exports.markHolderGroupPaid = async (req, res) => {
     return res.json({ success: true, data: doc });
   } catch (err) {
     console.error('[markHolderGroupPaid]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ─── Admin manual RENEWAL (no Stripe) ─────────────────────────────────────────
+/**
+ * adminRenew
+ *
+ * Lets an admin renew a subscription (base plan OR a holder-upgrade group) on a
+ * customer's behalf WITHOUT taking payment. Reuses the exact same application
+ * logic as a paid renewal (applyRenewalToRegistration / applyGroupRenewal) so the
+ * queued-vs-immediate behaviour, Renewal docs and registration fields are
+ * identical to the Stripe path — only the Payment doc is synthetic (manual).
+ *
+ * Admin controls everything via the body:
+ *   plan, multiYearCount, exactCount (airline), holdersToRemove, holderGroupId,
+ *   price (overrides computed amount), invoiceNumber (custom, must be unique).
+ *
+ * Route: POST /api/airlines/:id/admin-renew  and  /api/individuals/:id/admin-renew
+ */
+exports.adminRenew = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'Admin only.' });
+
+    const registrationId    = req.params.id || req.body.registrationId;
+    const registrationModel = req.body.registrationModel
+      || (req.baseUrl.includes('individuals') ? 'Individual' : 'Airlines');
+    const { plan, multiYearCount, exactCount, holdersToRemove, holderGroupId, price, invoiceNumber } = req.body;
+
+    const VALID_MODELS = ['Individual', 'Airlines', 'AirlinesSubscription'];
+    if (!registrationId || !VALID_MODELS.includes(registrationModel))
+      return res.status(400).json({ success: false, message: 'Valid registrationId and registrationModel are required.' });
+
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    if (!doc) return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    const isAirline = registrationModel !== 'Individual';
+    const now = new Date();
+
+    // ── Resolve the plan + holder/year counts being renewed ───────────────────
+    const group = holderGroupId && doc.holderGroups?.id ? doc.holderGroups.id(holderGroupId) : null;
+    if (holderGroupId && !group)
+      return res.status(404).json({ success: false, message: 'Holder group not found.' });
+
+    const currentPlan = group ? group.plan : doc.subscriptionPlan;
+    const activePlan  = plan || currentPlan;
+    // Block only when the CURRENT plan is already Unlimited (no expiry to extend).
+    // Upgrading FROM 1 Year/Multi-Year TO Unlimited at renewal IS allowed — it just
+    // sets the new plan with no expiry (same as the paid Stripe renewal flow).
+    if (currentPlan === 'Unlimited Plan')
+      return res.status(400).json({ success: false, message: 'Already on Unlimited — it never expires, nothing to renew.' });
+
+    const yearsVal = activePlan === 'Multiple Years Subscription Plan'
+      ? Math.max(2, Number(multiYearCount) || Number(doc.multiYearCount) || 2)
+      : null;
+
+    const count = group
+      ? (exactCount ? Number(exactCount) : Number(group.count || 1))
+      : (exactCount ? Number(exactCount) : Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1));
+
+    // ── Amount: admin override, else computed from tier/plan pricing ──────────
+    let amountDollars = Number(price);
+    if (!(amountDollars > 0)) {
+      if (isAirline) {
+        // tierPpcForPlan returns UNLIMITED tier pricing when activePlan is Unlimited.
+        const ppc = tierPpcForPlan(activePlan, Math.max(3, count));
+        amountDollars = ppc * count * (yearsVal || 1);
+      } else {
+        amountDollars = activePlan === 'Unlimited Plan'
+          ? 299
+          : activePlan === 'Multiple Years Subscription Plan'
+            ? 55 * (yearsVal || 2)
+            : 69; // 1 Year
+      }
+    }
+    amountDollars = Math.round(amountDollars * 100) / 100;
+
+    // ── Invoice number: admin-supplied (must be unique) or freshly generated ──
+    let invoiceNum = normalizeInvoiceNumber(invoiceNumber);
+    if (invoiceNum) {
+      if (await isInvoiceNumberTaken(invoiceNum))
+        return res.status(400).json({ success: false, message: 'Invoice number already exists. Please use a different value.' });
+    } else {
+      invoiceNum = await generateInvoiceNumber();
+    }
+
+    // ── Build the invoice snapshot for the renewed period ─────────────────────
+    const baseExpiry = group
+      ? (group.expirationDate ? new Date(group.expirationDate) : null)
+      : (doc.expirationDate ? new Date(doc.expirationDate) : null);
+    const renewalBase = baseExpiry && baseExpiry > now ? baseExpiry : now;
+    const ppcForSnap = isAirline ? tierPpcForPlan(activePlan, Math.max(3, count)) : 0;
+    const snapDocObj = {
+      ...doc.toObject(),
+      subscriptionPlan: activePlan,
+      multiYearCount:   yearsVal,
+      price:            amountDollars,
+      committedCount:   count,
+      holderCountValue: String(count),
+      ...(isAirline ? { pricePerCertificate: ppcForSnap, pricePerCert: ppcForSnap } : {}),
+    };
+    const snapshot = buildInvoiceSnapshot(snapDocObj, registrationModel, amountDollars, renewalBase);
+
+    // ── Synthetic (manual) Payment doc — drives the same renewal application ──
+    const paymentDoc = await Payment.create({
+      stripePaymentIntentId: `MANUAL-RENEW-${invoiceNum}`,
+      status:           'succeeded',
+      isPaid:           true,
+      paidAt:           now,
+      amountCents:      Math.round(amountDollars * 100),
+      amountDollars,
+      currency:         'usd',
+      registrationId,
+      registrationModel,
+      invoiceNumber:    invoiceNum,
+      invoiceSnapshot:  snapshot,
+      purpose:          'renewal',
+      confirmedVia:     'manual',
+      paymentMethodType:'manual',
+      newSubscriptionPlan:    plan || null,
+      renewalMultiYearCount:  yearsVal,
+      renewalExactCount:      isAirline ? count : null,
+      renewalHoldersToRemove: Array.isArray(holdersToRemove) && holdersToRemove.length ? holdersToRemove : null,
+    });
+
+    // ── Apply renewal — identical path to the paid Stripe flow ────────────────
+    const updatedReg = holderGroupId
+      ? await applyGroupRenewal(registrationId, registrationModel, paymentDoc, holderGroupId)
+      : await applyRenewalToRegistration(registrationId, registrationModel, paymentDoc);
+
+    // ── Canonical Invoice doc (purpose renewal, manual) ───────────────────────
+    try {
+      await createOrUpdateInvoice({
+        registrationId,
+        registrationModel,
+        paymentId:             paymentDoc._id,
+        snapshot,
+        amountDollars,
+        paidAt:                now,
+        paymentMethod:         'manual',
+        existingInvoiceNumber: invoiceNum,
+        purpose:               'renewal',
+      });
+    } catch (invErr) {
+      console.warn('[adminRenew] Invoice creation failed:', invErr.message);
+    }
+
+    return res.json({ success: true, data: updatedReg, invoiceNumber: invoiceNum, amount: amountDollars });
+  } catch (err) {
+    console.error('[adminRenew]', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };

@@ -63,6 +63,9 @@ export const adminHolderUpgrade             = (id, data) => API.post(`/airlines/
 export const markHolderGroupPaid            = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/mark-paid`)
 // Force-activate a holder group's queued renewal now (admin)
 export const activateGroupRenewalNow        = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/activate-renewal`)
+// Admin renews a subscription (no payment) + generates invoice. registrationModel: 'Airlines' | 'Individual'.
+export const adminRenewAirline              = (id, data) => API.post(`/airlines/${id}/admin-renew`, { ...data, registrationModel: 'Airlines' })
+export const adminRenewIndividual           = (id, data) => API.post(`/individuals/${id}/admin-renew`, { ...data, registrationModel: 'Individual' })
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
 export const createPaymentIntent = (registrationId, registrationModel) =>

@@ -90,4 +90,31 @@ async function generateInvoiceNumber(yearOverride) {
   throw new Error('Unable to generate a unique invoice number after multiple attempts.');
 }
 
-module.exports = { generateInvoiceNumber, isInvoiceNumberTaken, normalizeInvoiceNumber };
+/**
+ * Peek the next invoice number WITHOUT incrementing the persisted counter.
+ *
+ * Used by the admin invoice modal on open so merely viewing (and then cancelling)
+ * never burns a sequence number — that left permanent gaps in the invoice numbering.
+ * The number is reserved for real only when the invoice is saved, at which point
+ * the save path validates uniqueness (isInvoiceNumberTaken) and the payment flow's
+ * generateInvoiceNumber() advances/skips as needed.
+ */
+async function peekNextInvoiceNumber(yearOverride) {
+  const useYear = yearOverride || new Date().getFullYear();
+  const yy = String(useYear).slice(-2);
+
+  const counter = await InvoiceCounter.findOne({ year: useYear }).select('sequence').lean();
+  let next = (counter?.sequence || 0) + 1;
+
+  // Skip any candidate already used anywhere in the DB (manual admin invoices may
+  // have consumed numbers without advancing the counter).
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidate = `Invoice US-${next}-${yy}`;
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await isInvoiceNumberTaken(candidate))) return candidate;
+    next += 1;
+  }
+  throw new Error('Unable to peek a free invoice number after multiple attempts.');
+}
+
+module.exports = { generateInvoiceNumber, peekNextInvoiceNumber, isInvoiceNumberTaken, normalizeInvoiceNumber };

@@ -676,7 +676,35 @@ exports.addSubscription = async (req, res) => {
     if (!subscriptionId)
       return res.status(400).json({ message: 'subscriptionId is required.' });
 
+    if (!mongoose.Types.ObjectId.isValid(subscriptionId))
+      return res.status(400).json({ message: 'Invalid subscriptionId.' });
+
     const oid = new mongoose.Types.ObjectId(subscriptionId);
+
+    // ── Ownership verification ────────────────────────────────────────────────
+    // Without this, any authenticated user could $addToSet ANY registration id
+    // into their own subscriptionIds and then read that record's payments,
+    // invoices and PII (the ownership checks downstream trust subscriptionIds).
+    // Verify the registration's email matches the caller's email. Admins skip.
+    if (req.user.role !== 'admin') {
+      const Individual           = require('../models/Individual');
+      const Airlines             = require('../models/Airlines');
+      const AirlinesSubscription = require('../models/AirlinesSubscription');
+      const [ind, air, legacy] = await Promise.all([
+        Individual.findById(oid).select('email').lean(),
+        Airlines.findById(oid).select('email pointOfContactEmail paymentEmail').lean(),
+        AirlinesSubscription.findById(oid).select('email contactEmail paymentEmail').lean(),
+      ]);
+      const doc = ind || air || legacy;
+      if (!doc)
+        return res.status(404).json({ message: 'Registration record not found.' });
+      const userEmail = (req.user.email || '').toLowerCase();
+      const docEmails = [
+        doc.email, doc.pointOfContactEmail, doc.contactEmail, doc.paymentEmail,
+      ].filter(Boolean).map(e => String(e).toLowerCase());
+      if (!userEmail || !docEmails.includes(userEmail))
+        return res.status(403).json({ message: 'This subscription does not belong to your account.' });
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
