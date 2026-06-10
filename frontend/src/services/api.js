@@ -111,6 +111,9 @@ export const saveInvoiceDraftToDoc     = (invoiceId, draft, invoiceNumber) =>
 // Admin creates a new canonical Invoice doc when none exists (wire/no-payment registrations)
 export const createAdminInvoiceDoc = (registrationId, registrationModel, draft, invoiceNumber, purpose) =>
   API.post('/invoices/admin-create', { registrationId, registrationModel, draft, invoiceNumber, purpose })
+// Admin deletes an invoice — removed for both admin and the airline/individual
+export const deleteInvoice = (registrationId, invoiceNumber) =>
+  API.delete(`/invoices/by-registration/${registrationId}/${encodeURIComponent(invoiceNumber)}`)
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)

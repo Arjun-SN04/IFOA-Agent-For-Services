@@ -179,7 +179,20 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
         stripePaymentIntentId:  p.stripePaymentIntentId || '',
       }));
 
+    // Filter out invoices the admin has deleted/hidden (by invoice number) so they
+    // never show to the airline/individual or the admin.
+    let hiddenSet = new Set();
+    try {
+      const RegModel = req.query.model === 'Individual' ? Individual : null;
+      const regDoc = RegModel
+        ? await RegModel.findById(regId).select('hiddenInvoiceNumbers').lean()
+        : (await Airlines.findById(regId).select('hiddenInvoiceNumbers').lean())
+          || (await Individual.findById(regId).select('hiddenInvoiceNumbers').lean());
+      hiddenSet = new Set((regDoc?.hiddenInvoiceNumbers || []).map(n => normalizeInvoiceNumber(n)));
+    } catch (_) { /* non-critical */ }
+
     const all = [...invoices, ...renewalItems, ...paymentItems]
+      .filter(item => !hiddenSet.has(normalizeInvoiceNumber(item.invoiceNumber)))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json({ success: true, data: all });
@@ -365,6 +378,17 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
       };
       invoice.markModified('draft');
 
+      // Persist the editable dates onto the Invoice doc itself (not just the draft)
+      // so they are saved in the DB and reflected wherever the doc fields are read.
+      if (draft.issueDate) {
+        const d = new Date(draft.issueDate);
+        if (!Number.isNaN(d.getTime())) invoice.issueDate = d;
+      }
+      if (draft.payableBy) {
+        const d = new Date(draft.payableBy);
+        if (!Number.isNaN(d.getTime())) invoice.payableBy = d;
+      }
+
       if (draft.lineItems?.length) {
         const newTotal = draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0);
         invoice.lineItems   = draft.lineItems;
@@ -409,6 +433,33 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
         message: 'Invoice number already exists. Please use a different value.',
       });
     }
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── DELETE /api/invoices/by-registration/:regId/:invoiceNumber (admin) ────────
+// Admin deletes an invoice. The Invoice doc (if any) is removed AND the invoice
+// number is recorded on the registration's hiddenInvoiceNumbers so the
+// payment/renewal-derived fallback never resurfaces it. Result: gone for both
+// admin and the airline/individual.
+router.delete('/by-registration/:regId/:invoiceNumber', auth, adminOnly, async (req, res) => {
+  try {
+    const { regId } = req.params;
+    const invoiceNumber = normalizeInvoiceNumber(decodeURIComponent(req.params.invoiceNumber));
+    if (!invoiceNumber)
+      return res.status(400).json({ success: false, message: 'invoiceNumber required.' });
+
+    // Remove the canonical Invoice doc if it exists for this registration.
+    await Invoice.deleteMany({ registrationId: regId, invoiceNumber });
+
+    // Record the number as hidden on the registration (covers payment/renewal fallbacks).
+    const RegModel = (await Airlines.findById(regId).select('_id').lean()) ? Airlines : Individual;
+    await RegModel.findByIdAndUpdate(regId, {
+      $addToSet: { hiddenInvoiceNumbers: invoiceNumber },
+    });
+
+    res.json({ success: true, message: 'Invoice deleted.' });
+  } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });

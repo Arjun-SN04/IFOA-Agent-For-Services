@@ -69,6 +69,9 @@ const IndividualSchema = new mongoose.Schema({
   invoiceStatus: { type: String },
   invoiceNumber: { type: String },
   invoiceDraft:  { type: mongoose.Schema.Types.Mixed, default: null },
+  // Invoice numbers admin has deleted/hidden — filtered out of the invoice list
+  // shown to the individual (and admin) so a deleted invoice never reappears.
+  hiddenInvoiceNumbers: { type: [String], default: [] },
   stripePaymentIntentId: { type: String, default: '' },
 
   // Invoice generation tracking — set to true by admin after first PDF download

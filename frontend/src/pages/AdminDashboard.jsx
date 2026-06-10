@@ -32,6 +32,7 @@ import {
   getInvoiceByRegistration,
   saveInvoiceDraftToDoc,
   createAdminInvoiceDoc,
+  deleteInvoice,
   activateQueuedRenewal,
   activateWirePayment,
   sendRenewalReminders,
@@ -559,6 +560,22 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   const [saving, setSaving] = React.useState(false)
   const [saveErr, setSaveErr] = React.useState('')
   const [pdfBusy, setPdfBusy] = React.useState({})
+  const [deletingNum, setDeletingNum] = React.useState(null)
+
+  const handleDeleteInvoice = async (inv) => {
+    const num = inv.invoiceNumber
+    if (!num) { setError('This entry has no invoice number to delete.'); return }
+    if (!window.confirm(`Delete invoice ${num}?\n\nIt will be permanently removed and will no longer be visible to the ${registrationModel === 'Individual' ? 'individual' : 'airline'}. This cannot be undone.`)) return
+    setDeletingNum(num)
+    try {
+      await deleteInvoice(registrationId, num)
+      await load()
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to delete invoice.')
+    } finally {
+      setDeletingNum(null)
+    }
+  }
   // Tracks the active invoice number locally so stale `record.invoiceNumber` prop
   // doesn't cause the Active badge to disappear after an inline edit.
   const [activeInvoiceNum, setActiveInvoiceNum] = React.useState(record?.invoiceNumber || '')
@@ -686,12 +703,20 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
     }
   }
 
+  const toDateInput = (v) => {
+    if (!v) return ''
+    const dt = new Date(v)
+    return Number.isNaN(dt.getTime()) ? '' : dt.toISOString().slice(0, 10)
+  }
+
   const openEdit = (inv) => {
     const d = inv.draft || {}
     const items = d.lineItems?.length ? d.lineItems : (inv.lineItems || [])
     const item = items[0] || {}
     setEditForm({
       invoiceNumber:     d.invoiceNumber     || inv.invoiceNumber || '',
+      issueDate:         toDateInput(d.issueDate || inv.issueDate || inv.paidAt),
+      payableBy:         toDateInput(d.payableBy || inv.payableBy),
       recipientName:     d.recipientName     || inv.recipientName || '',
       recipientCompany:  d.recipientCompany  || inv.recipientCompany || '',
       recipientAddress1: d.recipientAddress1 || inv.recipientAddress1 || '',
@@ -715,8 +740,8 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
       const total = Number(editForm.totalPrice) || qty * unit
       const draft = {
         invoiceNumber:     editForm.invoiceNumber,
-        issueDate:         editing.draft?.issueDate || editing.issueDate || editing.paidAt,
-        payableBy:         editing.draft?.payableBy || editing.payableBy,
+        issueDate:         editForm.issueDate || editing.draft?.issueDate || editing.issueDate || editing.paidAt,
+        payableBy:         editForm.payableBy || editing.draft?.payableBy || editing.payableBy,
         recipientName:     editForm.recipientName,
         recipientCompany:  editForm.recipientCompany,
         recipientContact:  editForm.recipientName,
@@ -906,6 +931,14 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                       {editing?._id === inv._id ? 'Cancel' : 'Edit'}
                     </button>
                   )}
+                  <button
+                    onClick={() => handleDeleteInvoice(inv)}
+                    disabled={deletingNum === inv.invoiceNumber}
+                    title="Delete invoice (hidden from the customer)"
+                    className="text-[11px] font-semibold text-red-600 hover:text-red-800 border border-red-200 bg-white rounded-lg px-2.5 py-1 transition disabled:opacity-50"
+                  >
+                    {deletingNum === inv.invoiceNumber ? 'Deleting…' : 'Delete'}
+                  </button>
                 </div>
               </div>
 
@@ -928,6 +961,26 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                         />
                       </div>
                     ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3">
+                    <div>
+                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Issue Date</p>
+                      <input
+                        type="date"
+                        value={editForm.issueDate || ''}
+                        onChange={e => setEditForm(f => ({ ...f, issueDate: e.target.value }))}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Payable By</p>
+                      <input
+                        type="date"
+                        value={editForm.payableBy || ''}
+                        onChange={e => setEditForm(f => ({ ...f, payableBy: e.target.value }))}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </div>
                   </div>
                   <div>
                     <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Address</p>
