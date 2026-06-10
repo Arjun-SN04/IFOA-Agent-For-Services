@@ -7,6 +7,10 @@ export default defineConfig({
     include: ['react-phone-input-2'],
   },
   build: {
+    // Output the production build into a cPanel/Apache-ready folder.
+    // public/.htaccess is copied in automatically (SPA routing).
+    outDir: 'public_html',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
