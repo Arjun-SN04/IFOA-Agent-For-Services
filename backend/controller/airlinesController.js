@@ -611,6 +611,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
+      'holderGroups',
     ]);
 
     const allowedFields = [
@@ -620,6 +621,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
+      'holderGroups',
       // User-editable profile fields
       'subscriptionPlan', 'subscriptionDate', 'expirationDate',
       'holderCount', 'holderCountValue', 'committedCount',
@@ -1019,6 +1021,54 @@ exports.updateRenewalDetails = async (req, res) => {
       });
     }
     res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+// ── Force-activate a holder group's queued renewal NOW (admin) ─────────────────
+// Promotes group.nextRenewal to the live group immediately, ignoring activationDate.
+// Period restarts from now (forced early start), so expiry is recomputed from today.
+exports.activateGroupRenewalNow = async (req, res) => {
+  try {
+    const { id, groupId } = req.params;
+    const doc = await Airlines.findById(id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const group = (doc.holderGroups || []).id(groupId);
+    if (!group) return res.status(404).json({ success: false, message: 'Holder group not found.' });
+
+    const nr = group.nextRenewal;
+    if (!nr?.paidAt) {
+      return res.status(400).json({ success: false, message: 'No queued renewal on this group.' });
+    }
+
+    const now = new Date();
+    group.plan = nr.plan || group.plan;
+    if (nr.count)        group.count        = nr.count;
+    if (nr.pricePerCert) group.pricePerCert = nr.pricePerCert;
+    if (nr.price)        group.amount       = nr.price;
+    group.subscriptionDate = now;
+    group.expirationDate   = group.plan === 'Unlimited Plan'
+      ? null
+      : computeAirlinesExpirationDate(group.plan, now, nr.multiYearCount);
+    if (nr.invoiceNumber) group.invoiceNumber = nr.invoiceNumber;
+    group.lastRenewal = {
+      plan: nr.plan, count: nr.count, paidAt: nr.paidAt, activationDate: now,
+      expiresAt: group.expirationDate, price: nr.price, invoiceNumber: nr.invoiceNumber,
+    };
+    if (Array.isArray(nr.holdersToRemove) && nr.holdersToRemove.length) {
+      const gid = String(group._id);
+      doc.certificateHolders = doc.certificateHolders.filter(
+        h => !(String(h.holderGroupId || '') === gid && nr.holdersToRemove.includes(String(h._id))),
+      );
+    }
+    group.nextRenewal = {
+      plan: null, count: null, pricePerCert: null, price: null, paidAt: null,
+      activationDate: null, expiresAt: null, invoiceNumber: null, holdersToRemove: null,
+    };
+    await doc.save();
+    res.json({ success: true, data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -1862,7 +1912,9 @@ exports.activateWirePayment = async (req, res) => {
           amountDollars:         upgradeAmount,
           paidAt:                now,
           paymentMethod:         'wire',
-          existingInvoiceNumber: doc.invoiceNumber || null,
+          // Don't reuse the initial invoice number — that would overwrite the
+          // original invoice in place. Each holder-upgrade gets its own invoice.
+          existingInvoiceNumber: null,
           purpose:               'holder-upgrade',
         });
       } catch (invErr) {
@@ -1872,15 +1924,67 @@ exports.activateWirePayment = async (req, res) => {
       return res.json({ success: true, activated: true, data: updated });
 
     } else {
-      // Initial: mark active
+      // Initial: mark active and compute expiration from plan + multiYearCount.
+      const subscriptionDate = doc.subscriptionDate ? new Date(doc.subscriptionDate) : now;
+      const expirationDate   = computeAirlinesExpirationDate(
+        doc.subscriptionPlan, subscriptionDate, doc.multiYearCount
+      );
+      const invoiceNumber = doc.invoiceNumber || await generateInvoiceNumber();
+
+      const initialUpdate = {
+        status: 'Active', isPaid: true, isFormCompleted: true,
+        paymentStatus: 'paid', subscriptionDate,
+        invoiceStatus: 'Paid',
+        invoiceNumber,
+        wirePaymentRequested: false, wireRequestPurpose: null,
+      };
+      // Unlimited Plan returns null (never expires) — leave expirationDate unset.
+      if (expirationDate !== null) {
+        initialUpdate.expirationDate = expirationDate;
+      }
+
       const updated = await Airlines.findByIdAndUpdate(
         req.params.id,
-        { $set: {
-          status: 'Active', isPaid: true, isFormCompleted: true,
-          paymentStatus: 'paid', wirePaymentRequested: false, wireRequestPurpose: null,
-        }},
+        { $set: initialUpdate },
         { new: true }
       );
+
+      // Create the canonical subscription Invoice so it persists independently
+      // of any later holder-upgrade/renewal invoices. Without this, wire-activated
+      // airlines had NO Invoice doc until one was generated manually — and a later
+      // upgrade could become the only invoice on record.
+      try {
+        const isUnlimited = updated.subscriptionPlan === 'Unlimited Plan';
+        const holders     = Number(updated.committedCount || updated.holderCountValue || 1);
+        const ppc         = Number(updated.pricePerCertificate || updated.pricePerCert || 0);
+        const amount      = isUnlimited ? ppc : ppc * holders;
+        await createOrUpdateInvoice({
+          registrationId:    updated._id,
+          registrationModel: 'Airlines',
+          snapshot: {
+            name:             [updated.firstName, updated.lastName].filter(Boolean).join(' '),
+            email:            updated.email || '',
+            isAirline:        true,
+            airlineName:      updated.airlineName || '',
+            subscriptionPlan: updated.subscriptionPlan,
+            subscriptionDate,
+            expirationDate:   updated.expirationDate || null,
+            holderCount:      holders,
+            pricePerCert:     ppc,
+            subtotal:         amount,
+            tax:              0,
+            totalPaid:        amount,
+          },
+          amountDollars:         amount,
+          paidAt:                subscriptionDate,
+          paymentMethod:         'wire',
+          existingInvoiceNumber: invoiceNumber,
+          purpose:               'payment',
+        });
+      } catch (e) {
+        console.warn('[activateWirePayment] Initial invoice failed:', e.message);
+      }
+
       return res.json({ success: true, activated: true, data: updated });
     }
   } catch (err) {

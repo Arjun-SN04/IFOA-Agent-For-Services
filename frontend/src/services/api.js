@@ -61,6 +61,8 @@ export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines
 // Admin manual holder-upgrade (increase committed count + create a holder group)
 export const adminHolderUpgrade             = (id, data) => API.post(`/airlines/${id}/admin-holder-upgrade`, data)
 export const markHolderGroupPaid            = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/mark-paid`)
+// Force-activate a holder group's queued renewal now (admin)
+export const activateGroupRenewalNow        = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/activate-renewal`)
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
 export const createPaymentIntent = (registrationId, registrationModel) =>

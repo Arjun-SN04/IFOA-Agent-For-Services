@@ -27,6 +27,7 @@ const {
   requestAirlineInvoice,
   renewAirlinesSubscription,
   activateWirePayment,
+  activateGroupRenewalNow,
 } = require('../controller/airlinesController');
 const { adminHolderUpgrade, markHolderGroupPaid } = require('../controller/paymentController');
 
@@ -137,6 +138,8 @@ router.patch('/:id/activate-wire', authMiddleware, requireAdmin, activateWirePay
 // admin manual holder-upgrade (increase committed count + create holder group)
 router.post('/:id/admin-holder-upgrade', authMiddleware, requireAdmin, adminHolderUpgrade);
 router.post('/:id/holder-group/:groupId/mark-paid', authMiddleware, requireAdmin, markHolderGroupPaid);
+// force-activate a holder group's queued renewal now (admin)
+router.post('/:id/holder-group/:groupId/activate-renewal', authMiddleware, requireAdmin, activateGroupRenewalNow);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 // renew — owner or admin (additional ownership check inside controller)

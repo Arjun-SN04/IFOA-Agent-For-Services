@@ -10,6 +10,7 @@ import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
 import { getAirlineTotal } from '../../utils/airlineTotal'
+import { getInvoiceStatus } from '../../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 const PhoneInput = PhoneInputLib.default || PhoneInputLib
@@ -1681,23 +1682,23 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop overflow-y-auto">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 flex flex-col lg:flex-row items-start gap-3 mt-auto mb-auto">
-        <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl shadow-black/25 flex flex-col max-h-[92vh] animate-modal-panel">
+        <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl shadow-black/20 border border-slate-200 bg-white flex flex-col max-h-[92vh] animate-modal-panel">
 
-          {/* Dark header — expiry status embedded */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-5 pt-5 pb-4 flex-shrink-0">
-            <div className="flex items-start justify-between mb-4">
+          {/* Clean light header */}
+          <div className="bg-white px-5 pt-5 pb-4 flex-shrink-0 border-b border-slate-100">
+            <div className="flex items-start justify-between mb-3.5">
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <svg className="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Renew Subscription</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Renew Subscription</span>
                 </div>
-                <h3 className="text-xl font-black text-white leading-tight">Extend Your Coverage</h3>
+                <h3 className="text-xl font-black text-slate-900 leading-tight">Extend Your Coverage</h3>
               </div>
               <button
                 onClick={onClose}
-                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white/50 hover:text-white flex items-center justify-center transition"
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1705,29 +1706,38 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
               </button>
             </div>
 
-            {/* Expiry chip inside dark header */}
-            <div className="flex items-center gap-2 rounded-xl px-3.5 py-2" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              <div>
-                {daysLeft !== null && daysLeft <= 0 ? (
-                  <>
-                    <p className="text-sm font-semibold text-white">Expired — {currentExpiry}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Renewing starts a fresh period from today</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-semibold text-white leading-tight">
-                      {daysLeft !== null
-                        ? `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} — ${currentExpiry}`
-                        : `Expires: ${currentExpiry}`}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Renewing extends from current expiry date</p>
-                  </>
-                )}
-              </div>
-            </div>
+            {/* Expiry chip — light, urgency-coloured */}
+            {(() => {
+              const expired = daysLeft !== null && daysLeft <= 0
+              const urgent  = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
+              const chipCls = expired ? 'bg-red-50 border-red-100' : urgent ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'
+              const iconCls = expired ? 'text-red-500' : urgent ? 'text-amber-500' : 'text-slate-400'
+              const titleCls = expired ? 'text-red-700' : urgent ? 'text-amber-800' : 'text-slate-800'
+              return (
+                <div className={`flex items-center gap-2 rounded-xl px-3.5 py-2 border ${chipCls}`}>
+                  <svg className={`w-4 h-4 flex-shrink-0 ${iconCls}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <div>
+                    {expired ? (
+                      <>
+                        <p className={`text-sm font-semibold ${titleCls}`}>Expired — {currentExpiry}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Renewing starts a fresh period from today</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className={`text-sm font-semibold leading-tight ${titleCls}`}>
+                          {daysLeft !== null
+                            ? `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} — ${currentExpiry}`
+                            : `Expires: ${currentExpiry}`}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Renewing extends from current expiry date</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           <div className="bg-white overflow-y-auto flex-1 min-h-0">
@@ -1854,20 +1864,20 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                 </div>
               )}
 
-              {/* Renewal total — dark anchor card */}
-              <div className="rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3 flex items-center justify-between">
+              {/* Renewal total — clean accent card */}
+              <div className="rounded-xl border-2 border-blue-100 bg-blue-50/60 px-4 py-3 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Renewal Total</p>
-                  {pricingLabel && <p className="text-[10px] text-slate-600 mt-1 tabular-nums">{pricingLabel}</p>}
+                  {pricingLabel && <p className="text-[10px] text-slate-500 mt-1 tabular-nums">{pricingLabel}</p>}
                 </div>
                 <div className="text-right">
                   {plan === 'Unlimited Plan' && !isAirline ? (
                     <>
-                      <p className="text-xl font-black text-emerald-400 tabular-nums">$299.00</p>
-                      <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider leading-none">Lifetime</p>
+                      <p className="text-xl font-black text-emerald-600 tabular-nums">$299.00</p>
+                      <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider leading-none">Lifetime</p>
                     </>
                   ) : (
-                    <p className="text-xl font-black text-white tabular-nums">${(renewalAmountCents / 100).toFixed(2)}</p>
+                    <p className="text-xl font-black text-slate-900 tabular-nums">${(renewalAmountCents / 100).toFixed(2)}</p>
                   )}
                 </div>
               </div>
@@ -1887,8 +1897,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                 onClick={() => setShowPayment(true)}
                 disabled={chargedCents <= 0 || !selectionValid}
                 title={!selectionValid ? `Select at least 1 holder to keep` : undefined}
-                className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl disabled:opacity-60 px-4 py-2 text-sm font-bold text-white transition-all"
-                style={{ background: '#0000ff' }}
+                className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:hover:bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-all"
               >
                 {isAirline ? 'Pay with Card' : 'Proceed to Payment'}
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -2455,18 +2464,12 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
                       {purposeLabel(doc)}
                     </span>
                     {(() => {
-                      // Holder-upgrade invoices reflect their group's live status; the
-                      // base invoice reflects the subscription's invoiceNumber.
-                      const now = Date.now()
-                      const grp = (reg?.holderGroups || []).find(g => g.invoiceNumber && g.invoiceNumber === doc.invoiceNumber)
-                      const grpPending = grp && grp.paymentStatus === 'pending'
-                      const grpExpired = grp && grp.plan !== 'Unlimited Plan' && grp.expirationDate && new Date(grp.expirationDate).getTime() <= now
-                      const grpActive = grp && !grpPending && (grp.plan === 'Unlimited Plan' || (grp.expirationDate && new Date(grp.expirationDate).getTime() > now))
-                      const baseActive = reg?.invoiceNumber && doc.invoiceNumber === reg.invoiceNumber
-                      if (baseActive || grpActive) return <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200">Active</span>
-                      if (grpExpired) return <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">Expired</span>
-                      if (grpPending) return <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">Pending</span>
-                      return null
+                      // Shared status badge — single source of truth in utils/invoiceStatus.js,
+                      // identical on client (individual & airline) + admin. Dynamic: follows
+                      // the registration's active/queued plan.
+                      const badge = getInvoiceStatus(doc, reg, { isHolderUpgrade: isHolderUpgrade(doc) })
+                      if (!badge) return null
+                      return <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${badge.cls}`}>{badge.label}</span>
                     })()}
                   </div>
                   <p className="text-[11px] text-slate-500">{fmt(doc.paidAt || doc.issueDate || doc.createdAt)}</p>

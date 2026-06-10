@@ -7,6 +7,7 @@ import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import { Plane } from 'lucide-react'
 import { getAirlineTotal, fmtAirlineTotal } from '../utils/airlineTotal'
+import { getInvoiceStatus } from '../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 const AdminPhoneInput = PhoneInputLib.default || PhoneInputLib
@@ -36,6 +37,7 @@ import {
   sendRenewalReminders,
   adminHolderUpgrade,
   markHolderGroupPaid,
+  activateGroupRenewalNow,
 } from '../services/api'
 
 // Convert a raw backend/Mongoose error into a short, user-friendly message.
@@ -844,14 +846,11 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
             const purposeCls = inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
               : 'bg-slate-800 border-slate-700 text-white'
             const planLabel = inv.subscriptionPlan || inv.plan || ''
-            // Holder-upgrade invoices are tied to a holder group — their live status
-            // (Active / Expired / Pending) is derived dynamically from that group.
-            const _now = Date.now()
-            const _grp = (record?.holderGroups || []).find(g => g.invoiceNumber && g.invoiceNumber === inv.invoiceNumber)
-            const _grpExpired = _grp && _grp.plan !== 'Unlimited Plan' && _grp.expirationDate && new Date(_grp.expirationDate).getTime() <= _now
-            const _grpPending = _grp && _grp.paymentStatus === 'pending'
-            const _grpActive = _grp && !_grpPending && (_grp.plan === 'Unlimited Plan' || (_grp.expirationDate && new Date(_grp.expirationDate).getTime() > _now))
-            const isActiveInvoice = (activeInvoiceNum && inv.invoiceNumber === activeInvoiceNum) || _grpActive
+            // Shared status badge — single source of truth in utils/invoiceStatus.js,
+            // identical on admin + client (individual & airline). Dynamic: follows the
+            // registration's active/queued plan.
+            const badge = getInvoiceStatus(inv, record, { isHolderUpgrade, activeInvoiceNum })
+            const isActiveInvoice = badge?.label === 'Active'
             return (
             <div key={String(inv._id)} className={`rounded-xl border px-4 py-3 transition-all ${isActiveInvoice ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}>
               <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -861,19 +860,9 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                     <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${purposeCls}`}>
                       {purposeLabel}
                     </span>
-                    {isActiveInvoice && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700">
-                        Active
-                      </span>
-                    )}
-                    {_grpExpired && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700">
-                        Expired
-                      </span>
-                    )}
-                    {_grpPending && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700">
-                        Pending
+                    {badge && (
+                      <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${badge.cls}`}>
+                        {badge.label}
                       </span>
                     )}
                   </div>
@@ -1259,9 +1248,30 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
     const purposeStr = record.wireRequestPurpose === 'renewal' ? 'renewal' : 'activation'
     const activationDate = record.subscriptionDate ? new Date(record.subscriptionDate) : new Date()
     const isQueued = activationDate > new Date()
+
+    // Mirror backend computeAirlinesExpirationDate so the preview matches what
+    // activation will set. expirationDate may be empty for initial requests.
+    const previewExpiry = () => {
+      if (record.expirationDate) return new Date(record.expirationDate)
+      const plan = record.wireRequestRenewalPlan || record.subscriptionPlan
+      if (plan === 'Unlimited Plan') return null
+      const d = new Date(activationDate)
+      if (plan === '1 Year Subscription Plan') { d.setFullYear(d.getFullYear() + 1); return d }
+      if (plan === 'Multiple Years Subscription Plan') {
+        const years = Number(record.multiYearCount) >= 2 ? Number(record.multiYearCount) : 2
+        d.setFullYear(d.getFullYear() + years); return d
+      }
+      return null
+    }
+    const exp = previewExpiry()
+    const expStr = exp ? exp.toLocaleDateString() : (
+      (record.wireRequestRenewalPlan || record.subscriptionPlan) === 'Unlimited Plan'
+        ? 'Never (Unlimited)' : '—'
+    )
+
     const confirmMsg = isQueued
-      ? `Queue this wire payment as a renewal?\n\nPlan: ${record.wireRequestRenewalPlan || record.subscriptionPlan}\nActivates: ${activationDate.toLocaleDateString()}\nExpires: ${record.expirationDate ? new Date(record.expirationDate).toLocaleDateString() : '—'}\n\nThe renewal will activate automatically on the set date.`
-      : `Activate this wire ${purposeStr} now?\n\nThis will set the subscription to Active.\nSubscription Date: ${activationDate.toLocaleDateString()}\nExpires: ${record.expirationDate ? new Date(record.expirationDate).toLocaleDateString() : '—'}\n\nThis cannot be automatically undone.`
+      ? `Queue this wire payment as a renewal?\n\nPlan: ${record.wireRequestRenewalPlan || record.subscriptionPlan}\nActivates: ${activationDate.toLocaleDateString()}\nExpires: ${expStr}\n\nThe renewal will activate automatically on the set date.`
+      : `Activate this wire ${purposeStr} now?\n\nThis will set the subscription to Active.\nSubscription Date: ${activationDate.toLocaleDateString()}\nExpires: ${expStr}\n\nThis cannot be automatically undone.`
     if (!window.confirm(confirmMsg)) return
     setActivating(true); setActivateErr('')
     try {
@@ -1456,7 +1466,21 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
             // is the CURRENT plan's invoice — hide it until admin generates the new invoice.
             (isRenewalRequest || isHolderUpgradeRequest) && record.invoiceStatus === 'Wire Requested'
           ) && <ViewField label="Invoice #" value={record.invoiceNumber} />}
-          {record.amountPaid > 0 && <ViewField label="Amount Paid" value={`$${Number(record.amountPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />}
+          {(() => {
+            // Wire request amount owed depends on purpose:
+            //  - holder-upgrade: additional holders × price/cert
+            //  - renewal: the renewal price stored in amountPaid
+            //  - initial: FULL committed amount (totalAmount), NOT just filled holders.
+            //    amountPaid only covers submitted holders, so it understates the bill.
+            const wireAmount = isHolderUpgradeRequest
+              ? Number(record.wireRequestAdditionalCount || 0) * Number(record.pricePerCertificate || record.pricePerCert || 0)
+              : isRenewalRequest
+                ? Number(record.amountPaid || record.totalAmount || 0)
+                : Number(record.totalAmount || record.amountPaid || 0)
+            return wireAmount > 0 && (
+              <ViewField label="Amount Due" value={`$${wireAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
+            )
+          })()}
           {/* For renewal/upgrade, record.subscriptionDate/expirationDate are the CURRENT plan's dates.
               Don't show them in the wire-request view — they're not what the airline requested. */}
           {!isRenewalRequest && !isHolderUpgradeRequest && record.subscriptionDate && (
@@ -1619,6 +1643,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
   const [showInvoices, setShowInvoices] = useState(false)
   const [showHolderCount, setShowHolderCount] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState(null)
+  const [activatingGroupId, setActivatingGroupId] = useState(null)
 
   const handleMarkGroupPaid = async (groupId) => {
     setMarkingPaidId(groupId)
@@ -1629,6 +1654,20 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
       alert(e?.response?.data?.message || 'Failed to mark paid.')
     } finally {
       setMarkingPaidId(null)
+    }
+  }
+
+  const handleActivateGroupRenewal = async (group) => {
+    const planLbl = group.nextRenewal?.plan || 'queued plan'
+    if (!window.confirm(`Start the queued plan now for this upgrade?\n\nSwitch to: ${planLbl}\nA fresh period begins today and expiry is recomputed from now.\n\nThis cannot be undone automatically.`)) return
+    setActivatingGroupId(String(group._id))
+    try {
+      const res = await activateGroupRenewalNow(record._id, group._id)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Failed to activate queued renewal.')
+    } finally {
+      setActivatingGroupId(null)
     }
   }
 
@@ -1728,7 +1767,13 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                             </p>
                             <p className="text-[10px] text-slate-500 mt-0.5">${g.pricePerCert}/cert · ${Number(g.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} · {g.plan === 'Unlimited Plan' ? 'No expiry' : (g.expirationDate ? `expires ${fmtDate(g.expirationDate)}` : '—')}{g.invoiceNumber ? ` · ${g.invoiceNumber}` : ''}</p>
                             {g.nextRenewal?.paidAt && (
-                              <p className="text-[10px] font-bold text-emerald-700 mt-0.5">Renewal queued — {planShort(g.nextRenewal.plan)} activates {g.nextRenewal.activationDate ? fmtDate(g.nextRenewal.activationDate) : 'at expiry'}</p>
+                              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                                <p className="text-[10px] font-bold text-emerald-700">Renewal queued — {planShort(g.nextRenewal.plan)}{g.nextRenewal.count ? ` · ${g.nextRenewal.count} holders` : ''}{g.nextRenewal.price ? ` · $${Number(g.nextRenewal.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''} activates {g.nextRenewal.activationDate ? fmtDate(g.nextRenewal.activationDate) : 'at expiry'}</p>
+                                <button onClick={() => handleActivateGroupRenewal(g)} disabled={activatingGroupId === String(g._id)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 disabled:opacity-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 transition">
+                                  {activatingGroupId === String(g._id) ? 'Activating…' : 'Activate Now'}
+                                </button>
+                              </div>
                             )}
                             {pending && (
                               <button onClick={() => handleMarkGroupPaid(g._id)} disabled={markingPaidId === String(g._id)}
@@ -2015,6 +2060,37 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
   }))
   const groupOpts = form.holderGroups || []
   const groupLabel = (g) => (g.plan === 'Unlimited Plan' ? 'Unlimited' : g.plan === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year') + ' upgrade'
+  // Edit a field on a single holder-upgrade group. Recompute amount when count/price change.
+  const setGroup = (idx, field, value) =>
+    setForm(p => ({
+      ...p,
+      holderGroups: (p.holderGroups || []).map((g, i) => {
+        if (i !== idx) return g
+        const next = { ...g, [field]: value }
+        if (field === 'count' || field === 'pricePerCert') {
+          const c = Number(field === 'count' ? value : next.count) || 0
+          const ppc = Number(field === 'pricePerCert' ? value : next.pricePerCert) || 0
+          next.amount = c * ppc
+        }
+        return next
+      }),
+    }))
+  // Edit a field on a single holder-upgrade group's queued renewal (nextRenewal).
+  // Recompute the queued price when count or price/cert changes.
+  const setGroupRenewal = (idx, field, value) =>
+    setForm(p => ({
+      ...p,
+      holderGroups: (p.holderGroups || []).map((g, i) => {
+        if (i !== idx) return g
+        const nr = { ...(g.nextRenewal || {}), [field]: value }
+        if (field === 'count' || field === 'pricePerCert') {
+          const c = Number(field === 'count' ? value : nr.count) || 0
+          const ppc = Number(field === 'pricePerCert' ? value : nr.pricePerCert) || 0
+          nr.price = c * ppc
+        }
+        return { ...g, nextRenewal: nr }
+      }),
+    }))
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
   const handleSave = async () => {
     setErr('')
@@ -2035,8 +2111,21 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
       holderGroupId: h.holderGroupId ? h.holderGroupId : null, // '' breaks ObjectId cast
       dateOfBirth:   h.dateOfBirth ? h.dateOfBirth : null,
     }))
+    // Normalise holder-group dates: '' breaks Date cast on the backend.
+    const cleanGroups = (form.holderGroups || []).map(g => ({
+      ...g,
+      subscriptionDate: g.subscriptionDate ? g.subscriptionDate : null,
+      expirationDate:   g.plan === 'Unlimited Plan' ? null : (g.expirationDate ? g.expirationDate : null),
+      ...(g.nextRenewal ? {
+        nextRenewal: {
+          ...g.nextRenewal,
+          activationDate: g.nextRenewal.activationDate ? g.nextRenewal.activationDate : null,
+          expiresAt:      g.nextRenewal.plan === 'Unlimited Plan' ? null : (g.nextRenewal.expiresAt ? g.nextRenewal.expiresAt : null),
+        },
+      } : {}),
+    }))
     try {
-      await onSave(record._id, { ...form, certificateHolders: cleanHolders })
+      await onSave(record._id, { ...form, certificateHolders: cleanHolders, holderGroups: cleanGroups })
       onClose()
     } catch (e) {
       setErr(friendlySaveError(e))
@@ -2105,6 +2194,56 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 </Field>
               </div>
             </div>
+            {groupOpts.length > 0 && (
+              <div><SectionHead label={`Holder Upgrade Plans (${groupOpts.length})`} />
+                <p className="text-[10px] text-slate-400 mb-3 -mt-1">Each upgrade batch is its own plan. Edits here are raw corrections — they do not generate invoices.</p>
+                <div className="space-y-4">
+                  {groupOpts.map((g, gi) => (
+                    <div key={String(g._id || gi)} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-black text-slate-700">{groupLabel(g)} #{gi + 1}</p>
+                        <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${g.paymentStatus === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>{g.paymentStatus || 'paid'}</span>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <Field label="Plan"><select className={selectCls} value={g.plan || ''} onChange={e => setGroup(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                        <Field label="Payment Status"><select className={selectCls} value={g.paymentStatus || 'paid'} onChange={e => setGroup(gi, 'paymentStatus', e.target.value)}><option value="paid">Paid</option><option value="pending">Pending</option></select></Field>
+                        <Field label="Holder Count"><input className={inputCls} type="number" min="1" value={g.count ?? ''} onChange={e => setGroup(gi, 'count', parseFloat(e.target.value) || 0)} /></Field>
+                        <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={g.pricePerCert ?? ''} onChange={e => setGroup(gi, 'pricePerCert', parseFloat(e.target.value) || 0)} /></Field>
+                        <Field label="Amount (USD)">
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
+                            <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0" value={g.amount ?? ''} onChange={e => setGroup(gi, 'amount', parseFloat(e.target.value) || 0)} />
+                          </div>
+                        </Field>
+                        <Field label="Invoice #"><input className={inputCls} value={g.invoiceNumber || ''} onChange={e => setGroup(gi, 'invoiceNumber', e.target.value)} /></Field>
+                        <Field label="Subscription Date"><input className={inputCls} type="date" value={g.subscriptionDate ? String(g.subscriptionDate).slice(0,10) : ''} onChange={e => setGroup(gi, 'subscriptionDate', e.target.value)} /></Field>
+                        <Field label="Expiration Date"><input className={inputCls} type="date" value={g.expirationDate ? String(g.expirationDate).slice(0,10) : ''} onChange={e => setGroup(gi, 'expirationDate', e.target.value)} disabled={g.plan === 'Unlimited Plan'} placeholder={g.plan === 'Unlimited Plan' ? 'Never (Unlimited)' : ''} /></Field>
+                      </div>
+                      {g.nextRenewal?.paidAt && (
+                        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Queued Renewal — what the user paid for</p>
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            <Field label="Queued Plan"><select className={selectCls} value={g.nextRenewal.plan || ''} onChange={e => setGroupRenewal(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                            <Field label="Holder Count"><input className={inputCls} type="number" min="1" value={g.nextRenewal.count ?? ''} onChange={e => setGroupRenewal(gi, 'count', parseFloat(e.target.value) || 0)} /></Field>
+                            <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={g.nextRenewal.pricePerCert ?? ''} onChange={e => setGroupRenewal(gi, 'pricePerCert', parseFloat(e.target.value) || 0)} /></Field>
+                            <Field label="Amount Paid (USD)">
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
+                                <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0" value={g.nextRenewal.price ?? ''} onChange={e => setGroupRenewal(gi, 'price', parseFloat(e.target.value) || 0)} />
+                              </div>
+                            </Field>
+                            <Field label="Activates On"><input className={inputCls} type="date" value={g.nextRenewal.activationDate ? String(g.nextRenewal.activationDate).slice(0,10) : ''} onChange={e => setGroupRenewal(gi, 'activationDate', e.target.value)} /></Field>
+                            <Field label="Queued Expiry"><input className={inputCls} type="date" value={g.nextRenewal.expiresAt ? String(g.nextRenewal.expiresAt).slice(0,10) : ''} onChange={e => setGroupRenewal(gi, 'expiresAt', e.target.value)} disabled={g.nextRenewal.plan === 'Unlimited Plan'} /></Field>
+                            <div className="sm:col-span-2"><Field label="Queued Invoice #"><input className={inputCls} value={g.nextRenewal.invoiceNumber || ''} onChange={e => setGroupRenewal(gi, 'invoiceNumber', e.target.value)} /></Field></div>
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-2">To start this plan immediately, use <span className="font-bold">Activate Now</span> in the view screen.</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div><SectionHead label="Airline / Operator" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2"><Field label="Company Name"><input className={inputCls} value={form.airlineName || ''} onChange={e => set('airlineName', e.target.value)} /></Field></div>
