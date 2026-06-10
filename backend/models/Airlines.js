@@ -8,7 +8,7 @@ const CertificateHolderSchema = new mongoose.Schema({
   certificateType: {
     type: String,
     required: true,
-    enum: ['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher'],
+    enum: ['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher', 'Part 107 - Remote Pilot'],
   },
   certificateStatus:            { type: String, enum: ['NEW', 'EXISTING'], required: true },
   faaCertificateNumber:         { type: String, default: '' },

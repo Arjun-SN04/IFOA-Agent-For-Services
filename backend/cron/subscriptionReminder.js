@@ -153,13 +153,19 @@ async function activateMaturedRenewals() {
         ...(renewal.registrationModel === 'Individual' && renewal.price
           ? { price: renewal.price }
           : {}),
-        // Airlines: restore committed holder count + amountPaid + totalAmount
-        ...(renewal.registrationModel !== 'Individual' ? {
-          ...(renewal.committedCount
-            ? { committedCount: renewal.committedCount, holderCountValue: String(renewal.committedCount) }
-            : {}),
-          ...(renewal.price ? { amountPaid: renewal.price, totalAmount: renewal.price } : {}),
-        } : {}),
+        // Airlines: restore committed holder count + amountPaid + totalAmount.
+        // committedCount is the GRAND TOTAL — renewal.committedCount is the BASE count only,
+        // so add back active holder-upgrade group slots (they stay separate until they renew).
+        ...(renewal.registrationModel !== 'Individual' ? (() => {
+          const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
+          const grandTotal = renewal.committedCount ? Number(renewal.committedCount) + activeGroupSlots : null;
+          return {
+            ...(grandTotal != null
+              ? { committedCount: grandTotal, holderCountValue: String(grandTotal) }
+              : {}),
+            ...(renewal.price ? { amountPaid: renewal.price, totalAmount: renewal.price } : {}),
+          };
+        })() : {}),
       };
 
       // nextRenewal is a typed subdocument — $unset leaves an empty shell.

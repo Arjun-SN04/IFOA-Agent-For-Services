@@ -367,11 +367,18 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.isFormCompleted         = true;
     // nextRenewal/nextRenewalId cleared via $unset below — do NOT put them in $set
     if (renewalMultiYearCount)     update.multiYearCount = renewalMultiYearCount;
-    // Airline: update committed holder count + pricePerCertificate if user changed it at renewal time
+    // Airline: update committed holder count + pricePerCertificate if user changed it at renewal time.
+    // committedCount is the GRAND TOTAL (base + active holder-upgrade groups). The renewal count
+    // (renewalExactCount) is the BASE plan only — active groups stay separate until they renew —
+    // so we add their slots back to keep the invariant (else the frontend, which derives base as
+    // committedCount − groupSlots, would under-count the base).
     if (renewalExactCount && registrationModel !== 'Individual') {
-      update.committedCount       = renewalExactCount;
-      update.holderCountValue     = String(renewalExactCount);
-      update.holderCount          = holderRangeFromCount(renewalExactCount);
+      const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
+      const grandTotal           = renewalExactCount + activeGroupSlots;
+      update.committedCount       = grandTotal;
+      update.holderCountValue     = String(grandTotal);
+      update.holderCount          = holderRangeFromCount(grandTotal);
+      // Price/cert tier is based on the base renewal count the user actually paid for.
       const renewalPpc            = tierPpcForPlan(activePlan, Math.max(3, renewalExactCount));
       if (renewalPpc > 0) {
         update.pricePerCertificate = renewalPpc;
@@ -1728,15 +1735,21 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
 
   // Airline: compute correct PPC and explicit totalAmount for the activated plan.
   // findByIdAndUpdate bypasses the pre-save hook, so we must set totalAmount manually.
-  const newCommittedCount = nr.committedCount || doc.committedCount || null;
+  // committedCount is the GRAND TOTAL (base + active holder-upgrade groups). nr.committedCount is
+  // the BASE renewal count only; active groups stay separate, so add their slots back to keep the
+  // invariant the frontend relies on (base = committedCount − groupSlots).
+  const renewalBaseCount = nr.committedCount ? Number(nr.committedCount) : (doc.committedCount || null);
+  const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
+  const newCommittedCount = renewalBaseCount != null ? renewalBaseCount + activeGroupSlots : null;
   let newPricePerCert = doc.pricePerCertificate;
   let computedTotalAmount = nr.price || null;
-  if (registrationModel !== 'Individual' && newCommittedCount) {
-    newPricePerCert = tierPpcForPlan(activePlan, newCommittedCount);
-    if (activePlan === 'Multiple Years Subscription Plan' && nr.multiYearCount > 1) {
-      computedTotalAmount = newPricePerCert * newCommittedCount * nr.multiYearCount;
-    } else {
-      computedTotalAmount = newPricePerCert * newCommittedCount;
+  if (registrationModel !== 'Individual' && renewalBaseCount) {
+    // Tier + total are based on the base renewal count actually paid for.
+    newPricePerCert = tierPpcForPlan(activePlan, renewalBaseCount);
+    if (!computedTotalAmount) {
+      computedTotalAmount = activePlan === 'Multiple Years Subscription Plan' && nr.multiYearCount > 1
+        ? newPricePerCert * renewalBaseCount * nr.multiYearCount
+        : newPricePerCert * renewalBaseCount;
     }
   }
 

@@ -50,7 +50,7 @@ const COUNTRIES = [
 
 const HOLDER_COUNTS = ['3 to 5', '5 to 10', 'More than 10']
 const SUBSCRIPTION_PLANS = ['1 Year Subscription Plan', 'Unlimited Plan']
-const CERTIFICATE_TYPES = ['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher']
+const CERTIFICATE_TYPES = ['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher', 'Part 107 - Remote Pilot']
 const PAYMENT_STATUS_OPTIONS = ['paid', 'pending']
 const COUNT_OPTIONS = {
   '3 to 5': [3, 4, 5],

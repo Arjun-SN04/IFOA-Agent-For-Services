@@ -41,7 +41,7 @@ const IndividualSchema = new mongoose.Schema({
   },
   primaryCertificate: {
     type: String,
-    enum: ['Part 65 - Aircraft Dispatcher', 'Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor'],
+    enum: ['Part 65 - Aircraft Dispatcher', 'Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 107 - Remote Pilot'],
     required: true,
   },
   faaCertificateNumber: { type: String },

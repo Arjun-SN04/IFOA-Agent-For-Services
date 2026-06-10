@@ -117,6 +117,7 @@ const CERTIFICATE_TYPES = [
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
   'Part 65 - Aircraft Dispatcher',
+  'Part 107 - Remote Pilot',
 ]
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
@@ -186,12 +187,14 @@ const INDIVIDUAL_CERT_TYPES = [
   'Part 65 - Aircraft Dispatcher',
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
+  'Part 107 - Remote Pilot',
 ]
 
 const AIRLINE_CERT_TYPES = [
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
   'Part 65 - Aircraft Dispatcher',
+  'Part 107 - Remote Pilot',
 ]
 
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -1563,10 +1566,24 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   )
   const [plan, setPlan] = useState((isGroup ? group.plan : sub.subscriptionPlan) || '1 Year Subscription Plan')
   const [multiYearRenewCount, setMultiYearRenewCount] = useState(Number(sub.multiYearCount) || 3)
+
+  // ── Renewal count continuity (agreed flow) ──────────────────────────────────
+  // When renewing a holder-upgrade GROUP, the count continues from the base plan:
+  //   1. base has a PAID queued renewal  → use that queued count (what they paid)
+  //   2. else base is currently active    → use the base's committed count
+  //   3. else (no base plan to anchor to) → start from the group's own count (1 for a single member)
+  const baseLiveNow = (sub.status === 'Active' || sub.isPaid) &&
+    (sub.subscriptionPlan === 'Unlimited Plan' || !sub.expirationDate || new Date(sub.expirationDate) > new Date())
+  const baseAnchorCount = sub.nextRenewal?.paidAt
+    ? Number(sub.nextRenewal.committedCount || sub.committedCount || 0)
+    : (baseLiveNow ? Number(sub.committedCount || sub.holderCountValue || 0) : 0)
+  const countFromBase = isGroup && baseAnchorCount > 0
+  const anchorSource = sub.nextRenewal?.paidAt ? 'renewed base plan' : 'current base plan'
+
   // Airline: committed holder count — user can adjust at renewal time
   const [exactCount, setExactCount] = useState(
     isGroup
-      ? Number(group.count || unitHolders.length || 1)
+      ? (baseAnchorCount > 0 ? baseAnchorCount : Number(group.count || unitHolders.length || 1))
       : Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 1)
   )
   const [showPayment, setShowPayment] = useState(false)
@@ -1809,6 +1826,9 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                     <span className="text-slate-500">Current: <strong className="text-slate-700">{currentHolderCount}</strong></span>
                     <span className="font-semibold text-blue-600">Tier {renewRange} · ${renewPpc}/cert</span>
                   </div>
+                  {countFromBase && (
+                    <p className="text-[10px] text-emerald-600 font-semibold">Continuing count from {anchorSource} ({baseAnchorCount}). Adjust if needed.</p>
+                  )}
                 </div>
               )}
 
@@ -2967,32 +2987,60 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                       const gExpired = g.plan !== 'Unlimited Plan' && gDays !== null && gDays <= 0
                       const gQueued = !!g.nextRenewal?.paidAt
                       const gCanRenew = active && g.plan !== 'Unlimited Plan' && !gQueued && gDays !== null && gDays <= 60
+                      const isUnlimited = g.plan === 'Unlimited Plan'
+                      const pct = Math.min(100, Math.round((filled / Math.max(1, g.count)) * 100))
+                      const invNum = String(g.invoiceNumber || '').replace(/^invoice\s+/i, '')
                       return (
-                        <div key={String(g._id || gi)} className="rounded-xl border border-blue-100 bg-blue-50/60 px-3.5 py-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-black text-slate-900">
-                              {planShortLabel(g.plan, g.multiYearCount)}
-                              {gExpired && <span className="ml-1.5 text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5">Expired</span>}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-500">{filled}/{g.count} filled</span>
+                        <div key={String(g._id || gi)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                          {/* Header: plan name + type badge + amount */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-black text-slate-900">{planShortLabel(g.plan, g.multiYearCount)}</span>
+                              {isUnlimited ? (
+                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Lifetime</span>
+                              ) : (
+                                <span className="text-[9px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">Upgrade</span>
+                              )}
+                              {gExpired && <span className="text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5">Expired</span>}
+                              {gQueued && <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Renewing</span>}
+                            </div>
+                            <span className="text-sm font-black text-slate-900 tabular-nums">{money(g.amount)}</span>
                           </div>
-                          <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-slate-500">
-                            <span>${g.pricePerCert}/cert · {money(g.amount)}</span>
-                            <span>{g.plan === 'Unlimited Plan' ? 'No expiry' : (g.expirationDate ? `Expires ${fmtYMD(g.expirationDate)}` : '—')}</span>
+
+                          {/* Fill progress */}
+                          <div className="mt-2.5">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
+                              <span>{filled} / {g.count} holders</span>
+                              <span className={isUnlimited ? 'text-emerald-600' : ''}>
+                                {isUnlimited ? 'No expiry' : (g.expirationDate ? `Expires ${fmtYMD(g.expirationDate)}` : '—')}
+                              </span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className={`h-full rounded-full ${filled >= g.count ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                            </div>
                           </div>
-                          {g.invoiceNumber && (
-                            <p className="text-[10px] text-slate-400 mt-0.5">Invoice {g.invoiceNumber}</p>
-                          )}
+
+                          {/* Meta: price/cert + invoice */}
+                          <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400">
+                            <span><span className="font-semibold text-slate-500">${g.pricePerCert}</span>/cert</span>
+                            {invNum && <span className="font-mono">Invoice {invNum}</span>}
+                          </div>
+
                           {gQueued && (
-                            <p className="text-[10px] font-bold text-emerald-700 mt-1">
-                              Renewal queued — {planShortLabel(g.nextRenewal.plan)} activates {g.nextRenewal.activationDate ? fmtYMD(g.nextRenewal.activationDate) : 'at expiry'}
-                            </p>
+                            <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
+                              <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              <p className="text-[10px] font-bold text-emerald-700 leading-snug">
+                                {planShortLabel(g.nextRenewal.plan)} renewal queued — activates {g.nextRenewal.activationDate ? fmtYMD(g.nextRenewal.activationDate) : 'at expiry'}
+                              </p>
+                            </div>
                           )}
+
                           {gCanRenew && onRenewGroup && (
                             <button
                               onClick={() => onRenewGroup(g)}
-                              className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold text-white transition"
-                              style={{ background: '#0000ff' }}
+                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-600/20 transition"
                             >
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3146,6 +3194,11 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               top: `${top}px`,
               left: `${left}px`,
               width: `${popupWidth}px`,
+              // Bound the panel to the viewport so the list scrolls instead of
+              // overflowing off-screen (bottom holders + their buttons were cut off).
+              maxHeight: `${window.innerHeight - top - margin}px`,
+              display: 'flex',
+              flexDirection: 'column',
             }
             isDesktopPositioned = true
           }
@@ -3156,9 +3209,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-              className={`fixed z-50 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xl ${isDesktopPositioned
+              className={`fixed z-50 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xl flex flex-col ${isDesktopPositioned
                   ? ""
-                  : "top-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px]"
+                  : "top-24 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px] max-h-[calc(100vh-7rem)]"
                 }`}
               style={popupStyle}
             >
@@ -3204,7 +3257,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
               </div>
 
               {/* Holder list */}
-              <div className="overflow-y-auto divide-y divide-slate-100" style={{ maxHeight: '520px' }}>
+              <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
                 {filteredHP.length === 0 ? (
                   <div className="py-8 text-center">
                     <p className="text-xs font-semibold text-slate-500">No match for "{holderSearch}"</p>
@@ -3550,7 +3603,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                     onChange={e => setEditHolderForm(f => ({ ...f, certificateType: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition bg-white">
                     <option value="">Select type…</option>
-                    {['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher'].map(v => (
+                    {['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher', 'Part 107 - Remote Pilot'].map(v => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
@@ -3620,7 +3673,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onU
                       onChange={e => setEditHolderForm(f => ({ ...f, secondaryCertificateType: e.target.value }))}
                       className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition bg-white">
                       <option value="">Select secondary type…</option>
-                      {['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher'].map(v => (
+                      {['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher', 'Part 107 - Remote Pilot'].map(v => (
                         <option key={v} value={v}>{v}</option>
                       ))}
                     </select>

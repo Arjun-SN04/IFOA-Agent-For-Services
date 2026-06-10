@@ -4,12 +4,14 @@ const PRIMARY_TYPES = [
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
   'Part 65 - Aircraft Dispatcher',
+  'Part 107 - Remote Pilot',
 ]
 
 const SECONDARY_TYPES = [
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
   'Part 65 - Aircraft Dispatcher',
+  'Part 107 - Remote Pilot',
 ]
 
 function Field({ label, required, error, helper, children }) {

@@ -22,6 +22,7 @@ const CERTIFICATE_OPTIONS = [
   'Part 65 - Aircraft Dispatcher',
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
+  'Part 107 - Remote Pilot',
 ]
 
 const initialForm = {

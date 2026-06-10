@@ -18,6 +18,7 @@ const CERTIFICATE_TYPES = [
   'Part 61 - Pilot',
   'Part 61 - Flight or Ground Instructor',
   'Part 65 - Aircraft Dispatcher',
+  'Part 107 - Remote Pilot',
 ]
 
 export default function AirlinesStep2Holders({ data, update, onNext, onBack }) {
