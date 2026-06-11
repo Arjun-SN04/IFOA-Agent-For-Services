@@ -39,6 +39,7 @@ const {
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
+const { activeHolderGroupSlots, allHolderGroupSlots, currentBaseSlots } = require('../utils/holderGroups');
 const {
   sendIndividualPaymentConfirmation,
   sendAirlinePaymentConfirmation,
@@ -386,13 +387,12 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     // nextRenewal/nextRenewalId cleared via $unset below — do NOT put them in $set
     if (renewalMultiYearCount)     update.multiYearCount = renewalMultiYearCount;
     // Airline: update committed holder count + pricePerCertificate if user changed it at renewal time.
-    // committedCount is the GRAND TOTAL (base + active holder-upgrade groups). The renewal count
-    // (renewalExactCount) is the BASE plan only — active groups stay separate until they renew —
-    // so we add their slots back to keep the invariant (else the frontend, which derives base as
-    // committedCount − groupSlots, would under-count the base).
+    // committedCount is the GRAND TOTAL (base + ALL holder-upgrade groups). The renewal count
+    // (renewalExactCount) is the BASE plan only — groups stay separate until they renew — so we
+    // add ALL their slots back to keep the invariant (the frontend derives base as
+    // committedCount − allGroupSlots; subtracting only active would under-count the base).
     if (renewalExactCount && registrationModel !== 'Individual') {
-      const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
-      const grandTotal           = renewalExactCount + activeGroupSlots;
+      const grandTotal           = renewalExactCount + allHolderGroupSlots(doc.holderGroups);
       update.committedCount       = grandTotal;
       update.holderCountValue     = String(grandTotal);
       update.holderCount          = holderRangeFromCount(grandTotal);
@@ -478,6 +478,31 @@ async function applyGroupRenewal(registrationId, registrationModel, paymentDoc, 
   const holdersToRemove = Array.isArray(paymentDoc.renewalHoldersToRemove) && paymentDoc.renewalHoldersToRemove.length
     ? paymentDoc.renewalHoldersToRemove
     : null;
+
+  // ── Merge into base plan ──────────────────────────────────────────────────
+  // Same-plan upgrade group folds back into the base: its holders become base
+  // holders (inherit the base plan + expiry) and its slots fold into committedCount.
+  // committedCount delta = newCount − previousGroupCount (the group leaves the array,
+  // the base absorbs `count` of its slots). Always immediate — never queued.
+  if (paymentDoc.mergeTarget === 'base' && group.plan === doc.subscriptionPlan) {
+    const prevGroupCount = Number(group.count || 0);
+    if (holdersToRemove) {
+      doc.certificateHolders = doc.certificateHolders.filter(
+        h => !(String(h.holderGroupId || '') === String(groupId) && holdersToRemove.includes(String(h._id))),
+      );
+    }
+    // Remaining group holders become base holders.
+    (doc.certificateHolders || []).forEach(h => {
+      if (String(h.holderGroupId || '') === String(groupId)) h.holderGroupId = null;
+    });
+    // Drop the group; fold its (possibly adjusted) slot count into the base total.
+    doc.holderGroups = (doc.holderGroups || []).filter(g => String(g._id) !== String(groupId));
+    const newCommitted = Math.max(0, Number(doc.committedCount || doc.holderCountValue || 0) - prevGroupCount + count);
+    doc.committedCount = newCommitted;
+    doc.holderCountValue = String(newCommitted);
+    await doc.save();
+    return doc;
+  }
 
   if (isQueued) {
     group.nextRenewal = {
@@ -728,8 +753,9 @@ exports.createPaymentIntent = async (req, res) => {
 
       // Determine new total count and look up tier-based ppc (pricing logic
       // unchanged: tier derived from the new total committed count).
-      const currentCommitted = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
-      const newTotal = Math.max(3, currentCommitted + additional);
+      // Tier is based on current base slots (excludes previous-period upgrade plans)
+      // so a stale leftover plan can't shift the tier.
+      const newTotal = Math.max(3, currentBaseSlots(doc) + additional);
       const newPpc   = tierPpcForPlan(batchPlan, newTotal);
 
       // Multi-Year batches multiply by the selected year count.
@@ -811,6 +837,13 @@ exports.createPaymentIntent = async (req, res) => {
     if (newSubscriptionPlan) metadata.newSubscriptionPlan = newSubscriptionPlan;
     // Group renewal target — confirm/webhook applies the renewal to this group.
     if (purpose === 'renewal' && bodyHolderGroupId) metadata.holderGroupId = String(bodyHolderGroupId);
+    // Group renewal merge — fold the group back into the base plan (same plan type only).
+    // applyGroupRenewal dissolves the group: its holders become base holders (inherit
+    // base expiry) and its slots fold into the base committed count.
+    if (purpose === 'renewal' && bodyHolderGroupId && bodyMergeTarget === 'base') {
+      const grp = (doc.holderGroups || []).find(g => String(g._id) === String(bodyHolderGroupId));
+      if (grp && grp.plan === doc.subscriptionPlan) metadata.mergeTarget = 'base';
+    }
     // computedYears was set inside the amount block; propagate to metadata so
     // confirm/webhook can store it on the Payment doc without re-deriving.
     // Clamp to the SAME Math.max(2, …) the amount calculations applied so the
@@ -829,8 +862,7 @@ exports.createPaymentIntent = async (req, res) => {
     if (purpose === 'holder-upgrade') {
       const _batchPlan  = newSubscriptionPlan || doc.subscriptionPlan;
       const _additional = Number(bodyAdditionalCount || 0);
-      const _current    = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
-      const _newTotal   = Math.max(3, _current + _additional);
+      const _newTotal   = Math.max(3, currentBaseSlots(doc) + _additional);
       metadata.newPricePerCertificate = String(tierPpcForPlan(_batchPlan, _newTotal));
       // batchPlan mirrors newSubscriptionPlan; set explicitly so confirm/webhook
       // always have the group's plan even when it equals the base plan.
@@ -1751,12 +1783,11 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
 
   // Airline: compute correct PPC and explicit totalAmount for the activated plan.
   // findByIdAndUpdate bypasses the pre-save hook, so we must set totalAmount manually.
-  // committedCount is the GRAND TOTAL (base + active holder-upgrade groups). nr.committedCount is
-  // the BASE renewal count only; active groups stay separate, so add their slots back to keep the
-  // invariant the frontend relies on (base = committedCount − groupSlots).
+  // committedCount is the GRAND TOTAL (base + ALL holder-upgrade groups). nr.committedCount is
+  // the BASE renewal count only; groups stay separate, so add ALL their slots back to keep the
+  // invariant the frontend relies on (base = committedCount − allGroupSlots).
   const renewalBaseCount = nr.committedCount ? Number(nr.committedCount) : (doc.committedCount || null);
-  const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
-  const newCommittedCount = renewalBaseCount != null ? renewalBaseCount + activeGroupSlots : null;
+  const newCommittedCount = renewalBaseCount != null ? renewalBaseCount + allHolderGroupSlots(doc.holderGroups) : null;
   let newPricePerCert = doc.pricePerCertificate;
   let computedTotalAmount = nr.price || null;
   if (registrationModel !== 'Individual' && renewalBaseCount) {
@@ -1945,9 +1976,14 @@ exports.adminHolderUpgrade = async (req, res) => {
 
     const now = new Date();
     const currentCommitted = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
-    const newTotal = currentCommitted + addCount;
-    const ppc      = tierPpcForPlan(batchPlan, Math.max(3, newTotal));
-    const amount   = ppc * addCount;
+    // committedCount keeps the invariant (base + all not-expired groups), so the new
+    // stored total just adds the purchased slots. The pricing TIER, however, is based
+    // on the current base slots (excludes previous-period upgrade plans) so a stale
+    // leftover plan can't bump the airline into a higher/lower tier.
+    const newCommitted = currentCommitted + addCount;
+    const tierBasis    = currentBaseSlots(doc, now) + addCount;
+    const ppc          = tierPpcForPlan(batchPlan, Math.max(3, tierBasis));
+    const amount       = ppc * addCount;
     const expiry   = computeExpiry(batchPlan, now, null);
 
     // Resolve a valid merge target (must be the SAME plan type as the batch).
@@ -1960,8 +1996,8 @@ exports.adminHolderUpgrade = async (req, res) => {
       if (tg && tg.plan === batchPlan) mergeGroup = tg;
     }
 
-    doc.committedCount   = newTotal;
-    doc.holderCountValue = String(newTotal);
+    doc.committedCount   = newCommitted;
+    doc.holderCountValue = String(newCommitted);
     if (batchPlan === doc.subscriptionPlan) doc.pricePerCertificate = ppc;
 
     let group; // the unit to invoice against (real group for separate; pseudo for merge)

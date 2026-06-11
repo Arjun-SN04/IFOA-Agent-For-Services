@@ -218,10 +218,10 @@ router.post('/admin-create', auth, adminOnly, async (req, res) => {
     }
 
     const norm = normalizeInvoiceNumber(invoiceNumber);
-    // renewal and holder-upgrade invoices are additive — they must NOT reuse the
-    // current-plan Invoice doc. Only match by exact invoice number; never fall back
+    // renewal, holder-upgrade and custom invoices are additive — they must NOT reuse
+    // the current-plan Invoice doc. Only match by exact invoice number; never fall back
     // to the generic adminGenerated doc, and never delete sibling Invoice docs.
-    const isAdditive = purpose === 'renewal' || purpose === 'holder-upgrade';
+    const isAdditive = purpose === 'renewal' || purpose === 'holder-upgrade' || purpose === 'custom';
 
     // Find any existing admin-generated Invoice doc for this registration.
     // Prefer exact match on invoiceNumber; fall back to any adminGenerated doc

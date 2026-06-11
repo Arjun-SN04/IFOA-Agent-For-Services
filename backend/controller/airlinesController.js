@@ -11,6 +11,7 @@ const {
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice }  = require('../services/invoiceService');
 const { sendAirlinePaymentConfirmation, sendWireRequestAdminNotification } = require('../services/emailService');
+const { allHolderGroupSlots } = require('../utils/holderGroups');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -426,9 +427,10 @@ exports.addHoldersToSubscription = async (req, res) => {
       });
     }
 
-    // Base-plan capacity excludes slots reserved by holder groups, and only
-    // counts holders that belong to the base plan (holderGroupId == null).
-    const totalGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
+    // Base-plan capacity excludes slots reserved by ALL holder groups (committedCount
+    // accumulates every group's slots), and only counts holders that belong to the
+    // base plan (holderGroupId == null).
+    const totalGroupSlots = allHolderGroupSlots(doc.holderGroups);
     const baseCommitted   = Math.max(0, (doc.committedCount || doc.certificateHolders.length) - totalGroupSlots);
     const baseFilled      = doc.certificateHolders.filter(h => !h.holderGroupId).length;
 

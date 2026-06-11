@@ -9,7 +9,8 @@ import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
-import { getAirlineTotal } from '../../utils/airlineTotal'
+import { getAirlineTotal, isActiveHolderGroup, isCurrentBaseGroup, activeGroupSlots, allGroupSlots, currentBaseGroupSlots } from '../../utils/airlineTotal'
+import { getExpiryStatus } from '../../utils/expiryStatus'
 import { getInvoiceStatus } from '../../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
@@ -79,9 +80,9 @@ function EditCountrySelect({ value, onChange }) {
     <div className="relative">
       <button type="button" onClick={() => { setOpen(v => !v); setSearch('') }}
         className={`w-full text-left px-3 py-2 border rounded-lg text-sm bg-white outline-none transition flex items-center justify-between ${open ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-200 hover:border-slate-300'
-          } ${value ? 'text-slate-900' : 'text-slate-400'}`}>
+          } ${value ? 'text-slate-900' : 'text-slate-500'}`}>
         <span>{value || '— Select country —'}</span>
-        <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className={`w-3.5 h-3.5 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -89,10 +90,10 @@ function EditCountrySelect({ value, onChange }) {
         <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
           <div className="p-2 border-b border-slate-100">
             <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-400" />
+              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-500" />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-400">No results</div>}
+            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-500">No results</div>}
             {filtered.map(c => (
               <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
                 className={`px-4 py-2 text-sm cursor-pointer transition-colors ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}>
@@ -169,7 +170,7 @@ function PayBadge({ status }) {
 function Row({ label, value }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 py-3 border-b border-slate-100 last:border-0">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-52 flex-shrink-0">{label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 sm:w-52 flex-shrink-0">{label}</span>
       <span className="text-sm font-medium text-slate-800 break-words min-w-0">{value ?? '—'}</span>
     </div>
   )
@@ -459,20 +460,9 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             </h3>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 justify-end">
-            {isAirline && (
-              <button
-                onClick={addHolder}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Certificate Holder
-              </button>
-            )}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center"
+              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center"
             >
               ✕
             </button>
@@ -510,7 +500,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                   {/* Current plan — read-only, changed via registration form */}
                   <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Plan</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Current Plan</p>
                       <p className="text-sm font-bold text-slate-800">{sub.subscriptionPlan || '—'}</p>
                     </div>
                     <button
@@ -541,7 +531,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                 <div className="space-y-3">
                   <div className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Plan</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Current Plan</p>
                       <p className="text-sm font-bold text-slate-800">{sub.subscriptionPlan || '—'}</p>
                     </div>
                     <button
@@ -565,7 +555,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
             <>
               {/* ── Company & Contact ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Company &amp; Contact</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Company &amp; Contact</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airline Name</label>
@@ -607,7 +597,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
               {/* ── Address ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Address</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
@@ -643,139 +633,12 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                 </div>
               </div>
 
-              {/* ── Certificate Holders ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Holders</p>
-                </div>
-                {maxHolders > 0 && (
-                  <p className="text-[11px] text-slate-500">
-                    Committed slots: <span className="font-bold text-slate-700">{maxHolders}</span>&nbsp;·&nbsp;Currently filled: <span className="font-bold text-slate-700">{form.certificateHolders?.length || 0}</span>
-                  </p>
-                )}
-                <div className="space-y-4">
-                  {(form.certificateHolders || []).map((h, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 bg-white">
-                      {/* Holder header */}
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 rounded-t-xl">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</div>
-                          <span className="text-xs font-bold text-slate-700 truncate">{h.fullName?.trim() || `Holder #${i + 1}`}</span>
-                        </div>
-                        <button onClick={() => removeHolder(i)} className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline flex-shrink-0 ml-2">Remove</button>
-                      </div>
-
-                      {/* Holder fields */}
-                      <div className="p-4 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full Name <span className="text-red-400">*</span></label>
-                            <input className={inpSm} placeholder="Full legal name" value={h.fullName} onChange={(e) => setHolder(i, 'fullName', e.target.value)} />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Date of Birth</label>
-                            <input type="date" className={inpSm + ' [color-scheme:light]'} value={h.dateOfBirth || ''} onChange={(e) => setHolder(i, 'dateOfBirth', e.target.value)} />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Type <span className="text-red-400">*</span></label>
-                            <select className={inpSm + ' cursor-pointer'} value={h.certificateType} onChange={(e) => setHolder(i, 'certificateType', e.target.value)}>
-                              <option value="">Select type…</option>
-                              {AIRLINE_CERT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Certificate Status</label>
-                            <select className={inpSm + ' cursor-pointer'} value={h.certificateStatus} onChange={(e) => setHolder(i, 'certificateStatus', e.target.value)}>
-                              <option value="EXISTING">EXISTING</option>
-                              <option value="NEW">NEW</option>
-                            </select>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">FAA Certificate # <span className="text-red-400">*</span></label>
-                            <input className={inpSm} placeholder="FAA Certificate #" value={h.faaCertificateNumber} onChange={(e) => setHolder(i, 'faaCertificateNumber', e.target.value)} />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">IACRA FTN # <span className="text-red-400">*</span></label>
-                            <input className={inpSm} placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber} onChange={(e) => setHolder(i, 'iacraFtnNumber', e.target.value)} />
-                          </div>
-                          <div className="flex flex-col gap-1 sm:col-span-2">
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Holder Email</label>
-                            <input type="email" className={inpSm} placeholder="holder@airline.com" value={h.email || ''} onChange={(e) => setHolder(i, 'email', e.target.value)} />
-                          </div>
-                        </div>
-
-                        {/* Secondary certificate toggle + collapsible fields — wrapped together so space-y-3 doesn't add gap when collapsed */}
-                        <div className="flex flex-col gap-2">
-                          <label className={`flex items-center gap-2.5 cursor-pointer p-3 rounded-lg border select-none transition-all ${h.hasSecondaryCertificate ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-blue-200 bg-white'
-                            }`}>
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${h.hasSecondaryCertificate ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'
-                              }`}>
-                              {h.hasSecondaryCertificate && (
-                                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                            <input
-                              type="checkbox"
-                              className="sr-only"
-                              checked={!!h.hasSecondaryCertificate}
-                              onChange={(e) => setHolder(i, 'hasSecondaryCertificate', e.target.checked)}
-                            />
-                            <span className="text-xs font-semibold text-slate-700">This holder has a secondary FAA certificate</span>
-                          </label>
-
-                          {/* Smooth collapse — max-h-0 when hidden so no gap leaks into space-y-3 */}
-                          <div className={`overflow-hidden transition-all duration-200 ease-in-out ${h.hasSecondaryCertificate ? 'max-h-[800px]' : 'max-h-0'}`}>
-                            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-3">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Secondary Certificate Details</p>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary Certificate Type <span className="text-red-400">*</span></label>
-                                <select
-                                  className={inpSm + ' cursor-pointer'}
-                                  value={h.secondaryCertificateType || ''}
-                                  onChange={(e) => setHolder(i, 'secondaryCertificateType', e.target.value)}
-                                >
-                                  <option value="">Select secondary type…</option>
-                                  {AIRLINE_CERT_TYPES.filter((t) => t !== h.certificateType).map((t) => (
-                                    <option key={t} value={t}>{t}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary FAA Cert #</label>
-                                  <input
-                                    className={inpSm}
-                                    placeholder="Secondary FAA Cert #"
-                                    value={h.secondaryFaaCertificateNumber || ''}
-                                    onChange={(e) => setHolder(i, 'secondaryFaaCertificateNumber', e.target.value)}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Secondary IACRA FTN #</label>
-                                  <input
-                                    className={inpSm}
-                                    placeholder="FTN-XXXXXXXX"
-                                    value={h.secondaryIacraFtnNumber || ''}
-                                    onChange={(e) => setHolder(i, 'secondaryIacraFtnNumber', e.target.value)}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           ) : (
             <>
               {/* ── Personal Info ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Information</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Personal Information</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name <span className="text-red-400">*</span></label>
@@ -817,7 +680,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
               {/* ── Address ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Address</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1 sm:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
@@ -851,7 +714,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
               {/* ── Certificate ── */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Information</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Certificate Information</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airman Certificate Status</label>
@@ -976,16 +839,16 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
   const committedCount = sub.committedCount || currentCount
 
   // Capacity depends on the chosen target: a group has its own slots; the base
-  // plan = committedCount minus all group slots.
-  const totalGroupSlots = holderGroups.reduce((s, g) => s + Number(g.count || 0), 0)
+  // plan = committedCount minus ALL upgrade slots. committedCount accumulates every
+  // group's slots (active or expired) and is never decremented, so subtracting all
+  // group slots yields the pure base count (shared invariant, mirrors the backend).
+  const totalGroupSlots = allGroupSlots(holderGroups)
   const baseCommitted = Math.max(0, committedCount - totalGroupSlots)
   const targetGroup = targetGroupId ? holderGroups.find(g => String(g._id) === String(targetGroupId)) : null
   const filledInTarget = existingHolders.filter(h =>
     targetGroupId ? String(h.holderGroupId || '') === String(targetGroupId) : !h.holderGroupId
   ).length
-  const remainingSlots = targetGroup
-    ? targetGroup.count - filledInTarget
-    : baseCommitted - filledInTarget
+  const targetCapacity = targetGroup ? targetGroup.count : baseCommitted
 
   // Holders that already belong to the selected target (group or base plan).
   const holdersForTarget = (tid) => existingHolders
@@ -1014,7 +877,10 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
   // as the first rows; only rows beyond this are genuinely new).
   const existingCount = holdersForTarget(targetGroupId).length
   const newMembersCount = Math.max(0, holders.length - existingCount)
-  const atLimit = newMembersCount >= remainingSlots
+  // Live remaining slots — based on rows currently in the form, so removing a holder
+  // frees a slot and re-enables "Add Certificate Holder".
+  const remainingSlots = Math.max(0, targetCapacity - holders.length)
+  const atLimit = holders.length >= targetCapacity
 
   const onChange = (i, field, val) =>
     setHolders(prev => prev.map((h, idx) => idx === i ? { ...h, [field]: val } : h))
@@ -1024,7 +890,8 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
   }
 
   const removeRow = (i) => {
-    if (i < existingCount) return
+    // Allow removing any holder — existing members too. Saving the form persists the
+    // remaining list, so a removed holder is dropped from the airline's record.
     if (holders.length > 1) setHolders(prev => prev.filter((_, idx) => idx !== i))
   }
 
@@ -1032,15 +899,42 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
     !h.fullName?.trim() && !h.dateOfBirth && !h.certificateType &&
     !h.iacraFtnNumber?.trim() && !h.faaCertificateNumber?.trim() && !h.email?.trim()
 
-  const validate = (rows) => {
-    const errs = rows.map(h => {
+  const validate = () => {
+    const errs = holders.map(h => {
       const e = {}
+      if (isHolderEmpty(h)) return e
       if (!h.fullName?.trim()) e.fullName = 'Required'
       if (!h.certificateType) e.certificateType = 'Required'
       if (!h.iacraFtnNumber?.trim()) e.iacraFtnNumber = 'Required'
       return e
     })
     setErrors(errs)
+
+    const firstInvalidIdx = errs.findIndex(e => Object.keys(e).length > 0)
+    if (firstInvalidIdx !== -1) {
+      setTimeout(() => {
+        const el = document.getElementById(`add-holder-card-${firstInvalidIdx}`)
+        if (el) {
+          let scrollParent = el.parentElement
+          while (scrollParent && scrollParent !== document.body) {
+            const { overflowY } = window.getComputedStyle(scrollParent)
+            if (overflowY === 'auto' || overflowY === 'scroll') break
+            scrollParent = scrollParent.parentElement
+          }
+          if (scrollParent && scrollParent !== document.body) {
+            const elTop = el.getBoundingClientRect().top
+            const containerTop = scrollParent.getBoundingClientRect().top
+            scrollParent.scrollBy({ top: elTop - containerTop - 16, behavior: 'smooth' })
+          } else {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          const firstField = Object.keys(errs[firstInvalidIdx])[0]
+          const input = el.querySelector(`[data-field="${firstField}"]`)
+          if (input) setTimeout(() => input.focus({ preventScroll: true }), 350)
+        }
+      }, 50)
+    }
+
     return errs.every(e => Object.keys(e).length === 0)
   }
 
@@ -1054,7 +948,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
       setApiError(`This plan has ${targetCapacity} slot${targetCapacity !== 1 ? 's' : ''}.`)
       return
     }
-    if (!validate(cleaned)) return
+    if (!validate()) return
     setSubmitting(true)
     setApiError('')
     try {
@@ -1082,11 +976,11 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-black text-gray-900">Certificate Holders</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-gray-500 mt-0.5">
               {remainingSlots} slot{remainingSlots !== 1 ? 's' : ''} remaining · already covered by your committed plan
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all flex-shrink-0">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-600 transition-all flex-shrink-0">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -1108,9 +1002,9 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
               <span className="text-sm font-black text-slate-900 tabular-nums">${Number(targetGroup.amount || 0).toFixed(2)}</span>
             </div>
             <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
-              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Price / cert</span>${Number(targetGroup.pricePerCert || 0)}</div>
-              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Slots</span>{filledInTarget} / {targetGroup.count} filled</div>
-              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Expiry</span>{targetGroup.plan === 'Unlimited Plan' ? 'Never' : (targetGroup.expirationDate ? fmtYMD(targetGroup.expirationDate) : '—')}</div>
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-500">Price / cert</span>${Number(targetGroup.pricePerCert || 0)}</div>
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-500">Slots</span>{filledInTarget} / {targetGroup.count} filled</div>
+              <div><span className="block text-[9px] font-bold uppercase tracking-wide text-slate-500">Expiry</span>{targetGroup.plan === 'Unlimited Plan' ? 'Never' : (targetGroup.expirationDate ? fmtYMD(targetGroup.expirationDate) : '—')}</div>
             </div>
             <p className="mt-2 text-[11px] text-slate-500">These slots are already paid for — fill them with certificate holders below at no extra charge.</p>
           </div>
@@ -1135,10 +1029,11 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
         {/* Holder forms */}
         <div className="px-4 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1">
           {holders.map((h, i) => (
-            <div key={i} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
+            <div key={i} id={`add-holder-card-${i}`} className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Member #{i + 1}</span>
-                <button onClick={() => removeRow(i)} disabled={holders.length <= 1 || i < existingCount}
+                <button onClick={() => removeRow(i)} disabled={holders.length <= 1}
+                  title={holders.length <= 1 ? 'At least one holder must remain' : 'Remove this holder'}
                   className="w-6 h-6 flex items-center justify-center rounded-full text-red-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-25">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -1146,7 +1041,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
-                  <input type="text" placeholder="Full legal name" value={h.fullName}
+                  <input type="text" placeholder="Full legal name" value={h.fullName} data-field="fullName"
                     onChange={e => onChange(i, 'fullName', e.target.value)} className={inp(errors[i]?.fullName)} />
                   {errors[i]?.fullName && <p className="text-red-500 text-xs mt-0.5">{errors[i].fullName}</p>}
                 </div>
@@ -1160,7 +1055,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Certificate Type *</label>
-                  <select value={h.certificateType} onChange={e => onChange(i, 'certificateType', e.target.value)} className={inp(errors[i]?.certificateType) + ' cursor-pointer'}>
+                  <select value={h.certificateType} data-field="certificateType" onChange={e => onChange(i, 'certificateType', e.target.value)} className={inp(errors[i]?.certificateType) + ' cursor-pointer'}>
                     <option value="">Select…</option>
                     {CERTIFICATE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -1187,7 +1082,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">IACRA FTN # *</label>
-                  <input type="text" placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber}
+                  <input type="text" placeholder="FTN-XXXXXXXX" value={h.iacraFtnNumber} data-field="iacraFtnNumber"
                     onChange={e => onChange(i, 'iacraFtnNumber', e.target.value)} className={inp(errors[i]?.iacraFtnNumber)} />
                   {errors[i]?.iacraFtnNumber && <p className="text-red-500 text-xs mt-0.5">{errors[i].iacraFtnNumber}</p>}
                 </div>
@@ -1243,7 +1138,7 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
           <button onClick={addRow} disabled={atLimit}
             className={`w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold transition-all ${atLimit ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400'
               }`}>
-            + Add Certificate Holder {atLimit ? `(max ${remainingSlots})` : `(${newMembersCount}/${remainingSlots})`}
+            + Add Certificate Holder {atLimit ? `(max ${targetCapacity})` : `(${holders.length}/${targetCapacity})`}
           </button>
 
           {apiError && (
@@ -1300,6 +1195,368 @@ function planShortLabel(plan, years) {
   return plan || '—'
 }
 
+// Modern plan summary card — dark header strip + clean white body. Shared by the
+// base plan and each added holder-upgrade plan on the airline Subscription page.
+function PlanCard({
+  accent = false, clickable = false, onClick, title, tag, name, amount,
+  expired, queued, filled, total, holdersLabel = 'Holders', pricePerCert,
+  unlimited, expiry, pct, invoice, note, nextRenewal, canRenew, onRenew,
+}) {
+  const handleClick = clickable && onClick ? () => onClick() : undefined
+  const expiryLabel = unlimited ? 'No expiry' : (expiry ? fmtYMD(expiry) : '—')
+  const clampedPct = Math.min(100, Math.max(0, pct))
+  return (
+    <div
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={handleClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } } : undefined}
+      title={clickable ? title : undefined}
+      className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition ${accent ? 'border-slate-900/10 ring-1 ring-blue-500/20' : 'border-slate-200'} ${clickable ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300' : ''}`}
+    >
+      {/* Dark header strip */}
+      <div className={`relative flex items-center justify-between gap-3 px-4 py-3 ${accent ? 'bg-gradient-to-r from-slate-900 to-slate-800' : 'bg-slate-900'}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          {tag && <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider text-white/90 bg-white/10 border border-white/15 rounded px-1.5 py-0.5">{tag.label}</span>}
+          <span className="text-sm font-bold text-white truncate">{name}</span>
+        </div>
+        <span className="text-sm font-extrabold text-white tabular-nums flex-shrink-0">{amount}</span>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 flex-col px-4 py-3">
+        {/* Status pills */}
+        {(() => {
+          const soon = !expired && !queued ? getExpiryStatus(expiry, { unlimited }) : null
+          if (!expired && !queued && !soon) return null
+          return (
+            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+              {queued && <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">Renewed</span>}
+              {expired && <span className="text-[9px] font-bold uppercase tracking-wide text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">Expired</span>}
+              {soon && <span className={`text-[9px] font-bold uppercase tracking-wide border rounded-full px-2 py-0.5 ${soon.cls}`}>{soon.label}</span>}
+            </div>
+          )
+        })()}
+
+        {/* Holders + progress */}
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700 mb-1.5">
+          <span>{holdersLabel} <span className="text-slate-950 font-bold">{filled} / {total}</span></span>
+          <span className="text-slate-500 font-bold tabular-nums">{clampedPct}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${filled >= total ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${clampedPct}%` }} />
+        </div>
+
+        {/* Meta row */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-700">
+          <span><span className="font-extrabold text-slate-950">${pricePerCert}</span>/cert</span>
+          <span className="text-slate-300">·</span>
+          <span className={unlimited ? 'text-emerald-600 font-semibold' : (expired ? 'text-amber-600 font-semibold' : 'text-slate-700 font-medium')}>
+            {unlimited ? 'No expiry' : `Expires ${expiryLabel}`}
+          </span>
+        </div>
+
+        {note && <p className="mt-2 text-[10px] text-slate-600 font-medium leading-snug">{note}</p>}
+
+        {/* Queued renewal note */}
+        {nextRenewal && (
+          <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700">
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="truncate">{planShortLabel(nextRenewal.plan)} queued — activates {nextRenewal.activationDate ? fmtYMD(nextRenewal.activationDate) : 'at expiry'}</span>
+          </div>
+        )}
+
+        {/* Spacer pushes footer to bottom for equal-height grid cards */}
+        <div className="flex-1" />
+
+        {/* Footer: invoice + renew */}
+        {(invoice || (canRenew && onRenew)) && (
+          <div className="mt-3 flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
+            {invoice
+              ? <span className="text-[10px] font-mono text-slate-500 font-medium truncate">Invoice {invoice}</span>
+              : <span />}
+            {canRenew && onRenew && (
+              <button onClick={(e) => { e.stopPropagation(); onRenew() }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-white transition flex-shrink-0">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Renew
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// One compact, nested row for a holder-upgrade plan attached to the base plan.
+function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup }) {
+  const isUnlimited = g.plan === 'Unlimited Plan'
+  const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
+  const gDays = g.expirationDate ? Math.ceil((new Date(g.expirationDate) - new Date()) / 86400000) : null
+  const gExpired = !isUnlimited && gDays !== null && gDays <= 0
+  const gQueued = !!g.nextRenewal?.paidAt
+  const gCanRenew = active && !isUnlimited && !gQueued && gDays !== null && gDays <= 60
+  const exp = getExpiryStatus(g.expirationDate, { unlimited: isUnlimited })
+  const current = isCurrentBaseGroup(g, s.subscriptionDate)
+  const pct = Math.min(100, Math.round((filled / Math.max(1, g.count)) * 100))
+  const invNum = String(g.invoiceNumber || '').replace(/^invoice\s+/i, '')
+  return (
+    <div
+      role={onManageGroup ? 'button' : undefined}
+      tabIndex={onManageGroup ? 0 : undefined}
+      onClick={onManageGroup ? () => onManageGroup(g) : undefined}
+      onKeyDown={onManageGroup ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onManageGroup(g) } } : undefined}
+      title={onManageGroup ? 'View holders & manage this plan' : undefined}
+      className={`rounded-xl border bg-white px-3.5 py-3 transition ${onManageGroup ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm' : ''} ${gExpired ? 'border-red-200' : 'border-slate-200'}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-900">
+              {isUnlimited ? 'Lifetime' : 'Upgrade'}
+            </span>
+            {gQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
+            {!gQueued && exp && <span className={`text-[9px] font-bold uppercase tracking-wide ${exp.kind === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>{exp.label}</span>}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            <span className="font-semibold text-slate-700">{filled}/{g.count}</span> holders
+            <span className="text-slate-300"> · </span>
+            <span className="font-semibold text-slate-700">${g.pricePerCert}</span>/cert
+            <span className="text-slate-300"> · </span>
+            {isUnlimited ? 'No expiry' : (g.expirationDate ? `Expires ${fmtYMD(g.expirationDate)}` : '—')}
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
+            <span className={`inline-flex items-center font-semibold ${current ? 'text-slate-400' : 'text-amber-600'}`}>
+              {current ? 'Current base period' : 'Previous base period'}
+            </span>
+            {invNum && <span className="font-mono">Invoice {invNum}</span>}
+          </p>
+        </div>
+        {gCanRenew && onRenewGroup && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRenewGroup(g) }}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-white transition"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Renew
+          </button>
+        )}
+      </div>
+      {gQueued && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600">
+          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Renewal queued — activates {g.nextRenewal.activationDate ? fmtYMD(g.nextRenewal.activationDate) : 'at expiry'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The base/main plan rendered as a uniform card — same visual language as
+// AttachedPlanRow so every plan in the expanded view reads consistently.
+function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew }) {
+  const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
+  const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
+  const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
+  const baseDays = s.expirationDate ? Math.ceil((new Date(s.expirationDate) - new Date()) / 86400000) : null
+  const baseExpired = !baseUnlimited && baseDays !== null && baseDays <= 0
+  const baseQueued = !!s.nextRenewal?.paidAt
+  const baseCanRenew = active && !baseUnlimited && !baseQueued && baseDays !== null && baseDays <= 60
+  const baseExp = getExpiryStatus(s.expirationDate, { unlimited: baseUnlimited })
+  const invNum = String(s.invoiceNumber || '').replace(/^invoice\s+/i, '')
+  return (
+    <div className={`rounded-xl border bg-white px-3.5 py-3 ${baseExpired ? 'border-red-200' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-900">Base Plan</span>
+            {baseQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
+            {!baseQueued && baseExpired && <span className="text-[9px] font-bold uppercase tracking-wide text-red-500">Expired</span>}
+            {!baseQueued && !baseExpired && baseExp && <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500">{baseExp.label}</span>}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            <span className="font-semibold text-slate-700">{baseFilled}/{baseCommitted}</span> holders
+            <span className="text-slate-300"> · </span>
+            <span className="font-semibold text-slate-700">${basePpc}</span>/cert
+            <span className="text-slate-300"> · </span>
+            {baseUnlimited ? 'No expiry' : (s.expirationDate ? `Expires ${fmtYMD(s.expirationDate)}` : '—')}
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
+            <span className="font-semibold">Main plan — drives holder capacity</span>
+            {invNum && <span className="font-mono">Invoice {invNum}</span>}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          {baseCanRenew && onRenew && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onRenew() }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-white transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Renew
+            </button>
+          )}
+          {onAddHolders && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAddHolders() }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition"
+            >
+              Manage
+            </button>
+          )}
+        </div>
+      </div>
+      {baseQueued && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600">
+          <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Renewal queued — activates {s.nextRenewal.activationDate ? fmtYMD(s.nextRenewal.activationDate) : 'at expiry'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Consolidated "current active subscription" — preview header summarises the active
+// plan (and how many plans total); expanding reveals every plan (base + attached)
+// as uniform detail cards.
+function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const groups = s.holderGroups || []
+  const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - allGroupSlots(groups))
+  const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
+  const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
+  const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
+  const baseDays = s.expirationDate ? Math.ceil((new Date(s.expirationDate) - new Date()) / 86400000) : null
+  const baseExpired = !baseUnlimited && baseDays !== null && baseDays <= 0
+  const baseQueued = !!s.nextRenewal?.paidAt
+  const basePct = Math.min(100, Math.round((baseFilled / Math.max(1, baseCommitted)) * 100))
+  // Whole-airline totals across every plan (base + all groups) for the preview bar.
+  const totalCommitted = Number(s.committedCount || s.holderCountValue || 0)
+  const totalFilled = (s.certificateHolders || []).length
+  const totalPct = Math.min(100, Math.round((totalFilled / Math.max(1, totalCommitted)) * 100))
+  const baseExp = getExpiryStatus(s.expirationDate, { unlimited: baseUnlimited })
+  const money2 = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  // Total across the active subscription = base plan + every still-active upgrade plan.
+  const activeGroupsAmount = groups.filter(isActiveHolderGroup).reduce((a, g) => a + Number(g.amount || 0), 0)
+  const grandTotal = basePpc * baseCommitted + activeGroupsAmount
+  const planCount = 1 + groups.length
+
+  const headBadges = (
+    <>
+      {baseQueued && <span className="text-[9px] font-black uppercase tracking-wide text-white">Renewed</span>}
+      {!baseQueued && baseExpired && <span className="text-[9px] font-black uppercase tracking-wide text-red-300">Expired</span>}
+      {!baseQueued && !baseExpired && baseExp && <span className="text-[9px] font-black uppercase tracking-wide text-amber-300">{baseExp.label}</span>}
+    </>
+  )
+
+  return (
+    <motion.div layout className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" transition={{ layout: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}>
+      {/* ── Preview header — always visible, click to expand/collapse ── */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setExpanded(v => !v)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(v => !v) } }}
+        className="group cursor-pointer"
+      >
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 sm:px-5 py-3.5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-widest text-white">Current Subscription</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {groups.length > 0 && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-white">+{groups.length} more</span>
+              )}
+              {headBadges}
+            </div>
+            <p className="mt-1 text-[11px] text-white">
+              {planCount} plan{planCount !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <motion.svg
+              animate={{ rotate: expanded ? 180 : 0 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              className="w-4 h-4 text-white group-hover:text-white/90 transition-colors"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </motion.svg>
+          </div>
+        </div>
+
+        {/* Collapsed preview: holder bar + plan chips */}
+        <div className="px-4 sm:px-5 py-3">
+          <div className="flex items-center justify-between text-[11px] mb-1.5">
+            <span className="text-slate-500">Holders <span className="font-bold text-slate-900">{totalFilled} / {totalCommitted}</span></span>
+            <span className={`font-bold tabular-nums ${totalPct >= 100 ? 'text-emerald-600' : 'text-slate-400'}`}>{totalPct}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${totalFilled >= totalCommitted ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${totalPct}%` }} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+              <span className="font-semibold text-slate-700">Base</span>
+              <span className="text-slate-300">·</span>
+              <span>{baseCommitted} slot{baseCommitted !== 1 ? 's' : ''}</span>
+            </span>
+            {groups.map((g, gi) => {
+              const isU = g.plan === 'Unlimited Plan'
+              const ex = getExpiryStatus(g.expirationDate, { unlimited: isU })
+              const isExp = ex?.kind === 'expired'
+              const slots = Number(g.count || 0)
+              return (
+                <span key={String(g._id || gi)} className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                  <span className="font-semibold text-slate-700">{isU ? 'Lifetime' : 'Upgrade'}</span>
+                  <span className="text-slate-300">·</span>
+                  <span>{slots} slot{slots !== 1 ? 's' : ''}</span>
+                  {isExp && <><span className="text-slate-300">·</span><span className="text-red-500 font-medium">expired</span></>}
+                  {!isU && !isExp && ex?.kind === 'expiring' && <><span className="text-slate-300">·</span><span className="text-amber-500 font-medium">expiring</span></>}
+                </span>
+              )
+            })}
+          </div>
+          <div className="mt-2.5 flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
+            <span>{expanded ? 'Hide details' : 'View full details'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Expanded details — every plan as a uniform card ── */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="details"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="border-t border-slate-100 bg-slate-50/40">
+              <div className="px-4 sm:px-5 pt-2.5 pb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">All plans ({planCount})</span>
+              </div>
+              <div className="px-3 sm:px-4 pb-3.5 space-y-2">
+                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} />
+                {groups.map((g, gi) => (
+                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
 // Resolve which plan a certificate holder is on. Holders in a holderGroup use the
 // group's plan/expiry; otherwise they fall back to the airline's base plan.
 function holderPlanInfo(h, sub) {
@@ -1312,7 +1569,13 @@ function holderPlanInfo(h, sub) {
 }
 
 function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
-  const currentCount = Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
+  // "Current slots" = the CURRENT base plan + its current-period upgrade slots
+  // (perpetual Unlimited + upgrades bought this base period). Previous-period upgrade
+  // plans are NOT part of the current base count, so they're excluded here even
+  // though they remain as separate active plans.
+  const _committed = Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
+  const _baseCommitted = Math.max(0, _committed - allGroupSlots(sub.holderGroups))
+  const currentCount = _baseCommitted + currentBaseGroupSlots(sub.holderGroups, sub.subscriptionDate)
   // Business rule: minimum 1 holder per upgrade
   const minAdditional = 1
 
@@ -1445,10 +1708,10 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
         {/* Header */}
         <div className="px-5 pt-4 pb-3 flex items-start justify-between flex-shrink-0">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Certificate Holders</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Certificate Holders</p>
             <h3 className="text-lg font-black text-slate-900 tracking-tight">Expand Holder Count</h3>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition mt-0.5">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-600 hover:bg-slate-100 transition mt-0.5">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
@@ -1461,19 +1724,19 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
           {/* Current snapshot */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Slots</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Current Slots</p>
               <p className="text-2xl font-black text-slate-900">{currentCount}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Current Rate</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Current Rate</p>
               <p className="text-2xl font-black text-slate-900">${currentPpc}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">per certificate</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">per certificate</p>
             </div>
           </div>
 
           {/* Plan picker — this batch of holders gets its own plan */}
           <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-2.5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan for these holders</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Plan for these holders</p>
             <div className="grid grid-cols-2 gap-2">
               {HOLDER_PLAN_OPTIONS.map(opt => (
                 <button
@@ -1504,12 +1767,12 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
           {/* Merge vs separate — only when an existing plan of the same type exists */}
           {mergeTargets.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Attach these holders to</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Attach these holders to</p>
               <label className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${mergeTarget === '' ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
                 <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === ''} onChange={() => setMergeTarget('')} />
                 <span>
                   <span className="block text-xs font-bold text-slate-800">New separate plan</span>
-                  <span className="block text-[10px] text-slate-400">Independent — full-length term starting today, its own expiry.</span>
+                  <span className="block text-[10px] text-slate-500">Independent — full-length term starting today, its own expiry.</span>
                 </span>
               </label>
               {mergeTargets.map((t) => (
@@ -1517,7 +1780,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
                   <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === t.id} onChange={() => setMergeTarget(t.id)} />
                   <span>
                     <span className="block text-xs font-bold text-slate-800">Merge into {t.label}</span>
-                    <span className="block text-[10px] text-slate-400">
+                    <span className="block text-[10px] text-slate-500">
                       Shares that plan's dates{t.expiry ? ` — expires ${fmtYMD(t.expiry)}` : (batchPlan === 'Unlimited Plan' ? ' — no expiry' : '')}. Separate invoice.
                     </span>
                   </span>
@@ -1528,7 +1791,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
 
           {/* Selector */}
           <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Holders to Add</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Holders to Add</p>
             <div className="flex items-center justify-between">
               <button
                 type="button"
@@ -1537,7 +1800,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
               >−</button>
               <div className="text-center">
                 <span className="text-3xl font-black text-slate-900 leading-none">{additionalCount}</span>
-                <p className="text-[10px] text-slate-400 mt-0.5">holders</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">holders</p>
               </div>
               <button
                 type="button"
@@ -1557,7 +1820,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
                   {tierChanged && <span className="ml-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-wider">Tier updated</span>}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 pt-0.5">Minimum {minAdditional} holder{minAdditional !== 1 ? 's' : ''} per upgrade</p>
+              <p className="text-[10px] text-slate-500 pt-0.5">Minimum {minAdditional} holder{minAdditional !== 1 ? 's' : ''} per upgrade</p>
             </div>
           </div>
 
@@ -1636,23 +1899,39 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   const [plan, setPlan] = useState((isGroup ? group.plan : sub.subscriptionPlan) || '1 Year Subscription Plan')
   const [multiYearRenewCount, setMultiYearRenewCount] = useState(Number(sub.multiYearCount) || 3)
 
-  // ── Renewal count continuity (agreed flow) ──────────────────────────────────
-  // When renewing a holder-upgrade GROUP, the count continues from the base plan:
-  //   1. base has a PAID queued renewal  → use that queued count (what they paid)
-  //   2. else base is currently active    → use the base's committed count
-  //   3. else (no base plan to anchor to) → start from the group's own count (1 for a single member)
+  // ── Group renewal = independent add-on ──────────────────────────────────────
+  // A holder-upgrade group renews on its OWN terms (it is an add-on, not the base).
+  // It defaults to its own slot count and may shrink to 1 holder while a base plan
+  // is live (the base already satisfies the airline 3-holder floor). With no active
+  // base plan this group stands alone and must meet the 3-holder minimum itself.
   const baseLiveNow = (sub.status === 'Active' || sub.isPaid) &&
     (sub.subscriptionPlan === 'Unlimited Plan' || !sub.expirationDate || new Date(sub.expirationDate) > new Date())
-  const baseAnchorCount = sub.nextRenewal?.paidAt
-    ? Number(sub.nextRenewal.committedCount || sub.committedCount || 0)
-    : (baseLiveNow ? Number(sub.committedCount || sub.holderCountValue || 0) : 0)
-  const countFromBase = isGroup && baseAnchorCount > 0
-  const anchorSource = sub.nextRenewal?.paidAt ? 'renewed base plan' : 'current base plan'
+  const countMin = isGroup ? (baseLiveNow ? 1 : 3) : 3
 
-  // Airline: committed holder count — user can adjust at renewal time
+  // Merge option — a same-plan upgrade group can fold back into the live base plan:
+  // its holders become base holders (inherit base plan + expiry) and its slots fold
+  // into the base committed count. Offered only when the base is active AND shares
+  // the group's plan type. Default is "keep separate" (renew as its own plan).
+  const canMergeToBase = isGroup && baseLiveNow && group.plan === sub.subscriptionPlan
+  const [mergeMode, setMergeMode] = useState(false)
+  const baseExpiryLabel = sub.expirationDate ? fmt(sub.expirationDate) : '—'
+
+  // Current base-period coverage = the base plan's OWN holder count PLUS every plan
+  // tied to this base period (perpetual Unlimited/Lifetime + upgrades created or renewed
+  // under the current base). Expired previous-period upgrades are excluded.
+  //   baseOwnCount        = committed grand total − ALL group slots
+  //   currentBaseGroupSlots = Lifetime + current-period upgrade slots
+  // This is shown only as a REFERENCE ceiling (how many the active base covers) — never
+  // the renewal default, so the user never pays for base slots this add-on doesn't have.
+  const baseOwnCount = Math.max(0, Number(sub.committedCount || sub.holderCountValue || 0) - allGroupSlots(sub.holderGroups))
+  const syncedBaseCount = baseOwnCount + currentBaseGroupSlots(sub.holderGroups, sub.subscriptionDate)
+
+  // Airline: committed holder count — user can adjust at renewal time.
+  // A group renewal starts from THIS plan's own holder count and grows dynamically as the
+  // user increases it; it is NOT pre-filled to the base coverage.
   const [exactCount, setExactCount] = useState(
     isGroup
-      ? (baseAnchorCount > 0 ? baseAnchorCount : Number(group.count || unitHolders.length || 1))
+      ? Number(group.count || unitHolders.length || 1)
       : Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 1)
   )
   const [showPayment, setShowPayment] = useState(false)
@@ -1756,6 +2035,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
         renewalExactCount={isAirline ? exactCount : undefined}
         renewalHoldersToRemove={holdersToRemove}
         holderGroupId={isGroup ? group._id : undefined}
+        mergeTarget={isGroup && mergeMode && canMergeToBase ? 'base' : undefined}
         onClose={() => { setShowPayment(false); onClose() }}
         onSuccess={(inv, updatedReg) => {
           onSaved(updatedReg || currentSub)
@@ -1784,7 +2064,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
               </div>
               <button
                 onClick={onClose}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition"
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-600 flex items-center justify-center transition"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1797,7 +2077,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
               const expired = daysLeft !== null && daysLeft <= 0
               const urgent = daysLeft !== null && daysLeft > 0 && daysLeft <= 7
               const chipCls = expired ? 'bg-red-50 border-red-100' : urgent ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'
-              const iconCls = expired ? 'text-red-500' : urgent ? 'text-amber-500' : 'text-slate-400'
+              const iconCls = expired ? 'text-red-500' : urgent ? 'text-amber-500' : 'text-slate-500'
               const titleCls = expired ? 'text-red-700' : urgent ? 'text-amber-800' : 'text-slate-800'
               return (
                 <div className={`flex items-center gap-2 rounded-xl px-3.5 py-2 border ${chipCls}`}>
@@ -1808,7 +2088,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                     {expired ? (
                       <>
                         <p className={`text-sm font-semibold ${titleCls}`}>Expired — {currentExpiry}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Renewing starts a fresh period from today</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Renewing starts a fresh period from today</p>
                       </>
                     ) : (
                       <>
@@ -1817,7 +2097,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                             ? `Expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} — ${currentExpiry}`
                             : `Expires: ${currentExpiry}`}
                         </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Renewing extends from current expiry date</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Renewing extends from current expiry date</p>
                       </>
                     )}
                   </div>
@@ -1830,12 +2110,12 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
             {/* Credentials slim row */}
             <div className="px-5 py-2.5 flex items-center justify-between border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                 </svg>
                 <div>
                   <p className="text-xs font-semibold text-slate-700">Registered details</p>
-                  <p className="text-[10px] text-slate-400">Verify credentials before renewing</p>
+                  <p className="text-[10px] text-slate-500">Verify credentials before renewing</p>
                 </div>
               </div>
               <button
@@ -1849,10 +2129,10 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
               </button>
             </div>
 
-            <div className="px-5 pt-2.5 pb-3.5 space-y-2.5">
+            <div className="px-5 pt-2.5 pb-3.5 space-y-2">
               {/* Plan selector */}
               <div className="space-y-1.5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select Renewal Plan</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Select Renewal Plan</p>
                 {plans.map((p) => (
                   <label key={p.value} className={`flex items-center gap-3 px-3.5 py-2 rounded-xl border-2 cursor-pointer transition-all ${plan === p.value
                     ? 'border-blue-500 bg-blue-50/70'
@@ -1873,14 +2153,42 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                 ))}
               </div>
 
+              {/* Participants renewed with the selected plan — compact, scrollable */}
+              {isAirline && unitHolders.length > 0 && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Participants renewed</p>
+                    <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-full px-2 py-0.5">{unitHolders.length}</span>
+                  </div>
+                  <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white max-h-[120px] overflow-y-auto">
+                    {unitHolders.map((h, i) => {
+                      const willRemove = holdersToRemove && holdersToRemove.includes(String(h._id))
+                      const initials = (h.fullName || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
+                      return (
+                        <div key={String(h._id || i)} className={`flex items-center gap-2 px-2.5 py-1.5 ${willRemove ? 'bg-red-50/50' : ''}`}>
+                          <span className={`w-6 h-6 rounded-full text-[9px] font-black flex items-center justify-center flex-shrink-0 ${willRemove ? 'bg-red-100 text-red-500' : 'bg-slate-100 text-slate-500'}`}>{initials || (i + 1)}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-xs font-semibold truncate ${willRemove ? 'text-red-600 line-through' : 'text-slate-800'}`}>{h.fullName || '(unnamed)'}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{h.certificateType || '—'} · FTN {h.iacraFtnNumber || '—'}</p>
+                          </div>
+                          {willRemove
+                            ? <span className="text-[9px] font-bold uppercase tracking-wide text-red-600 flex-shrink-0">Removed</span>
+                            : <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Airline: holder count */}
               {isAirline && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-2.5 space-y-2.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Certificate Holders</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Certificate Holders</p>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => setExactCount(c => Math.max(3, c - 1))}
+                      onClick={() => setExactCount(c => Math.max(countMin, c - 1))}
                       className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600 font-bold text-lg flex items-center justify-center transition"
                     >−</button>
                     <span className="text-2xl font-black text-slate-900 w-10 text-center tabular-nums">{exactCount}</span>
@@ -1889,15 +2197,48 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                       onClick={() => setExactCount(c => c + 1)}
                       className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600 font-bold text-lg flex items-center justify-center transition"
                     >+</button>
-                    <span className="text-xs text-slate-400 ml-1">holders</span>
+                    <span className="text-xs text-slate-500 ml-1">holders</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Current: <strong className="text-slate-700">{currentHolderCount}</strong></span>
+                    <span className="text-slate-500">
+                      {isGroup ? 'This plan' : 'Current'}: <strong className="text-slate-700">{currentHolderCount}</strong>
+                      {exactCount !== currentHolderCount && (
+                        <span className="text-blue-600"> → <strong>{exactCount}</strong></span>
+                      )}
+                      {isGroup && baseLiveNow && (
+                        <span className="text-slate-400"> · Base: <strong className="text-slate-600">{syncedBaseCount}</strong></span>
+                      )}
+                    </span>
                     <span className="font-semibold text-blue-600">Tier {renewRange} · ${renewPpc}/cert</span>
                   </div>
-                  {countFromBase && (
-                    <p className="text-[10px] text-emerald-600 font-semibold">Continuing count from {anchorSource} ({baseAnchorCount}). Adjust if needed.</p>
+                  {isGroup && (
+                    <p className="text-[10px] text-slate-500 font-semibold">
+                      {baseLiveNow
+                        ? `Add-on plan — adjust from 1 up to your base coverage (${syncedBaseCount}).`
+                        : 'No active base plan — renews independently (min 3 holders).'}
+                    </p>
                   )}
+                </div>
+              )}
+
+              {/* Group renewal: merge into base, or keep as a separate plan */}
+              {isAirline && canMergeToBase && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">How to renew this upgrade</p>
+                  <label className={`flex items-start gap-2.5 px-3 py-1.5 rounded-lg border cursor-pointer transition ${!mergeMode ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="radio" className="mt-0.5 accent-blue-600" checked={!mergeMode} onChange={() => setMergeMode(false)} />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-slate-800">Keep as a separate plan</span>
+                      <span className="block text-[10px] text-slate-500">Renews as its own upgrade with a fresh term.</span>
+                    </span>
+                  </label>
+                  <label className={`flex items-start gap-2.5 px-3 py-1.5 rounded-lg border cursor-pointer transition ${mergeMode ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeMode} onChange={() => setMergeMode(true)} />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-slate-800">Merge into base plan</span>
+                      <span className="block text-[10px] text-slate-500">Folds these holders into the base — they take its expiry ({baseExpiryLabel}).</span>
+                    </span>
+                  </label>
                 </div>
               )}
 
@@ -1929,7 +2270,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                     </svg>
                   )}
                   <svg
-                    className={`w-4 h-4 flex-shrink-0 transition-transform ${showHolderSelector ? 'rotate-180 text-blue-500' : 'text-slate-400'}`}
+                    className={`w-4 h-4 flex-shrink-0 transition-transform ${showHolderSelector ? 'rotate-180 text-blue-500' : 'text-slate-500'}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -1940,7 +2281,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
               {/* Multi-year */}
               {!isAirline && plan === 'Multiple Years Subscription Plan' && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Number of Years</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Number of Years</p>
                   <input
                     type="number"
                     min="2"
@@ -1949,7 +2290,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                     value={multiYearRenewCount}
                     onChange={(e) => setMultiYearRenewCount(Math.max(2, Number(e.target.value) || 2))}
                   />
-                  <p className="text-xs text-slate-400">$55 × {multiYearRenewCount} years</p>
+                  <p className="text-xs text-slate-500">$55 × {multiYearRenewCount} years</p>
                 </div>
               )}
 
@@ -2006,7 +2347,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
             <div className="w-72 rounded-2xl bg-white shadow-2xl shadow-black/30 overflow-hidden flex flex-col max-h-[76vh]">
               {/* Header */}
               <div className="flex items-center gap-2.5 px-3.5 py-3 bg-gradient-to-r from-slate-900 to-slate-800 flex-shrink-0">
-                <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0Z" />
                 </svg>
                 <div className="flex-1 min-w-0">
@@ -2052,7 +2393,7 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-slate-800 truncate">{h.fullName || '—'}</p>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{h.certificateType || ''}{h.faaCertificateNumber ? ` · ${h.faaCertificateNumber}` : ''}</p>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{h.certificateType || ''}{h.faaCertificateNumber ? ` · ${h.faaCertificateNumber}` : ''}</p>
                       </div>
                       {checked && (
                         <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -2259,13 +2600,13 @@ export default function SubscriptionPage() {
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" />
               <path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" />
             </svg>
-            <span className="text-slate-400 text-sm">Loading subscription…</span>
+            <span className="text-slate-500 text-sm">Loading subscription…</span>
           </div>
         ) : subs.length === 0 ? (
           <>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
               <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Plan</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Current Plan</p>
               </div>
               <div className="px-4 sm:px-6 py-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto mb-4">
@@ -2274,7 +2615,7 @@ export default function SubscriptionPage() {
                   </svg>
                 </div>
                 <p className="text-slate-700 font-bold mb-1">No active subscription</p>
-                <p className="text-slate-400 text-sm mb-5">Register to activate your FAA compliance service.</p>
+                <p className="text-slate-500 text-sm mb-5">Register to activate your FAA compliance service.</p>
                 <Link to="/register"
                   className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition-all">
                   Register Now
@@ -2529,12 +2870,12 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payment History</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment History</p>
             <h3 className="text-base font-black text-slate-900">All Invoices</h3>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
+            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center flex-shrink-0"
           >
             ✕
           </button>
@@ -2568,7 +2909,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
                   </div>
                   <p className="text-[11px] text-slate-500">{fmt(doc.paidAt || doc.issueDate || doc.createdAt)}</p>
                   {doc.subscriptionPlan && (
-                    <p className="text-[11px] text-slate-400 mt-0.5">{doc.subscriptionPlan}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{doc.subscriptionPlan}</p>
                   )}
                 </div>
                 <div className="flex-shrink-0 text-right">
@@ -2763,7 +3104,25 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
       .reduce((sum, doc) => sum + (Number(doc.totalAmount) || 0), 0)
     : null
 
-  const computedPlanTotal = isAirline ? getAirlineTotal(s) : 0
+  // Grand total = current base plan + every ACTIVE holder-upgrade plan (Unlimited or
+  // not-yet-expired). The base COUNT subtracts ALL group slots (committedCount = base +
+  // allGroups), while the upgrade AMOUNTS added on top only include still-active plans —
+  // an expired plan contributes $0.
+  const _groups = s.holderGroups || []
+  const _groupCounts = (g) => isActiveHolderGroup(g)
+  const _groupsAmount = _groups
+    .filter(_groupCounts)
+    .reduce((a, g) => a + Number(g.amount || 0), 0)
+  const _basePpc = Number(s.pricePerCertificate ?? s.pricePerCert ?? 0)
+  const _baseCommitted = Math.max(0, Number(s.committedCount ?? s.holderCountValue ?? 0) - allGroupSlots(_groups))
+  const _isMultiYear = (s.subscriptionPlan || '').includes('Multiple Year') && Number(s.multiYearCount) > 1
+  const _baseYears = _isMultiYear ? Number(s.multiYearCount) : 1
+  const _baseTotal = _basePpc > 0 && _baseCommitted > 0 ? _basePpc * _baseCommitted * _baseYears : 0
+  // When base can be computed, add the upgrade plans on top; otherwise fall back to
+  // the legacy stored total (which already bakes everything in).
+  const computedPlanTotal = isAirline
+    ? (_baseTotal > 0 ? _baseTotal + _groupsAmount : getAirlineTotal(s))
+    : 0
   const displayTotal = isAirline
     ? (computedPlanTotal > 0 ? computedPlanTotal : (invoiceTotal != null && invoiceTotal > 0 ? invoiceTotal : 0))
     : (s.price || s.totalServiceFees)
@@ -2878,15 +3237,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                   <p className="text-xs text-slate-500 mt-0.5">Renew to restore FAA compliance coverage and keep certifications active.</p>
                 </div>
               </div>
-              <button
-                onClick={onRenew}
-                className="flex-shrink-0 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all w-full sm:w-auto"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Renew Now
-              </button>
             </div>
           </div>
         </div>
@@ -2967,51 +3317,51 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 sm:justify-between">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Plan Details</p>
-          <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Plan Details</p>
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={onEditForm}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" />
               </svg>
               Edit Form
             </button>
+            {active && (
+              <button
+                onClick={handleInvoiceClick}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Invoices
+              </button>
+            )}
             {isAirline && active && !isExpired && (
               <button
                 onClick={onUpgrade}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-800 transition"
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                Expand Holder Count
+                Expand Holders
               </button>
             )}
             {showRenew && (
               <button
                 onClick={onRenew}
-                className={`inline-flex items-center gap-1.5 rounded-xl border-0 px-4 py-1.5 text-[10px] font-bold tracking-wide shadow-sm transition-all duration-150 ${isExpired
-                  ? 'bg-slate-900 text-white hover:bg-slate-800'
-                  : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-blue-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-md hover:shadow-blue-200'
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition ${isExpired
+                  ? 'bg-slate-900 text-white hover:bg-slate-700'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
                   }`}
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 {isExpired ? 'Renew Now' : 'Renew'}
-              </button>
-            )}
-            {active && (
-              <button
-                onClick={handleInvoiceClick}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Invoices
               </button>
             )}
           </div>
@@ -3050,172 +3400,28 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               <Row label="Total Amount" value={money(displayTotal)} />
 
               {/* ── Subscription Plans — base plan + each added counter plan ── */}
-              {Array.isArray(s.holderGroups) && s.holderGroups.length > 0 && (
-                <div className="py-3 border-b border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-2">Subscription Plans</p>
-                  <div className="space-y-2">
-                    {/* BASE PLAN — the main subscription that drives the holder capacity */}
-                    {(() => {
-                      const totalGroupSlots = (s.holderGroups || []).reduce((acc, gg) => acc + Number(gg.count || 0), 0)
-                      const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - totalGroupSlots)
-                      const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
-                      const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
-                      const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
-                      const baseExpiry = s.expirationDate ? new Date(s.expirationDate) : null
-                      const baseDays = baseExpiry ? Math.ceil((baseExpiry - new Date()) / (1000 * 60 * 60 * 24)) : null
-                      const baseExpired = !baseUnlimited && baseDays !== null && baseDays <= 0
-                      const baseQueued = !!s.nextRenewal?.paidAt
-                      const baseCanRenew = active && !baseUnlimited && !baseQueued && baseDays !== null && baseDays <= 60
-                      const basePct = Math.min(100, Math.round((baseFilled / Math.max(1, baseCommitted)) * 100))
-                      const baseInv = String(s.invoiceNumber || '').replace(/^invoice\s+/i, '')
-                      return (
-                        <div
-                          role={onAddHolders ? 'button' : undefined}
-                          tabIndex={onAddHolders ? 0 : undefined}
-                          onClick={onAddHolders ? () => onAddHolders() : undefined}
-                          onKeyDown={onAddHolders ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAddHolders() } } : undefined}
-                          title={onAddHolders ? 'View base-plan holders & manage' : undefined}
-                          className={`rounded-xl border-2 border-blue-300 bg-blue-50/50 px-4 py-3 transition ${onAddHolders ? 'cursor-pointer hover:border-blue-400 hover:shadow-md' : ''}`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 rounded-full px-2 py-0.5">Base Plan</span>
-                              <span className="text-sm font-black text-slate-900">{planShortLabel(s.subscriptionPlan, s.multiYearCount)}</span>
-                              {baseExpired && <span className="text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5">Expired</span>}
-                              {baseQueued && <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Renewing</span>}
-                            </div>
-                            <span className="text-sm font-black text-slate-900 tabular-nums">{money(basePpc * baseCommitted)}</span>
-                          </div>
-
-                          <div className="mt-2.5">
-                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
-                              <span>{baseFilled} / {baseCommitted} base holders</span>
-                              <span className={baseUnlimited ? 'text-emerald-600' : (baseExpired ? 'text-amber-600' : '')}>
-                                {baseUnlimited ? 'No expiry' : (baseExpiry ? `Expires ${fmtYMD(baseExpiry)}` : '—')}
-                              </span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-white/70 overflow-hidden">
-                              <div className={`h-full rounded-full ${baseFilled >= baseCommitted ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ width: `${basePct}%` }} />
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400">
-                            <span><span className="font-semibold text-slate-500">${basePpc}</span>/cert</span>
-                            {baseInv && <span className="font-mono">Invoice {baseInv}</span>}
-                          </div>
-
-                          <p className="mt-2 text-[10px] text-slate-500 leading-snug">
-                            Main subscription — total holder capacity depends on this plan. Renew it before expiry to keep all plans active.
-                          </p>
-
-                          {baseQueued && (
-                            <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
-                              <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              <p className="text-[10px] font-bold text-emerald-700 leading-snug">
-                                {planShortLabel(s.nextRenewal.plan)} renewal queued — activates {s.nextRenewal.activationDate ? fmtYMD(s.nextRenewal.activationDate) : 'at expiry'}
-                              </p>
-                            </div>
-                          )}
-
-                          {baseCanRenew && onRenew && (
-                            <button onClick={(e) => { e.stopPropagation(); onRenew() }}
-                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-600/20 transition">
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              Renew base plan
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Added counter plans */}
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 pt-1">Added Holder Plans</p>
-                    {s.holderGroups.map((g, gi) => {
-                      const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
-                      const gExpiry = g.expirationDate ? new Date(g.expirationDate) : null
-                      const gDays = gExpiry ? Math.ceil((gExpiry - new Date()) / (1000 * 60 * 60 * 24)) : null
-                      const gExpired = g.plan !== 'Unlimited Plan' && gDays !== null && gDays <= 0
-                      const gQueued = !!g.nextRenewal?.paidAt
-                      const gCanRenew = active && g.plan !== 'Unlimited Plan' && !gQueued && gDays !== null && gDays <= 60
-                      const isUnlimited = g.plan === 'Unlimited Plan'
-                      const pct = Math.min(100, Math.round((filled / Math.max(1, g.count)) * 100))
-                      const invNum = String(g.invoiceNumber || '').replace(/^invoice\s+/i, '')
-                      return (
-                        <div
-                          key={String(g._id || gi)}
-                          role={onManageGroup ? 'button' : undefined}
-                          tabIndex={onManageGroup ? 0 : undefined}
-                          onClick={onManageGroup ? () => onManageGroup(g) : undefined}
-                          onKeyDown={onManageGroup ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onManageGroup(g) } } : undefined}
-                          className={`rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition ${onManageGroup ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''}`}
-                          title={onManageGroup ? 'View holders & manage this plan' : undefined}
-                        >
-                          {/* Header: plan name + type badge + amount */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-sm font-black text-slate-900">{planShortLabel(g.plan, g.multiYearCount)}</span>
-                              {isUnlimited ? (
-                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Lifetime</span>
-                              ) : (
-                                <span className="text-[9px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">Upgrade</span>
-                              )}
-                              {gExpired && <span className="text-[9px] font-black uppercase tracking-widest text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-1.5 py-0.5">Expired</span>}
-                              {gQueued && <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Renewing</span>}
-                            </div>
-                            <span className="text-sm font-black text-slate-900 tabular-nums">{money(g.amount)}</span>
-                          </div>
-
-                          {/* Fill progress */}
-                          <div className="mt-2.5">
-                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
-                              <span>{filled} / {g.count} holders</span>
-                              <span className={isUnlimited ? 'text-emerald-600' : ''}>
-                                {isUnlimited ? 'No expiry' : (g.expirationDate ? `Expires ${fmtYMD(g.expirationDate)}` : '—')}
-                              </span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                              <div className={`h-full rounded-full ${filled >= g.count ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-
-                          {/* Meta: price/cert + invoice */}
-                          <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400">
-                            <span><span className="font-semibold text-slate-500">${g.pricePerCert}</span>/cert</span>
-                            {invNum && <span className="font-mono">Invoice {invNum}</span>}
-                          </div>
-
-                          {gQueued && (
-                            <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
-                              <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              <p className="text-[10px] font-bold text-emerald-700 leading-snug">
-                                {planShortLabel(g.nextRenewal.plan)} renewal queued — activates {g.nextRenewal.activationDate ? fmtYMD(g.nextRenewal.activationDate) : 'at expiry'}
-                              </p>
-                            </div>
-                          )}
-
-                          {gCanRenew && onRenewGroup && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onRenewGroup(g) }}
-                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm shadow-blue-600/20 transition"
-                            >
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              Renew this plan
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })}
+              {(() => {
+                const groupCount = Array.isArray(s.holderGroups) ? s.holderGroups.length : 0
+                return (
+                  <div className="py-5 border-b border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="h-4 w-1 rounded-full bg-slate-900" />
+                        <p className="text-sm font-extrabold text-slate-900">Current Subscription</p>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 rounded-full px-2.5 py-1">{1 + groupCount} plan{groupCount ? 's' : ''}</span>
+                    </div>
+                    <ActiveSubscriptionBlock
+                      s={s}
+                      active={active}
+                      onAddHolders={onAddHolders}
+                      onManageGroup={onManageGroup}
+                      onRenew={onRenew}
+                      onRenewGroup={onRenewGroup}
+                    />
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {(() => {
                 const remaining = (s.committedCount || 0) - (s.certificateHolders?.length || 0)
@@ -3258,14 +3464,14 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                           <p className="text-sm font-bold text-slate-800">
                             {s.certificateHolders.length} Certificate Holder{s.certificateHolders.length !== 1 ? 's' : ''}
                           </p>
-                          <p className="text-xs text-slate-400">{showHoldersDrawer ? 'Hide holders' : 'View all holders'}</p>
+                          <p className="text-xs text-slate-500">{showHoldersDrawer ? 'Hide holders' : 'View all holders'}</p>
                         </div>
                       </div>
                       <motion.div
                         animate={{ rotate: showHoldersDrawer ? 180 : 0 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                       >
-                        <svg className="w-4 h-4 text-slate-400 group-hover:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-slate-500 group-hover:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                         </svg>
                       </motion.div>
@@ -3388,14 +3594,14 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-0.5">Certificate Holders</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-none mb-0.5">Certificate Holders</p>
                     <p className="text-sm font-black text-slate-900 leading-none">
-                      {s.certificateHolders.length} <span className="text-slate-400 font-semibold text-xs">total</span>
+                      {s.certificateHolders.length} <span className="text-slate-500 font-semibold text-xs">total</span>
                     </p>
                   </div>
                 </div>
                 <button onClick={() => setShowHoldersDrawer(false)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all">
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -3405,7 +3611,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               {/* Search */}
               <div className="px-4 py-2 border-b border-slate-100 bg-white">
                 <div className="relative">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                   </svg>
                   <input
@@ -3439,12 +3645,16 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                         </div>
                         {(() => {
                           const pInfo = holderPlanInfo(h, s)
+                          const exp = getExpiryStatus(pInfo.expiry)
                           return (
-                            <span className={`inline-block mt-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${pInfo.isGroup
-                              ? 'bg-blue-50 border-blue-200 text-blue-700'
-                              : 'bg-slate-50 border-slate-200 text-slate-500'
-                              }`}>
-                              {pInfo.label}{pInfo.isGroup ? ' · upgrade' : ''}
+                            <span className="mt-1 inline-flex flex-wrap items-center gap-1">
+                              <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${pInfo.isGroup
+                                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                : 'bg-slate-50 border-slate-200 text-slate-500'
+                                }`}>
+                                {pInfo.label}{pInfo.isGroup ? ' · upgrade' : ''}
+                              </span>
+                              {exp && <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${exp.cls}`}>{exp.label}</span>}
                             </span>
                           )
                         })()}
@@ -3453,10 +3663,10 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                         )}
                         {/* Always show both primary and secondary certificate numbers (blank → —). */}
                         <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                          <p className="text-[10px] text-slate-400"><span className="font-bold text-slate-500">FAA</span> {h.faaCertificateNumber || '—'}</p>
-                          <p className="text-[10px] text-slate-400"><span className="font-bold text-slate-500">FTN</span> {h.iacraFtnNumber || '—'}</p>
-                          <p className="text-[10px] text-slate-400"><span className="font-bold text-slate-500">Sec. FAA</span> {h.secondaryFaaCertificateNumber || '—'}</p>
-                          <p className="text-[10px] text-slate-400"><span className="font-bold text-slate-500">Sec. FTN</span> {h.secondaryIacraFtnNumber || '—'}</p>
+                          <p className="text-[10px] text-slate-500"><span className="font-bold text-slate-500">FAA</span> {h.faaCertificateNumber || '—'}</p>
+                          <p className="text-[10px] text-slate-500"><span className="font-bold text-slate-500">FTN</span> {h.iacraFtnNumber || '—'}</p>
+                          <p className="text-[10px] text-slate-500"><span className="font-bold text-slate-500">Sec. FAA</span> {h.secondaryFaaCertificateNumber || '—'}</p>
+                          <p className="text-[10px] text-slate-500"><span className="font-bold text-slate-500">Sec. FTN</span> {h.secondaryIacraFtnNumber || '—'}</p>
                         </div>
                       </div>
                     </div>
@@ -3492,7 +3702,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               {/* Footer count when scrollable */}
               {s.certificateHolders.length > 4 && (
                 <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/60">
-                  <p className="text-[10px] text-slate-400 font-medium text-center">
+                  <p className="text-[10px] text-slate-500 font-medium text-center">
                     {filteredHP.length} of {s.certificateHolders.length} holders
                   </p>
                 </div>
@@ -3502,8 +3712,8 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
         })()}
       </AnimatePresence>
 
-      {/* ── Upcoming / Queued Next Plan Card ───────────────────────────── */}
-      {s.nextRenewal?.paidAt && (() => {
+      {/* Upcoming/Queued Next Plan card removed — each plan now shows its own renewal status inline. */}
+      {false && (() => {
         const nr = s.nextRenewal
         // Airline fallback: divide by (ppc × count) not just ppc
         const airlinePricePerYear = isAirline
@@ -3705,7 +3915,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Login credentials:</p>
                 <p className="text-sm text-slate-800 font-semibold">Email: {holderAction.holder.email || <span className="text-red-500">No email on file</span>}</p>
-                <p className="text-sm text-slate-800 font-semibold">Password: <span className="font-mono">{(holderAction.holder.fullName || '').toLowerCase().replace(/\s+/g, '')}</span> <span className="text-[10px] font-medium text-slate-400">(full name, no spaces)</span></p>
+                <p className="text-sm text-slate-800 font-semibold">Password: <span className="font-mono">{(holderAction.holder.fullName || '').toLowerCase().replace(/\s+/g, '')}</span> <span className="text-[10px] font-medium text-slate-500">(full name, no spaces)</span></p>
               </div>
               {!holderAction.holder.email && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
@@ -3737,7 +3947,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">Edit Holder</p>
                 <h2 className="text-base font-extrabold text-slate-900">{holderAction.holder.fullName}</h2>
               </div>
-              <button onClick={closeHolderModal} className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all">
+              <button onClick={closeHolderModal} className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all">
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -3904,7 +4114,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                   <p className="font-mono text-sm font-bold text-slate-900">{holderCredentials.password}</p>
                 </div>
               </div>
-              <p className="text-[11px] text-slate-400">They will be prompted to change their password on first login.</p>
+              <p className="text-[11px] text-slate-500">They will be prompted to change their password on first login.</p>
             </div>
             <div className="px-6 pb-5">
               <button onClick={() => setHolderCredentials(null)}

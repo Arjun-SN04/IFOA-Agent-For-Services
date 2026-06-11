@@ -60,6 +60,87 @@ export function getAirlineTotal(record) {
 }
 
 /**
+ * A holder-upgrade group is "active" when it still contributes to the current
+ * subscription: a perpetual Unlimited plan, a group with no expiry, or a group
+ * whose expiry is still in the future. Expired groups left in the array (e.g.
+ * after a base-plan renewal) are NOT active.
+ *
+ * This is the SINGLE definition used everywhere (frontend + backend mirror) so the
+ * invariant holds: baseCommitted = committedCount − activeGroupSlots.
+ *
+ * @param {object} g       - a holderGroup subdocument
+ * @param {Date}   [asOf]  - reference time (defaults to now)
+ * @returns {boolean}
+ */
+export function isActiveHolderGroup(g, asOf = new Date()) {
+  if (!g) return false
+  if (g.plan === 'Unlimited Plan') return true
+  if (!g.expirationDate) return true
+  return new Date(g.expirationDate) > asOf
+}
+
+/**
+ * Sum of slots across all currently-active holder-upgrade groups.
+ * @param {Array}  groups
+ * @param {Date}   [asOf]
+ * @returns {number}
+ */
+export function activeGroupSlots(groups, asOf = new Date()) {
+  return (groups || [])
+    .filter(g => isActiveHolderGroup(g, asOf))
+    .reduce((sum, g) => sum + Number(g.count || 0), 0)
+}
+
+/**
+ * Sum of slots across EVERY holder-upgrade group still in the array, active or
+ * expired. committedCount accumulates each group's slots on purchase and is never
+ * decremented on expiry, so committedCount = base + allGroupSlots always. The pure
+ * base plan count is therefore committedCount − allGroupSlots; subtracting only the
+ * active slots leaks an expired group's slots into the base count.
+ * @param {Array} groups
+ * @returns {number}
+ */
+export function allGroupSlots(groups) {
+  return (groups || []).reduce((sum, g) => sum + Number(g.count || 0), 0)
+}
+
+/**
+ * Does a group belong to the CURRENT base-plan period? Perpetual Unlimited plans
+ * always do (they carry across base renewals). A non-Unlimited upgrade belongs only
+ * if it is not expired AND was purchased on/after the current base period start
+ * (`periodStart` = the base plan's subscriptionDate). Upgrades bought under a
+ * previous base-plan period are NOT part of the current base count — they remain as
+ * their own separate plans.
+ *
+ * @param {object} g
+ * @param {Date|string} periodStart  - current base subscriptionDate
+ * @param {Date}   [asOf]
+ * @returns {boolean}
+ */
+export function isCurrentBaseGroup(g, periodStart, asOf = new Date()) {
+  if (!g) return false
+  if (g.plan === 'Unlimited Plan') return true
+  if (g.expirationDate && new Date(g.expirationDate) <= asOf) return false
+  if (!periodStart) return true
+  const bought = g.subscriptionDate || g.createdAt
+  return bought ? new Date(bought) >= new Date(periodStart) : true
+}
+
+/**
+ * Slots belonging to the current base period: perpetual Unlimited + current-period
+ * upgrades. Excludes previous-period upgrade plans.
+ * @param {Array} groups
+ * @param {Date|string} periodStart
+ * @param {Date} [asOf]
+ * @returns {number}
+ */
+export function currentBaseGroupSlots(groups, periodStart, asOf = new Date()) {
+  return (groups || [])
+    .filter(g => isCurrentBaseGroup(g, periodStart, asOf))
+    .reduce((sum, g) => sum + Number(g.count || 0), 0)
+}
+
+/**
  * Returns a formatted USD string for the airline total.
  * @param {object} record
  * @returns {string}  e.g. "$795.00"

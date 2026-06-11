@@ -9,6 +9,7 @@ const {
   sendIndividualRenewalConfirmation,
   sendAirlineRenewalConfirmation,
 } = require('../services/emailService');
+const { allHolderGroupSlots } = require('../utils/holderGroups');
 
 const UNLIMITED = 'Unlimited Plan';
 
@@ -155,10 +156,9 @@ async function activateMaturedRenewals() {
           : {}),
         // Airlines: restore committed holder count + amountPaid + totalAmount.
         // committedCount is the GRAND TOTAL — renewal.committedCount is the BASE count only,
-        // so add back active holder-upgrade group slots (they stay separate until they renew).
+        // so add back ALL holder-upgrade group slots (committedCount = base + allGroupSlots).
         ...(renewal.registrationModel !== 'Individual' ? (() => {
-          const activeGroupSlots = (doc.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0);
-          const grandTotal = renewal.committedCount ? Number(renewal.committedCount) + activeGroupSlots : null;
+          const grandTotal = renewal.committedCount ? Number(renewal.committedCount) + allHolderGroupSlots(doc.holderGroups) : null;
           return {
             ...(grandTotal != null
               ? { committedCount: grandTotal, holderCountValue: String(grandTotal) }

@@ -6,7 +6,8 @@ import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import { Plane } from 'lucide-react'
-import { getAirlineTotal, fmtAirlineTotal } from '../utils/airlineTotal'
+import { getAirlineTotal, fmtAirlineTotal, activeGroupSlots, allGroupSlots, currentBaseGroupSlots } from '../utils/airlineTotal'
+import { getExpiryStatus } from '../utils/expiryStatus'
 import { getInvoiceStatus } from '../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
@@ -154,9 +155,9 @@ function AdminCountrySelect({ value, onChange }) {
     <div className="relative">
       <button type="button" onClick={() => { setOpen(v => !v); setSearch('') }}
         className={`w-full text-left px-3 py-2 border rounded-lg text-sm bg-white outline-none transition flex items-center justify-between ${open ? 'border-slate-400 ring-2 ring-slate-100' : 'border-slate-200 hover:border-slate-300'
-          } ${value ? 'text-slate-900' : 'text-slate-400'}`}>
+          } ${value ? 'text-slate-900' : 'text-slate-500'}`}>
         <span>{value || '— Select country —'}</span>
-        <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className={`w-3.5 h-3.5 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -164,10 +165,10 @@ function AdminCountrySelect({ value, onChange }) {
         <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
           <div className="p-2 border-b border-slate-100">
             <input autoFocus type="text" placeholder="Search country…" value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-400" />
+              className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg outline-none focus:border-slate-400 bg-slate-50 text-slate-800 placeholder:text-slate-500" />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-400">No results</div>}
+            {filtered.length === 0 && <div className="px-4 py-3 text-sm text-slate-500">No results</div>}
             {filtered.map(c => (
               <div key={c} onClick={() => { onChange(c); setOpen(false); setSearch('') }}
                 className={`px-4 py-2 text-sm cursor-pointer transition-colors ${c === value ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'}`}>
@@ -267,7 +268,7 @@ function StatusText({ value, type = 'payment', isPaid }) {
 function Field({ label, children }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</label>
+      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</label>
       {children}
     </div>
   )
@@ -276,14 +277,18 @@ function Field({ label, children }) {
 function ViewField({ label, value }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
       <span className="text-sm text-slate-800 font-medium break-words">{value || '—'}</span>
     </div>
   )
 }
 
-function SectionHead({ label }) {
-  return <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3 pt-1">{label}</p>
+function SectionHead({ label, badge }) {
+  return (
+    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3 pt-1">
+      {label}{badge && <span className="text-slate-500"> · {badge}</span>}
+    </p>
+  )
 }
 
 // ─── NextRenewalSection — shared between Individual & Airline view modals ──────
@@ -427,7 +432,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
           <div className="rounded-lg border border-emerald-300 bg-white p-3 mb-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Plan</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Plan</label>
                 <select
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   value={editForm.plan}
@@ -440,7 +445,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
               </div>
               {editForm.plan === 'Multiple Years Subscription Plan' && (
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Years</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Years</label>
                   <input
                     type="number"
                     min="2"
@@ -452,7 +457,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
               )}
               {registrationModel === 'Airlines' && (
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Committed Count</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Committed Count</label>
                   <input
                     type="number"
                     min="1"
@@ -463,7 +468,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
                 </div>
               )}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Activation Date</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Activation Date</label>
                 <input
                   type="date"
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
@@ -472,7 +477,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Expires At</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Expires At</label>
                 <input
                   type="date"
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
@@ -481,7 +486,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Amount Paid</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Amount Paid</label>
                 <input
                   type="number"
                   step="0.01"
@@ -492,7 +497,7 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice #</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Invoice #</label>
                 <input
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   value={editForm.invoiceNumber}
@@ -551,6 +556,144 @@ function triggerInvoiceDownload({ url, filename }) {
 }
 
 
+// ─── InvoiceDraftFields — shared editable invoice form (edit + create) ────────
+function InvoiceDraftFields({ form, setForm, onGenerateNumber, generatingNumber }) {
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+        {/* Invoice # — full-width so the number is never clipped; optional Generate button */}
+        <div className="sm:col-span-2">
+          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Invoice #</p>
+          <div className="flex items-center gap-1.5">
+            <input
+              value={form.invoiceNumber || ''}
+              onChange={e => setForm(f => ({ ...f, invoiceNumber: e.target.value }))}
+              placeholder={onGenerateNumber ? 'Blank = auto on save' : ''}
+              className="flex-1 min-w-0 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            {onGenerateNumber && (
+              <button
+                type="button"
+                onClick={onGenerateNumber}
+                disabled={generatingNumber}
+                title="Preview the next invoice number (not saved until you click Create Invoice)"
+                className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition disabled:opacity-50"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                {generatingNumber ? '…' : 'Generate'}
+              </button>
+            )}
+          </div>
+        </div>
+        {[
+          ['Recipient Name', 'recipientName'],
+          ['Company', 'recipientCompany'],
+          ['Payment Method', 'paymentMethod'],
+          ['Country', 'recipientCountry'],
+        ].map(([label, key]) => (
+          <div key={key}>
+            <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
+            <input
+              value={form[key] || ''}
+              onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-x-3">
+        <div>
+          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Issue Date</p>
+          <input
+            type="date"
+            value={form.issueDate || ''}
+            onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+        <div>
+          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Payable By</p>
+          <input
+            type="date"
+            value={form.payableBy || ''}
+            onChange={e => setForm(f => ({ ...f, payableBy: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+      </div>
+      <div>
+        <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Address</p>
+        <input
+          value={form.recipientAddress1 || ''}
+          onChange={e => setForm(f => ({ ...f, recipientAddress1: e.target.value }))}
+          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+      </div>
+      <div>
+        <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Description</p>
+        <input
+          value={form.description || ''}
+          onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+      </div>
+      <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
+        {[
+          ['Quantity', 'quantity', 1, 1],
+          ['Unit Price', 'unitPrice', 1, 0],
+        ].map(([label, key, step, min]) => (
+          <div key={key}>
+            <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
+            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <button
+                type="button"
+                onClick={() => setForm(f => {
+                  const next = Math.max(min, parseFloat(f[key] || 0) - step)
+                  const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
+                  const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
+                  return { ...f, [key]: String(next), totalPrice: String(q * u) }
+                })}
+                className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200"
+              >−</button>
+              <input
+                value={form[key] || ''}
+                onChange={e => setForm(f => {
+                  const val = e.target.value
+                  const q = key === 'quantity' ? parseFloat(val || 0) : parseFloat(f.quantity || 0)
+                  const u = key === 'unitPrice' ? parseFloat(val || 0) : parseFloat(f.unitPrice || 0)
+                  return { ...f, [key]: val, totalPrice: isNaN(q * u) ? f.totalPrice : String(q * u) }
+                })}
+                className="flex-1 min-w-0 text-[11px] font-semibold text-center py-1 bg-transparent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setForm(f => {
+                  const next = parseFloat(f[key] || 0) + step
+                  const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
+                  const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
+                  return { ...f, [key]: String(next), totalPrice: String(q * u) }
+                })}
+                className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200"
+              >+</button>
+            </div>
+          </div>
+        ))}
+        <div>
+          <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Total Price</p>
+          <div className="flex items-center border border-emerald-200 rounded-lg overflow-hidden bg-emerald-50">
+            <span className="pl-2 text-emerald-600 text-xs font-bold flex-shrink-0">$</span>
+            <input
+              value={form.totalPrice || ''}
+              onChange={e => setForm(f => ({ ...f, totalPrice: e.target.value }))}
+              className="flex-1 min-w-0 text-[11px] font-bold text-center py-1.5 bg-transparent focus:outline-none text-emerald-700"
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── AdminInvoicesPanel — shows all invoices for a registration ───────────────
 function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerMode = false, onGenerateInvoice }) {
   const [invoices, setInvoices] = React.useState(null)
@@ -562,6 +705,24 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   const [saveErr, setSaveErr] = React.useState('')
   const [pdfBusy, setPdfBusy] = React.useState({})
   const [deletingNum, setDeletingNum] = React.useState(null)
+  // Admin custom-invoice creation (separate from inline edit so they don't clash).
+  const [creating, setCreating] = React.useState(false)
+  const [createForm, setCreateForm] = React.useState({})
+  const [creatingSaving, setCreatingSaving] = React.useState(false)
+  const [createErr, setCreateErr] = React.useState('')
+  const [genNumBusy, setGenNumBusy] = React.useState(false)
+
+  // Peek the next invoice number and drop it into the form — NOT persisted. The
+  // counter only advances when the invoice is actually created.
+  const handleGenerateNumber = async () => {
+    setGenNumBusy(true)
+    try {
+      const r = await generateInvoiceNumber()
+      const num = r.data?.invoiceNumber || ''
+      if (num) setCreateForm(f => ({ ...f, invoiceNumber: num }))
+    } catch (_) { /* non-critical — admin can still type one */ }
+    finally { setGenNumBusy(false) }
+  }
 
   const handleDeleteInvoice = async (inv) => {
     const num = inv.invoiceNumber
@@ -797,6 +958,69 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
     }
   }
 
+  // Open a blank custom-invoice form, prefilled with the registration's recipient.
+  const openCreate = () => {
+    const isAirline = registrationModel !== 'Individual'
+    const todayInput = new Date().toISOString().slice(0, 10)
+    const payable = new Date(); payable.setDate(payable.getDate() + 30)
+    setCreateForm({
+      invoiceNumber: '',
+      issueDate: todayInput,
+      payableBy: payable.toISOString().slice(0, 10),
+      recipientName: isAirline
+        ? [record?.firstName, record?.lastName].filter(Boolean).join(' ')
+        : [record?.firstName, record?.middleName, record?.lastName].filter(Boolean).join(' '),
+      recipientCompany: isAirline ? (record?.airlineName || '') : '',
+      recipientAddress1: [record?.addressLine1, record?.city, record?.state, record?.postalCode, record?.country].filter(Boolean).join(', '),
+      recipientCountry: record?.country || '',
+      paymentMethod: 'wire',
+      description: 'Agent For Service',
+      quantity: '1',
+      unitPrice: '',
+      totalPrice: '',
+    })
+    setCreateErr('')
+    setEditing(null)
+    setCreating(true)
+  }
+
+  // Persist a brand-new admin invoice. Leaving Invoice # blank lets the backend
+  // auto-generate one. The doc is adminGenerated + paid, so it shows to the airline.
+  const handleCreate = async () => {
+    setCreatingSaving(true); setCreateErr('')
+    try {
+      const qty = Number(createForm.quantity) || 1
+      const unit = Number(createForm.unitPrice) || 0
+      const total = Number(createForm.totalPrice) || qty * unit
+      if (!total || total <= 0) { setCreateErr('Enter a total/unit price greater than 0.'); setCreatingSaving(false); return }
+      const draft = {
+        invoiceNumber: createForm.invoiceNumber || undefined,
+        issueDate: createForm.issueDate || undefined,
+        payableBy: createForm.payableBy || undefined,
+        recipientName: createForm.recipientName,
+        recipientCompany: createForm.recipientCompany,
+        recipientContact: createForm.recipientName,
+        recipientAddress1: createForm.recipientAddress1,
+        recipientAddress2: '',
+        recipientCountry: createForm.recipientCountry,
+        paymentMethod: createForm.paymentMethod,
+        lineItems: [{
+          description: createForm.description || 'Agent For Service',
+          quantity: qty,
+          unitPrice: unit,
+          totalPrice: total,
+        }],
+      }
+      await createAdminInvoiceDoc(registrationId, registrationModel, draft, createForm.invoiceNumber, 'custom')
+      setCreating(false)
+      await load()
+    } catch (e) {
+      setCreateErr(e?.response?.data?.message || e.message || 'Create failed.')
+    } finally {
+      setCreatingSaving(false)
+    }
+  }
+
   const fmtInvDate = (d) => d
     ? new Date(d).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '—'
@@ -837,6 +1061,17 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
             </button>
           )}
           <button
+            onClick={() => creating ? setCreating(false) : openCreate()}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${creating ? 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50' : 'bg-slate-900 text-white hover:bg-slate-700'}`}
+          >
+            {creating ? 'Cancel' : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                Create New Invoice
+              </>
+            )}
+          </button>
+          <button
             onClick={load}
             disabled={loading}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
@@ -846,14 +1081,41 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
         </div>
       </div>
 
+      {/* Create New Invoice form */}
+      {creating && (
+        <div className="mb-4 rounded-xl border-2 border-slate-900/10 bg-slate-50/60 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-700">New Custom Invoice</p>
+            <span className="text-[9px] text-slate-500">Leave Invoice # blank to auto-generate</span>
+          </div>
+          <InvoiceDraftFields form={createForm} setForm={setCreateForm} onGenerateNumber={handleGenerateNumber} generatingNumber={genNumBusy} />
+          {createErr && <p className="text-[11px] text-red-600 font-semibold">{createErr}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCreate}
+              disabled={creatingSaving}
+              className="flex-1 inline-flex items-center justify-center gap-1 text-[11px] font-bold text-white bg-slate-900 hover:bg-slate-700 rounded-lg px-3 py-2 transition disabled:opacity-50"
+            >
+              {creatingSaving ? 'Creating…' : 'Create Invoice'}
+            </button>
+            <button
+              onClick={() => setCreating(false)}
+              className="inline-flex items-center justify-center text-[11px] font-bold text-slate-600 border border-slate-300 bg-white hover:bg-slate-100 rounded-lg px-4 py-2 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && visibleInvoices === null && (
-        <p className="text-xs text-slate-400 italic">Loading invoices…</p>
+        <p className="text-xs text-slate-500 italic">Loading invoices…</p>
       )}
 
       {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
       {!loading && visibleInvoices !== null && visibleInvoices.length === 0 && (
-        <p className="text-xs text-slate-400 italic">No invoices found.</p>
+        <p className="text-xs text-slate-500 italic">No invoices found.</p>
       )}
 
       {visibleInvoices !== null && visibleInvoices.length > 0 && (
@@ -893,7 +1155,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500 mt-0.5">{fmtInvDate(inv.paidAt || inv.createdAt)}</p>
-                    {planLabel && <p className="text-[10px] text-slate-400 mt-0.5">{planLabel}</p>}
+                    {planLabel && <p className="text-[10px] text-slate-500 mt-0.5">{planLabel}</p>}
                     <p className="text-[10px] font-semibold text-slate-700 mt-0.5">{fmtAmt(
                       inv.draft?.lineItems?.length
                         ? inv.draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0)
@@ -902,7 +1164,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                     {(inv.draft?.paymentId || inv.stripePaymentIntentId) && (() => {
                       const raw = String(inv.draft?.paymentId || inv.stripePaymentIntentId)
                       const clean = /^admin[_-]|^manual/i.test(raw) ? `MANUAL ${inv.invoiceNumber || ''}`.trim() : raw
-                      return <p className="text-[10px] text-slate-400 mt-0.5">Payment ID: <span className="font-mono text-slate-500 break-all">{clean}</span></p>
+                      return <p className="text-[10px] text-slate-500 mt-0.5">Payment ID: <span className="font-mono text-slate-500 break-all">{clean}</span></p>
                     })()}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -945,113 +1207,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
 
                 {editing?._id === inv._id && (
                   <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-                      {[
-                        ['Invoice #', 'invoiceNumber'],
-                        ['Recipient Name', 'recipientName'],
-                        ['Company', 'recipientCompany'],
-                        ['Payment Method', 'paymentMethod'],
-                        ['Country', 'recipientCountry'],
-                      ].map(([label, key]) => (
-                        <div key={key}>
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-                          <input
-                            value={editForm[key] || ''}
-                            onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3">
-                      <div>
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Issue Date</p>
-                        <input
-                          type="date"
-                          value={editForm.issueDate || ''}
-                          onChange={e => setEditForm(f => ({ ...f, issueDate: e.target.value }))}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Payable By</p>
-                        <input
-                          type="date"
-                          value={editForm.payableBy || ''}
-                          onChange={e => setEditForm(f => ({ ...f, payableBy: e.target.value }))}
-                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Address</p>
-                      <input
-                        value={editForm.recipientAddress1 || ''}
-                        onChange={e => setEditForm(f => ({ ...f, recipientAddress1: e.target.value }))}
-                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Description</p>
-                      <input
-                        value={editForm.description || ''}
-                        onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
-                      {[
-                        ['Quantity', 'quantity', 1, 1],
-                        ['Unit Price', 'unitPrice', 1, 0],
-                      ].map(([label, key, step, min]) => (
-                        <div key={key}>
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
-                          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
-                            <button
-                              type="button"
-                              onClick={() => setEditForm(f => {
-                                const next = Math.max(min, parseFloat(f[key] || 0) - step)
-                                const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
-                                const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
-                                return { ...f, [key]: String(next), totalPrice: String(q * u) }
-                              })}
-                              className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200"
-                            >−</button>
-                            <input
-                              value={editForm[key] || ''}
-                              onChange={e => setEditForm(f => {
-                                const val = e.target.value
-                                const q = key === 'quantity' ? parseFloat(val || 0) : parseFloat(f.quantity || 0)
-                                const u = key === 'unitPrice' ? parseFloat(val || 0) : parseFloat(f.unitPrice || 0)
-                                return { ...f, [key]: val, totalPrice: isNaN(q * u) ? f.totalPrice : String(q * u) }
-                              })}
-                              className="flex-1 min-w-0 text-[11px] font-semibold text-center py-1 bg-transparent focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setEditForm(f => {
-                                const next = parseFloat(f[key] || 0) + step
-                                const q = key === 'quantity' ? next : parseFloat(f.quantity || 0)
-                                const u = key === 'unitPrice' ? next : parseFloat(f.unitPrice || 0)
-                                return { ...f, [key]: String(next), totalPrice: String(q * u) }
-                              })}
-                              className="w-6 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200"
-                            >+</button>
-                          </div>
-                        </div>
-                      ))}
-                      <div>
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">Total Price</p>
-                        <div className="flex items-center border border-emerald-200 rounded-lg overflow-hidden bg-emerald-50">
-                          <span className="pl-2 text-emerald-600 text-xs font-bold flex-shrink-0">$</span>
-                          <input
-                            value={editForm.totalPrice || ''}
-                            onChange={e => setEditForm(f => ({ ...f, totalPrice: e.target.value }))}
-                            className="flex-1 min-w-0 text-[11px] font-bold text-center py-1.5 bg-transparent focus:outline-none text-emerald-700"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <InvoiceDraftFields form={editForm} setForm={setEditForm} />
                     {saveErr && <p className="text-[11px] text-red-600 font-semibold">{saveErr}</p>}
                     <button
                       onClick={handleSave}
@@ -1080,10 +1236,10 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-center lg:items-center justify-center p-4 sm:p-6 md:p-8 gap-4 overflow-y-auto lg:overflow-x-auto">
+      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-2xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          className="w-full max-w-2xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-100px)]"
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
@@ -1106,7 +1262,7 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
                 Edit
               </button>
-              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
             </div>
           </div>
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
@@ -1192,10 +1348,10 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
             >
               <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Invoice History</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-300 mb-0.5">Invoice History</p>
                   <p className="text-sm font-bold text-white truncate max-w-[180px]">{fullName}</p>
                 </div>
-                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition">✕</button>
+                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition">✕</button>
               </div>
               <AdminInvoicesPanel registrationId={record._id} registrationModel="Individual" record={record} drawerMode={true} />
             </motion.div>
@@ -1354,7 +1510,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
 
   const field = (label, key, type = 'text', extra = {}) => (
     <div key={key}>
-      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">{label}</label>
+      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">{label}</label>
       <input
         type={type}
         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
@@ -1440,7 +1596,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
           <div className="rounded-lg border border-blue-300 bg-white p-3 mb-1 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Purpose</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Purpose</label>
                 <select
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   value={form.wireRequestPurpose}
@@ -1453,7 +1609,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
               </div>
               {form.wireRequestPurpose === 'renewal' && (
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Renewal Plan</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Renewal Plan</label>
                   <select
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                     value={form.wireRequestRenewalPlan}
@@ -1468,7 +1624,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
               )}
               {form.wireRequestPurpose === 'holder-upgrade' && (
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Additional Holders</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Additional Holders</label>
                   <input type="number" min="1"
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                     value={form.wireRequestAdditionalCount}
@@ -1481,7 +1637,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
               {field(subDateLabel, 'subscriptionDate', 'date')}
               {field(expDateLabel, 'expirationDate', 'date')}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Status</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Invoice Status</label>
                 <select
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   value={form.invoiceStatus}
@@ -1493,7 +1649,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Payment Status</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Payment Status</label>
                 <select
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                   value={form.paymentStatus}
@@ -1573,7 +1729,13 @@ function adminTierPpc(plan, count) {
 }
 
 function AdminHolderCountModal({ record, onClose, onSaved }) {
+  // Raw stored committed (base + all not-expired groups) — used to derive base for
+  // the decrease path. The "current base slots" shown to the admin excludes
+  // previous-period upgrade plans (only base + perpetual + current-period upgrades),
+  // matching the airline-side Expand Holder Count modal.
   const committed = Number(record.committedCount || record.holderCountValue || record.certificateHolders?.length || 0)
+  const _baseCommitted = Math.max(0, committed - allGroupSlots(record.holderGroups))
+  const currentBaseSlots = _baseCommitted + currentBaseGroupSlots(record.holderGroups, record.subscriptionDate)
   const holders = record.certificateHolders || []
   const [mode, setMode] = useState('increase')
   // increase
@@ -1587,7 +1749,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const newTotal = committed + addCount
+  const newTotal = currentBaseSlots + addCount
   const ppc = adminTierPpc(plan, Math.max(3, newTotal))
   const amount = ppc * addCount
 
@@ -1609,6 +1771,54 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
   }, [record, plan])
   useEffect(() => { setMergeTarget('') }, [plan])
 
+  // ── Decrease: group holders by plan so admin removes specific members per plan ──
+  const groupLabelShort = (g) => (g.plan === 'Unlimited Plan' ? 'Unlimited' : 'Multiple Years Subscription Plan' === g.plan ? 'Multi-Year' : '1 Year') + ' upgrade'
+  const planSections = useMemo(() => {
+    const sections = [{
+      key: 'base',
+      label: `Base plan — ${planShort(record.subscriptionPlan)}`,
+      holders: holders.filter(h => !h.holderGroupId),
+    }]
+    ;(record.holderGroups || []).forEach((g, gi) => {
+      sections.push({
+        key: String(g._id),
+        label: `${groupLabelShort(g)} #${gi + 1}`,
+        holders: holders.filter(h => String(h.holderGroupId || '') === String(g._id)),
+      })
+    })
+    return sections
+  }, [holders, record])
+
+  // Keep/remove every member of one plan section at once.
+  const setSectionKeep = (secHolders, keepAll) => setKeep(prev => {
+    const n = new Set(prev)
+    secHolders.forEach(h => { const id = String(h._id); if (keepAll) n.add(id); else n.delete(id) })
+    return n
+  })
+
+  // Recompute kept holders + each plan's committed count after removals.
+  const decreaseResult = useMemo(() => {
+    const removed = holders.filter(h => !keep.has(String(h._id)))
+    const keptHolders = holders.filter(h => keep.has(String(h._id)))
+    const removedByGroup = {}
+    let removedBase = 0
+    removed.forEach(h => {
+      if (h.holderGroupId) removedByGroup[String(h.holderGroupId)] = (removedByGroup[String(h.holderGroupId)] || 0) + 1
+      else removedBase++
+    })
+    const groups = record.holderGroups || []
+    // committedCount = base + ACTIVE group slots; expired groups aren't in it.
+    const baseCommittedSlots = Math.max(0, committed - allGroupSlots(groups))
+    const newBaseCommitted = Math.max(0, baseCommittedSlots - removedBase)
+    // Each removed member frees one committed slot from its plan; drop emptied groups.
+    const newGroups = groups
+      .map(g => ({ ...g, count: Math.max(0, Number(g.count || 0) - (removedByGroup[String(g._id)] || 0)) }))
+      .filter(g => Number(g.count) > 0)
+    // Recompute committed from base + remaining ACTIVE group slots only.
+    const newCommitted = newBaseCommitted + allGroupSlots(newGroups)
+    return { keptHolders, newGroups, newCommitted }
+  }, [holders, keep, record, committed])
+
   const submit = async () => {
     setBusy(true); setErr('')
     try {
@@ -1616,12 +1826,14 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
         const res = await adminHolderUpgrade(record._id, { plan, additionalCount: addCount, paid, mergeTarget: mergeTarget || undefined })
         onSaved(res.data?.data)
       } else {
-        const keptHolders = holders.filter(h => keep.has(String(h._id)))
+        const { keptHolders, newGroups, newCommitted } = decreaseResult
+        if (keptHolders.length === holders.length) { setErr('Untick at least one member to remove.'); setBusy(false); return }
         if (keptHolders.length === 0) { setErr('Keep at least one holder.'); setBusy(false); return }
         const res = await updateAirlinesSubscription(record._id, {
           certificateHolders: keptHolders,
-          committedCount: keptHolders.length,
-          holderCountValue: String(keptHolders.length),
+          holderGroups: newGroups,
+          committedCount: newCommitted,
+          holderCountValue: String(newCommitted),
         })
         onSaved(res.data?.data)
       }
@@ -1635,7 +1847,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[61] flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
           className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between bg-slate-50 flex-shrink-0">
@@ -1643,7 +1855,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder Count</p>
               <h3 className="text-base font-extrabold text-slate-900">Manage Holders</h3>
             </div>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100">✕</button>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100">✕</button>
           </div>
 
           <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
@@ -1652,12 +1864,12 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
               <button onClick={() => setMode('increase')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${mode === 'increase' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'}`}>Increase</button>
               <button onClick={() => setMode('decrease')} className={`rounded-lg border px-3 py-2 text-xs font-bold ${mode === 'decrease' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600'}`}>Decrease</button>
             </div>
-            <p className="text-[11px] text-slate-500">Current committed: <span className="font-bold text-slate-800">{committed}</span> · holders on file: {holders.length}</p>
+            <p className="text-[11px] text-slate-500">Current base slots: <span className="font-bold text-slate-800">{currentBaseSlots}</span> · holders on file: {holders.length}</p>
 
             {mode === 'increase' ? (
               <>
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Plan for these holders</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Plan for these holders</label>
                   <div className="grid grid-cols-2 gap-2">
                     {['1 Year Subscription Plan', 'Unlimited Plan'].map(p => (
                       <button key={p} onClick={() => setPlan(p)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${plan === p ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{planShort(p)}</button>
@@ -1666,13 +1878,13 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
                 </div>
                 {mergeTargets.length > 0 && (
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Attach to</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Attach to</label>
                     <div className="space-y-1.5">
                       <label className={`flex items-start gap-2 px-3 py-2 rounded-lg border cursor-pointer ${mergeTarget === '' ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
                         <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === ''} onChange={() => setMergeTarget('')} />
                         <span>
                           <span className="block text-xs font-bold text-slate-800">New separate plan</span>
-                          <span className="block text-[10px] text-slate-400">Independent — full term from today.</span>
+                          <span className="block text-[10px] text-slate-500">Independent — full term from today.</span>
                         </span>
                       </label>
                       {mergeTargets.map(t => (
@@ -1680,7 +1892,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
                           <input type="radio" className="mt-0.5 accent-blue-600" checked={mergeTarget === t.id} onChange={() => setMergeTarget(t.id)} />
                           <span>
                             <span className="block text-xs font-bold text-slate-800">Merge into {t.label}</span>
-                            <span className="block text-[10px] text-slate-400">Shares its dates{t.expiry ? ` — expires ${fmtDate(t.expiry)}` : (plan === 'Unlimited Plan' ? ' — no expiry' : '')}. Separate invoice.</span>
+                            <span className="block text-[10px] text-slate-500">Shares its dates{t.expiry ? ` — expires ${fmtDate(t.expiry)}` : (plan === 'Unlimited Plan' ? ' — no expiry' : '')}. Separate invoice.</span>
                           </span>
                         </label>
                       ))}
@@ -1703,30 +1915,63 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
                   <span className="text-xl font-black text-white">${amount.toFixed(2)}</span>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Payment</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Payment</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => setPaid(true)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${paid ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'}`}>Paid (invoice)</button>
                     <button onClick={() => setPaid(false)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${!paid ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-600'}`}>Pending</button>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">{paid ? 'Generates an invoice now; airline can see it.' : 'No invoice yet — mark paid later to generate it.'}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{paid ? 'Generates an invoice now; airline can see it.' : 'No invoice yet — mark paid later to generate it.'}</p>
                 </div>
               </>
             ) : (
               <>
-                <p className="text-[11px] text-slate-500">Untick holders to remove. Committed count becomes the number kept.</p>
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200">
-                  {holders.length === 0 && <p className="px-3 py-4 text-xs text-slate-400 text-center">No holders on file.</p>}
-                  {holders.map((h, i) => (
-                    <label key={String(h._id || i)} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50">
-                      <input type="checkbox" checked={keep.has(String(h._id))} onChange={() => toggleKeep(String(h._id))} className="w-4 h-4 accent-blue-600" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">{h.fullName || '(unnamed)'}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{h.iacraFtnNumber || h.faaCertificateNumber || ''}{h.holderGroupId ? ' · upgrade' : ''}</p>
+                <p className="text-[11px] text-slate-500">Choose a plan, then untick the members to remove. Each removed member frees one committed slot from <span className="font-semibold text-slate-700">that</span> plan.</p>
+                {holders.length === 0 && <p className="px-3 py-4 text-xs text-slate-500 text-center rounded-xl border border-slate-200">No holders on file.</p>}
+                <div className="space-y-2.5 max-h-72 overflow-y-auto -mx-1 px-1">
+                  {planSections.map(sec => {
+                    const keptInSec = sec.holders.filter(h => keep.has(String(h._id))).length
+                    const total = sec.holders.length
+                    return (
+                      <div key={sec.key} className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-600 truncate">{sec.label}</p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-[10px] font-bold text-slate-500">Keep {keptInSec}/{total}</span>
+                            {total > 0 && (
+                              <button onClick={() => setSectionKeep(sec.holders, keptInSec !== total)}
+                                className="text-[10px] font-bold text-blue-600 hover:underline">
+                                {keptInSec === total ? 'Remove all' : 'Keep all'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {total === 0
+                          ? <p className="px-3 py-3 text-[11px] text-slate-500 text-center">No members on file in this plan.</p>
+                          : (
+                            <div className="divide-y divide-slate-100">
+                              {sec.holders.map((h, i) => {
+                                const removing = !keep.has(String(h._id))
+                                return (
+                                  <label key={String(h._id || i)} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 ${removing ? 'bg-red-50/40' : ''}`}>
+                                    <input type="checkbox" checked={keep.has(String(h._id))} onChange={() => toggleKeep(String(h._id))} className="w-4 h-4 accent-blue-600" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className={`text-xs font-bold truncate ${removing ? 'text-red-600 line-through' : 'text-slate-800'}`}>{h.fullName || '(unnamed)'}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">{h.iacraFtnNumber || h.faaCertificateNumber || ''}</p>
+                                    </div>
+                                    {removing && <span className="text-[9px] font-bold uppercase tracking-wide text-red-500 flex-shrink-0">Remove</span>}
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
                       </div>
-                    </label>
-                  ))}
+                    )
+                  })}
                 </div>
-                <p className="text-[11px] font-bold text-slate-700">Keeping {keep.size} of {holders.length}</p>
+                <div className="flex items-center justify-between rounded-lg bg-slate-900 px-3.5 py-2.5">
+                  <span className="text-[11px] font-bold text-white">Keeping {keep.size} of {holders.length}</span>
+                  <span className="text-[11px] font-semibold text-white/80">New committed: <span className="font-black text-white">{decreaseResult.newCommitted}</span></span>
+                </div>
               </>
             )}
           </div>
@@ -1749,6 +1994,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
   const [showHolderCount, setShowHolderCount] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState(null)
   const [activatingGroupId, setActivatingGroupId] = useState(null)
+  const [activatingBase, setActivatingBase] = useState(false)
   // Holder-upgrade group whose detail popup is open (holders + price + add).
   const [groupModal, setGroupModal] = useState(null)
   // Admin renewal modal target: null | { group } (group null = base subscription).
@@ -1780,14 +2026,28 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
     }
   }
 
+  const handleActivateBaseRenewal = async () => {
+    const planLbl = record.nextRenewal?.plan || 'queued plan'
+    if (!window.confirm(`Start the queued base plan now?\n\nSwitch to: ${planLbl}\nExpiry is recomputed from today.\n\nThis cannot be undone automatically.`)) return
+    setActivatingBase(true)
+    try {
+      const res = await activateQueuedRenewal(record._id, 'Airlines')
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Failed to activate queued renewal.')
+    } finally {
+      setActivatingBase(false)
+    }
+  }
+
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-center lg:items-center justify-center p-4 sm:p-6 md:p-8 gap-4 overflow-y-auto lg:overflow-x-auto">
+      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-3xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          className="w-full max-w-3xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-100px)]"
           onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
@@ -1805,25 +2065,26 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
                 Edit
               </button>
-              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
             </div>
           </div>
           <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
-            <div><SectionHead label="Status & Subscription" />
+            <div><SectionHead label="Status & Subscription" badge="Base Plan" />
+              <p className="-mt-2 mb-3 text-[11px] text-slate-500">Plan, holder count, dates and pricing below are for the <span className="font-semibold text-slate-600">base plan</span>. To edit any plan's details or its added holders, use <span className="font-semibold text-slate-600">Edit</span>.</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <ViewField label="Status" value={<StatusText value={record.isPaid ? 'Active' : (record.status || 'Pending')} type="status" isPaid={record.isPaid} />} />
                 <ViewField label="Payment Confirmed" value={<StatusText type="isPaid" isPaid={record.isPaid} />} />
                 <ViewField label="Payment" value={<StatusText value={record.paymentStatus} isPaid={record.isPaid} />} />
                 <ViewField label="Invoice" value={record.invoiceStatus} />
                 <ViewField label="Wire Request" value={record.wirePaymentRequested ? `Requested${record.wirePaymentRequestedAt ? ` on ${fmtDate(record.wirePaymentRequestedAt)}` : ''}` : 'No'} />
-                <ViewField label="Invoice #" value={record.invoiceNumber} />
-                <ViewField label="Plan" value={record.subscriptionPlan} />
+                <ViewField label="Base Invoice #" value={record.invoiceNumber} />
+                <ViewField label="Base Plan" value={record.subscriptionPlan} />
                 <ViewField label="Holder Count" value={record.holderCount} />
                 <ViewField label="Exact Count" value={record.holderCountValue} />
                 <ViewField label="Subscription Date" value={record.subscriptionDate ? fmtDateYMD(record.subscriptionDate) : (record.isPaid ? fmtDateYMD(record.updatedAt) : 'Activates on payment')} />
                 <ViewField label="Expiration Date" value={record.subscriptionPlan === 'Unlimited Plan' ? 'Never (Unlimited)' : record.expirationDate ? fmtDateYMD(record.expirationDate) : record.isPaid ? '—' : 'Activates on payment'} />
                 <ViewField label="Price/Cert" value={fmtMoney(record.pricePerCertificate ?? record.pricePerCert)} />
-                <ViewField label="Total Fees" value={fmtAirlineTotal(record)} />
+                <ViewField label="Base Total Fees" value={fmtAirlineTotal(record)} />
               </div>
             </div>
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Airline / Operator" />
@@ -1831,7 +2092,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <div className="mb-4 flex items-center gap-3">
                   <img src={record.logoUrl} alt="Company logo" className="w-14 h-14 rounded-xl object-contain border border-slate-200 bg-white" />
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Company Logo</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Company Logo</p>
                     <p className="text-xs text-slate-500 truncate max-w-[200px]">{record.airlineName}</p>
                   </div>
                 </div>
@@ -1861,17 +2122,18 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <div className="border-t border-slate-100 pt-5">
                   <div className="flex items-center justify-between mb-2">
                     <SectionHead label="Subscription Plans" />
-                    <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-50 transition">Manage Holder Count</button>
+                    <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Holder Count</button>
                   </div>
                   <div className="space-y-2">
                     {/* BASE PLAN — main subscription driving holder capacity */}
                     {(() => {
-                      const totalGroupSlots = (record.holderGroups || []).reduce((acc, gg) => acc + Number(gg.count || 0), 0)
+                      const totalGroupSlots = allGroupSlots(record.holderGroups)
                       const baseCommitted = Math.max(0, Number(record.committedCount || record.holderCountValue || 0) - totalGroupSlots)
                       const baseFilled = (record.certificateHolders || []).filter(h => !h.holderGroupId).length
                       const basePpc = Number(record.pricePerCertificate || record.pricePerCert || 0)
                       const baseUnlimited = record.subscriptionPlan === 'Unlimited Plan'
                       const baseQueued = !!record.nextRenewal?.paidAt
+                      const baseExpiry = getExpiryStatus(record.expirationDate, { unlimited: baseUnlimited })
                       return (
                         <div
                           role="button"
@@ -1885,12 +2147,13 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                             <p className="text-xs font-black text-slate-900 flex items-center gap-1.5">
                               <span className="text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 rounded-full px-2 py-0.5">Base Plan</span>
                               {planShort(record.subscriptionPlan, record.multiYearCount)}
-                              {baseQueued && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700">Renewing</span>}
+                              {baseQueued && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700">Renewed</span>}
+                              {!baseQueued && baseExpiry && <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${baseExpiry.cls}`}>{baseExpiry.label}</span>}
                             </p>
                             <p className="text-[10px] text-slate-500 mt-0.5">
                               ${basePpc}/cert · ${Number(basePpc * baseCommitted).toLocaleString('en-US', { minimumFractionDigits: 2 })} · {baseUnlimited ? 'No expiry' : (record.expirationDate ? `expires ${fmtDate(record.expirationDate)}` : '—')}{record.invoiceNumber ? ` · ${record.invoiceNumber}` : ''}
                             </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Main plan — holder capacity depends on this. Renew before expiry.</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Main plan — holder capacity depends on this. Renew before expiry.</p>
                             {baseQueued && (
                               <p className="text-[10px] font-bold text-emerald-700 mt-0.5">
                                 Renewal queued — {planShort(record.nextRenewal.plan)} activates {record.nextRenewal.activationDate ? fmtDate(record.nextRenewal.activationDate) : 'at expiry'}
@@ -1905,15 +2168,22 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                                 Renew
                               </button>
                             )}
+                            {baseQueued && (
+                              <button onClick={(e) => { e.stopPropagation(); handleActivateBaseRenewal() }} disabled={activatingBase}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 disabled:opacity-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 transition">
+                                {activatingBase ? 'Activating…' : 'Activate Now'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       )
                     })()}
 
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 pt-1">Added Holder Plans ({record.holderGroups.length})</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 pt-1">Added Holder Plans ({record.holderGroups.length})</p>
                     {record.holderGroups.map((g, gi) => {
                       const filled = (record.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
                       const pending = g.paymentStatus === 'pending'
+                      const gExpiry = getExpiryStatus(g.expirationDate, { unlimited: g.plan === 'Unlimited Plan' })
                       return (
                         <div
                           key={String(g._id || gi)}
@@ -1926,8 +2196,9 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                         >
                           <div>
                             <p className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                              {planShort(g.plan, g.multiYearCount)} <span className="text-slate-400 font-semibold">upgrade</span>
+                              {planShort(g.plan, g.multiYearCount)} <span className="text-slate-500 font-semibold">upgrade</span>
                               <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${pending ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>{pending ? 'Pending' : 'Paid'}</span>
+                              {!g.nextRenewal?.paidAt && gExpiry && <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${gExpiry.cls}`}>{gExpiry.label}</span>}
                             </p>
                             <p className="text-[10px] text-slate-500 mt-0.5">${g.pricePerCert}/cert · ${Number(g.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} · {g.plan === 'Unlimited Plan' ? 'No expiry' : (g.expirationDate ? `expires ${fmtDate(g.expirationDate)}` : '—')}{g.invoiceNumber ? ` · ${g.invoiceNumber}` : ''}</p>
                             {g.nextRenewal?.paidAt && (
@@ -1967,7 +2238,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 {record.subscriptionPlan !== 'Unlimited Plan' && (
                   <button onClick={() => setRenewTarget({ group: null })} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 transition">Renew Subscription</button>
                 )}
-                <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-50 transition">Manage Holder Count</button>
+                <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Holder Count</button>
               </div>
             )}
             {record.certificateHolders?.length > 0 && (() => {
@@ -1979,9 +2250,9 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
               const holderPlan = (h) => {
                 if (h.holderGroupId) {
                   const g = groups.find(grp => String(grp._id) === String(h.holderGroupId))
-                  if (g) return { label: planShort(g.plan, g.multiYearCount), isGroup: true }
+                  if (g) return { label: planShort(g.plan, g.multiYearCount), isGroup: true, expiry: g.expirationDate, unlimited: g.plan === 'Unlimited Plan' }
                 }
-                return { label: planShort(record.subscriptionPlan, record.multiYearCount), isGroup: false }
+                return { label: planShort(record.subscriptionPlan, record.multiYearCount), isGroup: false, expiry: record.expirationDate, unlimited: record.subscriptionPlan === 'Unlimited Plan' }
               }
               return (
                 <div className="border-t border-slate-100 pt-5">
@@ -1992,9 +2263,14 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                         <div className="flex items-center justify-between gap-2 mb-3">
                           <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder #{i + 1}</p>
                           {(() => {
-                            const p = holderPlan(h); return (
-                              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${p.isGroup ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
-                                {p.label}{p.isGroup ? ' · upgrade' : ''}
+                            const p = holderPlan(h)
+                            const exp = getExpiryStatus(p.expiry, { unlimited: p.unlimited })
+                            return (
+                              <span className="flex flex-wrap items-center gap-1 justify-end">
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${p.isGroup ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                                  {p.label}{p.isGroup ? ' · upgrade' : ''}
+                                </span>
+                                {exp && <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${exp.cls}`}>{exp.label}</span>}
                               </span>
                             )
                           })()}
@@ -2028,7 +2304,6 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
             </div>
-            <NextRenewalSection record={record} registrationModel="Airlines" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
         <AnimatePresence>
@@ -2044,10 +2319,10 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
             >
               <div className="sticky top-0 z-10 bg-slate-900 px-4 py-4 flex items-center justify-between">
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Invoice History</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-300 mb-0.5">Invoice History</p>
                   <p className="text-sm font-bold text-white truncate max-w-[180px]">{record.airlineName || 'Airline'}</p>
                 </div>
-                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition">✕</button>
+                <button onClick={() => setShowInvoices(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition">✕</button>
               </div>
               <AdminInvoicesPanel registrationId={record._id} registrationModel="Airlines" record={record} drawerMode={true} onGenerateInvoice={onGenerateInvoice} />
             </motion.div>
@@ -2101,7 +2376,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
   const isBase = !group || group.__base
   const gid = isBase ? '' : String(group._id || '')
   const allHolders = record.certificateHolders || []
-  const totalGroupSlots = (record.holderGroups || []).reduce((a, g) => a + Number(g.count || 0), 0)
+  const totalGroupSlots = allGroupSlots(record.holderGroups)
   const capacity = isBase
     ? Math.max(0, Number(record.committedCount || record.holderCountValue || 0) - totalGroupSlots)
     : Number(group.count || 0)
@@ -2138,6 +2413,68 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
   const [rows, setRows] = useState(() => allHolders.filter(h => isBase ? !h.holderGroupId : String(h.holderGroupId || '') === gid).map(toRow))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+
+  // ── Queued renewal (nextRenewal) — editable so admin changes sync to client ──
+  const queuedRenewal = isBase
+    ? (record.nextRenewal?.paidAt ? record.nextRenewal : null)
+    : (group?.nextRenewal?.paidAt ? group.nextRenewal : null)
+  const fmtDInput = (v) => (v ? String(v).slice(0, 10) : '')
+  const [showRenewalEdit, setShowRenewalEdit] = useState(false)
+  const [rnForm, setRnForm] = useState(() => ({
+    plan: queuedRenewal?.plan || '',
+    multiYearCount: queuedRenewal?.multiYearCount || '',
+    count: queuedRenewal?.count ?? queuedRenewal?.committedCount ?? '',
+    price: queuedRenewal?.price ?? '',
+    pricePerCert: queuedRenewal?.pricePerCert ?? '',
+    activationDate: fmtDInput(queuedRenewal?.activationDate),
+    expiresAt: fmtDInput(queuedRenewal?.expiresAt),
+    invoiceNumber: queuedRenewal?.invoiceNumber || '',
+  }))
+  const [savingRn, setSavingRn] = useState(false)
+  const [rnErr, setRnErr] = useState('')
+  const setRn = (f, v) => setRnForm(p => ({ ...p, [f]: v }))
+
+  const saveRenewal = async () => {
+    setSavingRn(true); setRnErr('')
+    try {
+      const isUnlimited = rnForm.plan === 'Unlimited Plan'
+      if (isBase) {
+        const payload = {
+          plan: rnForm.plan,
+          activationDate: rnForm.activationDate || null,
+          expiresAt: isUnlimited ? null : (rnForm.expiresAt || null),
+          price: Number(rnForm.price) || 0,
+          invoiceNumber: rnForm.invoiceNumber,
+        }
+        if (rnForm.count !== '') payload.committedCount = Number(rnForm.count)
+        if (rnForm.plan === 'Multiple Years Subscription Plan') payload.multiYearCount = Number(rnForm.multiYearCount) || undefined
+        const res = await updateAirlinesRenewalDetails(record._id, payload)
+        onSaved(res.data?.data)
+      } else {
+        const updatedGroups = (record.holderGroups || []).map(g => {
+          if (String(g._id) !== gid) return g
+          return {
+            ...g,
+            nextRenewal: {
+              ...(g.nextRenewal || {}),
+              plan: rnForm.plan,
+              multiYearCount: rnForm.plan === 'Multiple Years Subscription Plan' ? (Number(rnForm.multiYearCount) || null) : null,
+              count: rnForm.count !== '' ? Number(rnForm.count) : (g.nextRenewal?.count ?? null),
+              pricePerCert: rnForm.pricePerCert !== '' ? Number(rnForm.pricePerCert) : (g.nextRenewal?.pricePerCert ?? null),
+              price: Number(rnForm.price) || 0,
+              activationDate: rnForm.activationDate || null,
+              expiresAt: isUnlimited ? null : (rnForm.expiresAt || null),
+              invoiceNumber: rnForm.invoiceNumber || null,
+            },
+          }
+        })
+        const res = await updateAirlinesSubscription(record._id, { holderGroups: updatedGroups })
+        onSaved(res.data?.data)
+      }
+    } catch (e) {
+      setRnErr(e?.response?.data?.message || 'Failed to update queued renewal.')
+    } finally { setSavingRn(false) }
+  }
 
   const canAdd = rows.length < capacity
   const addRow = () => { if (canAdd) setRows(r => [...r, emptyRow()]) }
@@ -2181,7 +2518,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
   const filled = rows.length
   const stat = (label, value) => (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="text-sm font-bold text-slate-800 truncate">{value}</p>
     </div>
   )
@@ -2190,7 +2527,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[61] flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
           className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
 
@@ -2200,7 +2537,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">{isBase ? 'Base Plan' : 'Holder Upgrade Plan'}</p>
               <h3 className="text-lg font-extrabold text-slate-900 mt-0.5">{planShort(planVal, multiVal)}{isBase ? '' : ' upgrade'}</h3>
             </div>
-            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition">✕</button>
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-600 transition">✕</button>
           </div>
 
           {/* Plan summary */}
@@ -2209,7 +2546,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
             {stat('Amount', `$${Number(amountVal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`)}
             {stat('Slots', `${filled} / ${capacity}`)}
             {stat('Expiry', planVal === 'Unlimited Plan' ? 'Never' : (expiryVal ? fmtDate(expiryVal) : '—'))}
-            {invVal && <div className="col-span-2 sm:col-span-4 text-[11px] font-mono text-slate-400">{invVal}</div>}
+            {invVal && <div className="col-span-2 sm:col-span-4 text-[11px] font-mono text-slate-500">{invVal}</div>}
           </div>
 
           {/* Holders */}
@@ -2218,11 +2555,11 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
 
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-slate-700">Certificate Holders</p>
-              <span className="text-[11px] text-slate-400">{filled} of {capacity} slots used</span>
+              <span className="text-[11px] text-slate-500">{filled} of {capacity} slots used</span>
             </div>
 
             {rows.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+              <p className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
                 No holders in this plan yet. Add one below.
               </p>
             )}
@@ -2231,7 +2568,7 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
               <div key={h._id || `new-${i}`} className="rounded-xl border border-slate-200 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-600">Holder {i + 1}{!h._id && <span className="ml-1.5 text-[9px] font-black uppercase tracking-wide text-blue-600 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">New</span>}</span>
-                  <button onClick={() => removeRow(i)} className="text-[11px] font-semibold text-slate-400 hover:text-red-600 transition">Remove</button>
+                  <button onClick={() => removeRow(i)} className="text-[11px] font-semibold text-slate-500 hover:text-red-600 transition">Remove</button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2303,6 +2640,74 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
               className={`w-full rounded-xl border-2 border-dashed py-2.5 text-sm font-bold transition ${canAdd ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-slate-200 text-slate-300 cursor-not-allowed'}`}>
               {canAdd ? `+ Add holder (${capacity - filled} slot${capacity - filled !== 1 ? 's' : ''} left)` : 'All slots filled'}
             </button>
+
+            {/* ── Edit queued renewal plan — syncs to client side ── */}
+            {queuedRenewal && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 overflow-hidden">
+                <button onClick={() => setShowRenewalEdit(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-emerald-50 transition">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Queued Renewal Plan</p>
+                    <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                      {planShort(queuedRenewal.plan, queuedRenewal.multiYearCount)} · activates {queuedRenewal.activationDate ? fmtDate(queuedRenewal.activationDate) : 'at expiry'}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-700">{showRenewalEdit ? 'Hide' : 'Edit'}</span>
+                </button>
+
+                {showRenewalEdit && (
+                  <div className="px-4 pb-4 pt-1 space-y-3 border-t border-emerald-100">
+                    {rnErr && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{rnErr}</div>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className={lbl}>Plan</label>
+                        <select className={inp} value={rnForm.plan} onChange={e => setRn('plan', e.target.value)}>
+                          <option value="1 Year Subscription Plan">1 Year</option>
+                          <option value="Multiple Years Subscription Plan">Multiple Years</option>
+                          <option value="Unlimited Plan">Unlimited</option>
+                        </select>
+                      </div>
+                      {rnForm.plan === 'Multiple Years Subscription Plan' && (
+                        <div>
+                          <label className={lbl}>Years</label>
+                          <input className={inp} type="number" min="2" value={rnForm.multiYearCount} onChange={e => setRn('multiYearCount', e.target.value)} />
+                        </div>
+                      )}
+                      <div>
+                        <label className={lbl}>{isBase ? 'Holder count' : 'Holders'}</label>
+                        <input className={inp} type="number" min="1" value={rnForm.count} onChange={e => setRn('count', e.target.value)} />
+                      </div>
+                      {!isBase && (
+                        <div>
+                          <label className={lbl}>Price / cert (USD)</label>
+                          <input className={inp} type="number" step="0.01" min="0" value={rnForm.pricePerCert} onChange={e => setRn('pricePerCert', e.target.value)} />
+                        </div>
+                      )}
+                      <div>
+                        <label className={lbl}>Total price (USD)</label>
+                        <input className={inp} type="number" step="0.01" min="0" value={rnForm.price} onChange={e => setRn('price', e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={lbl}>Activates on</label>
+                        <input className={inp} type="date" value={rnForm.activationDate} onChange={e => setRn('activationDate', e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={lbl}>Queued expiry</label>
+                        <input className={inp} type="date" value={rnForm.expiresAt} onChange={e => setRn('expiresAt', e.target.value)} disabled={rnForm.plan === 'Unlimited Plan'} />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className={lbl}>Queued invoice #</label>
+                        <input className={inp} value={rnForm.invoiceNumber} onChange={e => setRn('invoiceNumber', e.target.value)} />
+                      </div>
+                    </div>
+                    <button onClick={saveRenewal} disabled={savingRn}
+                      className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 px-4 py-2 text-sm font-bold text-white transition">
+                      {savingRn ? 'Saving…' : 'Save queued renewal'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -2345,6 +2750,11 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
 
   const groupHolders = isGroup
     ? (record.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(group._id))
+    : []
+  // Holders attached to the unit being renewed (group's holders, or base-plan
+  // holders) — these are the participants carried into the renewed term.
+  const unitHolders = isAirline
+    ? (isGroup ? groupHolders : (record.certificateHolders || []).filter(h => !h.holderGroupId))
     : []
 
   const [plan, setPlan] = useState(() => {
@@ -2407,7 +2817,7 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[71] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[71] flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
           className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
           {/* Header */}
@@ -2416,7 +2826,7 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Admin Renewal · No payment</p>
               <h3 className="text-lg font-extrabold text-slate-900 mt-0.5">{isGroup ? `Renew ${planShort(group.plan)} upgrade` : 'Renew Subscription'}</h3>
             </div>
-            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition">✕</button>
+            <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-600 transition">✕</button>
           </div>
 
           <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
@@ -2435,6 +2845,36 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
               </select>
             </div>
 
+            {/* Participants carried into the renewed term */}
+            {isAirline && unitHolders.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Participants renewed with this plan</p>
+                  <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-full px-2 py-0.5">{unitHolders.length}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mb-2">
+                  {isGroup ? `${planShort(group.plan)} upgrade` : 'Base plan'} — these holders carry into the renewed term{count < unitHolders.length ? `. Lowering the count to ${count} drops the struck-through holders.` : '.'}
+                </p>
+                <div className="space-y-1 max-h-44 overflow-y-auto">
+                  {unitHolders.map((h, i) => {
+                    const willRemove = i >= count
+                    return (
+                      <div key={String(h._id || i)} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${willRemove ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'}`}>
+                        <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-black text-slate-500 flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs font-semibold truncate ${willRemove ? 'text-red-600 line-through' : 'text-slate-800'}`}>{h.fullName || '(unnamed)'}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{h.certificateType || '—'} · FTN {h.iacraFtnNumber || '—'}</p>
+                        </div>
+                        {willRemove
+                          ? <span className="text-[9px] font-bold uppercase tracking-wide text-red-600 flex-shrink-0">Dropped</span>
+                          : <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {isMulti && (
               <div>
                 <label className={lbl}>Number of years</label>
@@ -2446,12 +2886,12 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
               <div>
                 <label className={lbl}>Certificate holders (count)</label>
                 <input className={inp} type="number" min={1} value={count} onChange={e => setCount(Math.max(1, Number(e.target.value) || 1))} />
-                <p className="text-[10px] text-slate-400 mt-1">Tier rate: ${ppc}/cert</p>
+                <p className="text-[10px] text-slate-500 mt-1">Tier rate: ${ppc}/cert</p>
               </div>
             )}
 
             <div>
-              <label className={lbl}>Invoice number <span className="font-normal text-slate-400">(optional — auto if blank)</span></label>
+              <label className={lbl}>Invoice number <span className="font-normal text-slate-500">(optional — auto if blank)</span></label>
               <div className="flex gap-2">
                 <input className={inp} value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} placeholder="Invoice US-…" />
                 <button onClick={genInvoice} disabled={genBusy} className="flex-shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
@@ -2463,10 +2903,10 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
             <div>
               <label className={lbl}>Amount</label>
               <div className="flex items-center gap-2">
-                <span className="text-slate-400 text-sm">$</span>
+                <span className="text-slate-500 text-sm">$</span>
                 <input className={inp} type="number" min={0} step="0.01" value={priceOverride} onChange={e => setPriceOverride(e.target.value)} placeholder={computed.toFixed(2)} />
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">
+              <p className="text-[10px] text-slate-500 mt-1">
                 Auto: ${computed.toFixed(2)}{isAirline ? ` (${ppc} × ${count}${isMulti ? ` × ${Math.max(2, years)}y` : ''})` : ''}. Leave blank to use this, or override.
               </p>
             </div>
@@ -2511,7 +2951,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -2521,7 +2961,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Individual</p>
               <h2 className="text-lg font-extrabold text-slate-900">{fullName}</h2>
             </div>
-            <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+            <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
           </div>
           <div className="px-6 py-5 space-y-6 max-h-[68vh] overflow-y-auto overflow-x-clip">
             {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
@@ -2742,7 +3182,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -2752,7 +3192,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Airline</p>
               <h2 className="text-lg font-extrabold text-slate-900">{record.airlineName || 'Airline'}</h2>
             </div>
-            <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+            <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
           </div>
           <div className="px-6 py-5 space-y-6 max-h-[68vh] overflow-y-auto overflow-x-clip">
             {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
@@ -2767,43 +3207,84 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 </div>
               </div>
             )}
-            <div><SectionHead label="Status & Subscription" />
+            <div><SectionHead label="Account Status" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Status"><select className={selectCls} value={form.status || 'Pending'} onChange={e => set('status', e.target.value)}><option>Pending</option><option>Active</option><option>Inactive</option></select></Field>
-                <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
-                <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0, 10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
-                <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0, 10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
-                <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
-                <Field label="Exact Holder Count">
-                  <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
-                    <button type="button"
-                      onClick={() => setForm(p => { const c = Math.max(1, Number(p.holderCountValue || 1) - 1); return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
-                      className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200">−</button>
-                    <input className="flex-1 min-w-0 text-xs text-center py-1.5 bg-transparent focus:outline-none" type="number" min="1"
-                      value={form.holderCountValue || ''}
-                      onChange={e => setForm(p => { const c = parseFloat(e.target.value) || 0; return { ...p, holderCountValue: e.target.value, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })} />
-                    <button type="button"
-                      onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
-                      className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
+              </div>
+            </div>
+
+            {/* ── BASE PLAN — subscription + payment + invoice grouped together ── */}
+            <div><SectionHead label="Base Plan" />
+              <div className="rounded-xl border-2 border-blue-200 bg-blue-50/40 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 rounded-full px-2 py-0.5">Base Plan</span>
+                    <span className="text-xs font-black text-slate-700">Main Subscription</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Holder Count</span> in the view screen.</p>
-                </Field>
-                <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
-                  value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
-                  onChange={e => setForm(p => { const price = parseFloat(e.target.value) || 0; const count = Number(p.committedCount ?? p.holderCountValue) || 0; return { ...p, pricePerCertificate: price, pricePerCert: price, totalServiceFees: count * price } })} /></Field>
-                <Field label="Total Amount (USD)">
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
-                    <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0"
-                      value={form.totalServiceFees ?? form.totalAmount ?? ''}
-                      onChange={e => set('totalServiceFees', parseFloat(e.target.value))} />
+                  <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${form.isPaid ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>{form.isPaid ? 'Paid' : 'Unpaid'}</span>
+                </div>
+
+                {/* Subscription details */}
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2.5">Subscription</p>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                    <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
+                    <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0, 10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
+                    <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0, 10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
+                    <Field label="Exact Holder Count">
+                      <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+                        <button type="button"
+                          onClick={() => setForm(p => { const c = Math.max(1, Number(p.holderCountValue || 1) - 1); return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                          className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200">−</button>
+                        <input className="flex-1 min-w-0 text-xs text-center py-1.5 bg-transparent focus:outline-none" type="number" min="1"
+                          value={form.holderCountValue || ''}
+                          onChange={e => setForm(p => { const c = parseFloat(e.target.value) || 0; return { ...p, holderCountValue: e.target.value, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })} />
+                        <button type="button"
+                          onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                          className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Holder Count</span> in the view screen.</p>
+                    </Field>
+                    <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
+                      value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
+                      onChange={e => setForm(p => { const price = parseFloat(e.target.value) || 0; const count = Number(p.committedCount ?? p.holderCountValue) || 0; return { ...p, pricePerCertificate: price, pricePerCert: price, totalServiceFees: count * price } })} /></Field>
+                    <div className="sm:col-span-2"><Field label="Total Amount (USD)">
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
+                        <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0"
+                          value={form.totalServiceFees ?? form.totalAmount ?? ''}
+                          onChange={e => set('totalServiceFees', parseFloat(e.target.value))} />
+                      </div>
+                    </Field></div>
                   </div>
-                </Field>
+                </div>
+
+                {/* Payment & invoice for the base plan */}
+                <div className="border-t border-blue-100 pt-3.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2.5">Payment & Invoice</p>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="Payment Confirmed (isPaid)">
+                      <select className={selectCls} value={String(form.isPaid === true)} onChange={e => {
+                        const paid = e.target.value === 'true'
+                        set('isPaid', paid)
+                        if (paid) { set('paymentStatus', 'paid'); set('status', 'Active') }
+                        else { set('paymentStatus', 'pending'); set('status', 'Pending') }
+                      }}>
+                        <option value="false">Not Confirmed (Unpaid)</option>
+                        <option value="true">Confirmed (Paid)</option>
+                      </select>
+                    </Field>
+                    <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
+                    <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
+                    <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
+                  </div>
+                </div>
               </div>
             </div>
             {groupOpts.length > 0 && (
               <div><SectionHead label={`Holder Upgrade Plans (${groupOpts.length})`} />
-                <p className="text-[10px] text-slate-400 mb-3 -mt-1">Each upgrade batch is its own plan. Edits here are raw corrections — they do not generate invoices.</p>
+                <p className="text-[10px] text-slate-500 mb-3 -mt-1">Each upgrade batch is its own plan. Edits here are raw corrections — they do not generate invoices.</p>
                 <div className="space-y-4">
                   {groupOpts.map((g, gi) => (
                     <div key={String(g._id || gi)} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -2843,7 +3324,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                             <Field label="Queued Expiry"><input className={inputCls} type="date" value={g.nextRenewal.expiresAt ? String(g.nextRenewal.expiresAt).slice(0, 10) : ''} onChange={e => setGroupRenewal(gi, 'expiresAt', e.target.value)} disabled={g.nextRenewal.plan === 'Unlimited Plan'} /></Field>
                             <div className="sm:col-span-2"><Field label="Queued Invoice #"><input className={inputCls} value={g.nextRenewal.invoiceNumber || ''} onChange={e => setGroupRenewal(gi, 'invoiceNumber', e.target.value)} /></Field></div>
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-2">To start this plan immediately, use <span className="font-bold">Activate Now</span> in the view screen.</p>
+                          <p className="text-[10px] text-slate-500 mt-2">To start this plan immediately, use <span className="font-bold">Activate Now</span> in the view screen.</p>
                         </div>
                       )}
                     </div>
@@ -2952,24 +3433,6 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                 </button>
               </div>
             )}
-            <div><SectionHead label="Payment & Invoice" />
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Payment Confirmed (isPaid)">
-                  <select className={selectCls} value={String(form.isPaid === true)} onChange={e => {
-                    const paid = e.target.value === 'true'
-                    set('isPaid', paid)
-                    if (paid) { set('paymentStatus', 'paid'); set('status', 'Active') }
-                    else { set('paymentStatus', 'pending'); set('status', 'Pending') }
-                  }}>
-                    <option value="false">Not Confirmed (Unpaid)</option>
-                    <option value="true">Confirmed (Paid)</option>
-                  </select>
-                </Field>
-                <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
-                <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
-                <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
-              </div>
-            </div>
           </div>
           <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={() => onClose()} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
@@ -3429,7 +3892,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
               className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -3444,7 +3907,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">
                       {hasInvoice ? 'Edit Invoice' : 'Invoice Generator'} · Admin
                     </p>
                     <h2 className="text-base font-extrabold text-slate-900 leading-tight">
@@ -3466,7 +3929,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                     </button>
                   )}
                   <button onClick={onClose}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
                 </div>
               </div>
 
@@ -3487,13 +3950,13 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${paymentMethodSel === opt.val ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'
                           }`}>{opt.icon}</div>
                         <p className={`font-black text-sm mb-0.5 ${paymentMethodSel === opt.val ? 'text-white' : 'text-slate-900'}`}>{opt.label}</p>
-                        <p className={`text-xs ${paymentMethodSel === opt.val ? 'text-slate-300' : 'text-slate-400'}`}>{opt.sub}</p>
+                        <p className={`text-xs ${paymentMethodSel === opt.val ? 'text-slate-300' : 'text-slate-500'}`}>{opt.sub}</p>
                       </button>
                     ))}
                   </div>
                   {isAirline && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 mb-6 flex items-start gap-2">
-                      <svg className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <svg className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       <span><span className="font-bold text-slate-700">Wire Transfer recommended</span> — wire details appear in the invoice footer automatically.</span>
                     </div>
                   )}
@@ -3543,10 +4006,10 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   </div>
 
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Invoice Details</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Invoice Details</p>
                     <div className="grid sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Invoice Number</label>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Invoice Number</label>
                         <div className="relative">
                           <input
                             className={`${iCls} pr-10`}
@@ -3577,30 +4040,30 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                           </div>
                         </div>
                       </div>
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Issue Date</label><input className={iCls} type="date" value={inv.issueDate} onChange={e => set('issueDate', e.target.value)} /></div>
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Payable By</label><input className={iCls} type="date" value={inv.payableBy} onChange={e => set('payableBy', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Issue Date</label><input className={iCls} type="date" value={inv.issueDate} onChange={e => set('issueDate', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Payable By</label><input className={iCls} type="date" value={inv.payableBy} onChange={e => set('payableBy', e.target.value)} /></div>
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Recipient</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Recipient</p>
                     <div className="grid sm:grid-cols-2 gap-3">
-                      {isAirline && <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Company Name</label><input className={iCls} value={inv.recipientCompany} onChange={e => set('recipientCompany', e.target.value)} /></div>}
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Contact Name</label><input className={iCls} value={inv.recipientContact} onChange={e => set('recipientContact', e.target.value)} /></div>
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Address Line 1</label><input className={iCls} value={inv.recipientAddress1} onChange={e => set('recipientAddress1', e.target.value)} /></div>
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Address Line 2 (City/State/Zip)</label><input className={iCls} value={inv.recipientAddress2} onChange={e => set('recipientAddress2', e.target.value)} /></div>
-                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Country</label><input className={iCls} value={inv.recipientCountry} onChange={e => set('recipientCountry', e.target.value)} /></div>
+                      {isAirline && <div className="sm:col-span-2"><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Company Name</label><input className={iCls} value={inv.recipientCompany} onChange={e => set('recipientCompany', e.target.value)} /></div>}
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Contact Name</label><input className={iCls} value={inv.recipientContact} onChange={e => set('recipientContact', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Address Line 1</label><input className={iCls} value={inv.recipientAddress1} onChange={e => set('recipientAddress1', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Address Line 2 (City/State/Zip)</label><input className={iCls} value={inv.recipientAddress2} onChange={e => set('recipientAddress2', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1">Country</label><input className={iCls} value={inv.recipientCountry} onChange={e => set('recipientCountry', e.target.value)} /></div>
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Line Items</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Line Items</p>
                     <div className="rounded-xl border border-slate-200 overflow-hidden">
                       <div className="grid grid-cols-12 gap-0 bg-slate-50 border-b border-slate-200 px-3 py-2">
-                        <span className="col-span-5 text-[9px] font-black uppercase tracking-widest text-slate-400">Description</span>
-                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center">Qty</span>
-                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Unit Price</span>
-                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Total</span>
+                        <span className="col-span-5 text-[9px] font-black uppercase tracking-widest text-slate-500">Description</span>
+                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Qty</span>
+                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Unit Price</span>
+                        <span className="col-span-2 text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Total</span>
                         <span className="col-span-1" />
                       </div>
                       <div className="divide-y divide-slate-100">
@@ -3611,7 +4074,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                             <input className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-blue-500 text-right" type="number" step="0.01" min="0" value={item.unitPrice} onChange={e => setItem(i, 'unitPrice', e.target.value)} />
                             <div className="col-span-2 text-xs font-bold text-slate-900 text-right">${Number(item.totalPrice).toFixed(2)}</div>
                             <button onClick={() => removeItem(i)} disabled={inv.lineItems.length <= 1}
-                              className="col-span-1 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20 mx-auto">
+                              className="col-span-1 w-6 h-6 flex items-center justify-center rounded-full text-slate-500 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20 mx-auto">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                           </div>
@@ -3625,14 +4088,14 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   </div>
 
                   <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-5 py-4 text-xs text-slate-500 space-y-1">
-                    <p className="font-black text-[9px] uppercase tracking-widest text-slate-400 mb-2">Invoice Summary</p>
+                    <p className="font-black text-[9px] uppercase tracking-widest text-slate-500 mb-2">Invoice Summary</p>
                     <div className="flex justify-between"><span>Invoice #</span><span className="font-bold text-slate-800">{inv.invoiceNumber}</span></div>
                     <div className="flex justify-between"><span>Date</span><span className="font-bold text-slate-800">{inv.issueDate}</span></div>
                     <div className="flex justify-between"><span>Payable By</span><span className="font-bold text-slate-800">{inv.payableBy}</span></div>
                     <div className="flex justify-between"><span>Recipient</span><span className="font-bold text-slate-800 text-right max-w-[55%]">{inv.recipientCompany || inv.recipientName}</span></div>
                     <div className="flex justify-between border-t border-slate-200 pt-2 mt-2"><span className="font-bold">Invoice Sum Tax-Exempt</span><span className="font-black text-red-600">${totalSum.toFixed(2)}</span></div>
                     {inv.paymentMethod === 'wire' && (
-                      <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] text-slate-400">
+                      <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] text-slate-500">
                         Footer will include: <span className="font-semibold text-slate-600">Bank of America · IFOA USA Corp · SWIFT: BOFAUS3N · Account: 8981 5632 1560</span>
                       </div>
                     )}
@@ -3691,7 +4154,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
         <AnimatePresence>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm" onClick={closePreviewModal} />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }} transition={{ duration: 0.2 }}
               className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -3702,7 +4165,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   <h2 className="text-lg font-extrabold text-slate-900">Preview — {previewData.filename}</h2>
                 </div>
                 <button onClick={closePreviewModal}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition">✕</button>
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
               </div>
               <div className="bg-slate-100 p-4 h-[72vh] max-h-[820px] min-h-[520px] overflow-hidden">
                 {previewLoading ? (
@@ -3757,9 +4220,9 @@ function StatCard({ label, value, sub, icon, accent = 'default' }) {
   return (
     <div className={`rounded-2xl border p-5 ${accents[accent]}`}>
       {icon && <div className={`mb-3 ${iconColors[accent]}`}>{icon}</div>}
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">{label}</p>
       <p className="text-2xl font-black text-slate-900">{value}</p>
-      {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
     </div>
   )
 }
@@ -3768,10 +4231,10 @@ function EmptyState({ message = 'No records found' }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-20 text-center">
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-        <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
+        <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
       </div>
       <p className="text-base font-bold text-slate-900">{message}</p>
-      <p className="text-sm text-slate-400 mt-1">Try adjusting your filters or refresh.</p>
+      <p className="text-sm text-slate-500 mt-1">Try adjusting your filters or refresh.</p>
     </div>
   )
 }
@@ -3880,17 +4343,17 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                 <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(allIds)}
                   className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
               </th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Contact</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Email / Phone</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Country</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Price</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Sub Start</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Expiry</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Status</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Invoice Preview</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-36">Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-36">Email / Phone</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-24">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Price</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Sub Start</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Expiry</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Status</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Payment</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-36">Invoice Preview</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -3925,7 +4388,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                           <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">
                             {[primary.firstName, primary.lastName].filter(Boolean).join(' ') || '—'}
                           </p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{primary.primaryCertificate || 'No cert type'}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[130px]">{primary.primaryCertificate || 'No cert type'}</p>
                           {primary.convertedFromAirlineName && (
                             <span className="inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 truncate max-w-[130px]" title={`Converted from ${primary.convertedFromAirlineName}`}>
                               ↗ {primary.convertedFromAirlineName}
@@ -3947,7 +4410,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                     </td>
                     <td className="px-4 py-4">
                       <p className="text-slate-700 text-xs truncate max-w-[140px]">{primary.email || '—'}</p>
-                      <p className="text-slate-400 text-[11px] mt-0.5">{primary.phone || '—'}</p>
+                      <p className="text-slate-500 text-[11px] mt-0.5">{primary.phone || '—'}</p>
                     </td>
                     <td className="px-4 py-4"><p className="text-slate-600 text-xs truncate max-w-[80px]">{primary.country || '—'}</p></td>
                     <td className="px-4 py-4"><span className="text-xs text-slate-700 font-medium">{planLabel(primary.subscriptionPlan)}</span></td>
@@ -4009,11 +4472,11 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                           <div className="min-w-0">
                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Sub #{si + 1}</p>
                             <p className="text-xs font-semibold text-slate-700 truncate max-w-[110px]">{[sub.firstName, sub.lastName].filter(Boolean).join(' ') || '—'}</p>
-                            <p className="text-[10px] text-slate-400 truncate max-w-[110px]">{sub.primaryCertificate || '—'}</p>
+                            <p className="text-[10px] text-slate-500 truncate max-w-[110px]">{sub.primaryCertificate || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p><p className="text-slate-400 text-[11px] mt-0.5">{sub.phone || '—'}</p></td>
+                      <td className="px-4 py-3"><p className="text-slate-600 text-xs truncate max-w-[140px]">{sub.email || '—'}</p><p className="text-slate-500 text-[11px] mt-0.5">{sub.phone || '—'}</p></td>
                       <td className="px-4 py-3"><p className="text-slate-500 text-xs">{sub.country || '—'}</p></td>
                       <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{planLabel(sub.subscriptionPlan)}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{fmtMoney(sub.price)}</td>
@@ -4110,17 +4573,17 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                 <input type="checkbox" checked={allSelected} onChange={() => onToggleSelectAll(allIds)}
                   className="w-4 h-4 rounded border-slate-300 accent-blue-600 cursor-pointer" />
               </th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-40">Airline & Contact</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-32">Email</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-16">Country</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Plan</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Holders / Total</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Sub Start</th>
-              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Expiry</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-28">Status</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-20">Payment</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-36">Invoice Preview</th>
-              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 w-24">Actions</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-40">Airline & Contact</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-32">Email</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-16">Country</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Plan</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Holders / Total</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Sub Start</th>
+              <th className="px-4 py-3.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Expiry</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-28">Status</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-20">Payment</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-36">Invoice Preview</th>
+              <th className="px-4 py-3.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500 w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -4160,7 +4623,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                         )}
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900 text-sm leading-tight truncate max-w-[130px]">{primary.airlineName || '—'}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[130px]">{contactName || primary.city || primary.country || '—'}</p>
                           {hasMany && (
                             <button
                               onClick={e => { e.stopPropagation(); toggle(key) }}
@@ -4184,7 +4647,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-md bg-slate-900 text-white text-[11px] font-bold px-1.5">
                             {primary.holderCountValue || primary.certificateHolders?.length || 0}
                           </span>
-                          <span className="text-[10px] text-slate-400 font-medium">holders</span>
+                          <span className="text-[10px] text-slate-500 font-medium">holders</span>
                         </div>
                         <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{fmtAirlineTotal(primary)}</span>
                       </div>
@@ -4250,7 +4713,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1 items-center">
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">{sub.certificateHolders?.length || 0}</span>
-                          <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{fmtAirlineTotal(sub)}</span>
+                          <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">{fmtAirlineTotal(sub)}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{sub.subscriptionDate ? fmtDateMDY(sub.subscriptionDate) : <span className="text-slate-300">—</span>}</td>
@@ -4360,7 +4823,7 @@ function OverviewPanel({ individuals, airlines }) {
       </div>
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Plan Distribution</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-5">Plan Distribution</p>
           <div className="space-y-4">
             {Object.entries(planCounts).map(([plan, count]) => {
               const pct = allRegs.length ? Math.round((count / allRegs.length) * 100) : 0
@@ -4368,7 +4831,7 @@ function OverviewPanel({ individuals, airlines }) {
                 <div key={plan}>
                   <div className="flex justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700">{plan}</span>
-                    <span className="font-bold text-slate-900">{count} <span className="text-slate-400 font-normal">({pct}%)</span></span>
+                    <span className="font-bold text-slate-900">{count} <span className="text-slate-500 font-normal">({pct}%)</span></span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <motion.div className="h-full bg-slate-700 rounded-full" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
@@ -4379,9 +4842,9 @@ function OverviewPanel({ individuals, airlines }) {
           </div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-5">Top Countries — All Registrations</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-5">Top Countries — All Registrations</p>
           <div className="space-y-2">
-            {topCountries.length === 0 ? <p className="text-sm text-slate-400">No data yet.</p> : topCountries.map(([country, count]) => (
+            {topCountries.length === 0 ? <p className="text-sm text-slate-500">No data yet.</p> : topCountries.map(([country, count]) => (
               <div key={country} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
                 <span className="text-sm text-slate-700 font-medium">{country}</span>
                 <div className="flex items-center gap-2">
@@ -5001,7 +5464,7 @@ export default function AdminDashboard() {
           {tab !== 'overview' && (
             <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
               <div className="relative flex-grow sm:flex-grow-0">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
                 <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
                   className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-full sm:w-48 bg-white transition shadow-sm" />
               </div>
@@ -5061,7 +5524,7 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-3 mb-4 px-1">
           <p className="text-sm text-slate-500">
             Showing <span className="font-semibold text-slate-800">{uniqueAccountCount}</span> account{uniqueAccountCount !== 1 ? 's' : ''}{' '}
-            <span className="text-slate-400">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
+            <span className="text-slate-500">({filtered.length} total subscription{filtered.length !== 1 ? 's' : ''})</span>
           </p>
           {selectedIds.size > 0 && (
             <div className="ml-auto flex items-center gap-2">
