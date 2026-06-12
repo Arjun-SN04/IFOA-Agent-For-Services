@@ -285,11 +285,23 @@ function parseAirlineRecordsFromRows(rows) {
         secondaryIacraFtnNumber: '',
       }];
     }
-    if (!current.holderCountValue || current.holderCountValue === '0') {
-      current.holderCountValue = String(current.certificateHolders.length || 1);
-      current.committedCount = Number(current.holderCountValue);
-      current.holderCount = holderRangeFromCount(current.committedCount);
-    }
+    // In the multi-row export shape every holder is an explicit row, so the exact
+    // imported holder count is authoritative — not the plan-derived tier count.
+    // Use the larger of the declared count and the actual holders so the committed
+    // count never under-reports the people actually imported (fixes "6 / 5").
+    const actualHolders = current.certificateHolders.length || 1;
+    const declared = Number(current.holderCountValue) || 0;
+    const exactCount = Math.max(actualHolders, declared);
+    current.holderCountValue = String(exactCount);
+    current.committedCount = exactCount;
+    current.holderCount = holderRangeFromCount(exactCount);
+    // committedCount changed → recompute money so total/paid track the exact count.
+    // Total = price × count × years (canonical formula, see utils/airlineTotal.js).
+    const ppc = Number(current.pricePerCertificate) || 0;
+    const isMultiYear = String(current.subscriptionPlan || '').includes('Multiple Year') && Number(current.multiYearCount) > 1;
+    const years = isMultiYear ? Number(current.multiYearCount) : 1;
+    current.totalAmount = ppc * exactCount * years;
+    current.amountPaid = current.isPaid ? current.totalAmount : 0;
     parsed.push({ rowNumber: currentRowNumber || 2, payload: current });
   };
 

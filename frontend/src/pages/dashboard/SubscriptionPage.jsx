@@ -9,7 +9,7 @@ import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
-import { getAirlineTotal, isActiveHolderGroup, isCurrentBaseGroup, activeGroupSlots, allGroupSlots, currentBaseGroupSlots } from '../../utils/airlineTotal'
+import { getAirlineTotal, isActiveHolderGroup, isCurrentBaseGroup, activeGroupSlots, allGroupSlots, currentBaseGroupSlots, renewTierAnchor } from '../../utils/airlineTotal'
 import { getExpiryStatus } from '../../utils/expiryStatus'
 import { getInvoiceStatus } from '../../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
@@ -1294,7 +1294,7 @@ function PlanCard({
 }
 
 // One compact, nested row for a holder-upgrade plan attached to the base plan.
-function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup }) {
+function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight = false }) {
   const isUnlimited = g.plan === 'Unlimited Plan'
   const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
   const gDays = g.expirationDate ? Math.ceil((new Date(g.expirationDate) - new Date()) / 86400000) : null
@@ -1312,7 +1312,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup }) {
       onClick={onManageGroup ? () => onManageGroup(g) : undefined}
       onKeyDown={onManageGroup ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onManageGroup(g) } } : undefined}
       title={onManageGroup ? 'View holders & manage this plan' : undefined}
-      className={`rounded-xl border bg-white px-3.5 py-3 transition ${onManageGroup ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm' : ''} ${gExpired ? 'border-red-200' : 'border-slate-200'}`}
+      className={`rounded-xl border bg-white px-3.5 py-3 transition ${onManageGroup ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm' : ''} ${highlight && gCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : gExpired ? 'border-red-200' : 'border-slate-200'}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -1359,7 +1359,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup }) {
 
 // The base/main plan rendered as a uniform card — same visual language as
 // AttachedPlanRow so every plan in the expanded view reads consistently.
-function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew }) {
+function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highlight = false }) {
   const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
   const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
   const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
@@ -1370,7 +1370,7 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew }) {
   const baseExp = getExpiryStatus(s.expirationDate, { unlimited: baseUnlimited })
   const invNum = String(s.invoiceNumber || '').replace(/^invoice\s+/i, '')
   return (
-    <div className={`rounded-xl border bg-white px-3.5 py-3 ${baseExpired ? 'border-red-200' : 'border-slate-200'}`}>
+    <div className={`rounded-xl border bg-white px-3.5 py-3 transition ${highlight && baseCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : baseExpired ? 'border-red-200' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1426,6 +1426,7 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew }) {
 // as uniform detail cards.
 function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup }) {
   const [expanded, setExpanded] = useState(false)
+  const [highlightRenew, setHighlightRenew] = useState(false)
 
   const groups = s.holderGroups || []
   const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - allGroupSlots(groups))
@@ -1448,6 +1449,22 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
   const grandTotal = basePpc * baseCommitted + activeGroupsAmount
   const planCount = 1 + groups.length
 
+  // ── Any plan currently renewable? (expiring ≤60d or expired, not queued) ─────
+  // Drives the header Renew shortcut: clicking it expands the card and highlights
+  // the plan rows that need renewing (each row carries its own Renew action).
+  const baseCanRenew = active && !baseUnlimited && !baseQueued && baseDays !== null && baseDays <= 60
+  const anyGroupCanRenew = groups.some((g) => {
+    const isU = g.plan === 'Unlimited Plan'
+    const gDays = g.expirationDate ? Math.ceil((new Date(g.expirationDate) - new Date()) / 86400000) : null
+    const gQueued = !!g.nextRenewal?.paidAt
+    return active && !isU && !gQueued && gDays !== null && gDays <= 60
+  })
+  const hasRenewable = (baseCanRenew && !!onRenew) || (anyGroupCanRenew && !!onRenewGroup)
+  const triggerRenew = () => {
+    setExpanded(true)
+    setHighlightRenew(true)
+  }
+
   const headBadges = (
     <>
       {baseQueued && <span className="text-[9px] font-black uppercase tracking-wide text-white">Renewed</span>}
@@ -1462,8 +1479,8 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setExpanded(v => !v)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(v => !v) } }}
+        onClick={() => setExpanded(v => { if (v) setHighlightRenew(false); return !v })}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(v => { if (v) setHighlightRenew(false); return !v }) } }}
         className="group cursor-pointer"
       >
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 sm:px-5 py-3.5 flex items-start justify-between gap-3">
@@ -1479,7 +1496,16 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
               {planCount} plan{planCount !== 1 ? 's' : ''}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            {hasRenewable && (
+              <button
+                onClick={(e) => { e.stopPropagation(); triggerRenew() }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-inset ring-white/25 px-2.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Renewal Due
+              </button>
+            )}
             <motion.svg
               animate={{ rotate: expanded ? 180 : 0 }}
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
@@ -1544,9 +1570,9 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">All plans ({planCount})</span>
               </div>
               <div className="px-3 sm:px-4 pb-3.5 space-y-2">
-                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} />
+                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} highlight={highlightRenew} />
                 {groups.map((g, gi) => (
-                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} />
+                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} highlight={highlightRenew} />
                 ))}
               </div>
             </div>
@@ -1916,15 +1942,10 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   const [mergeMode, setMergeMode] = useState(false)
   const baseExpiryLabel = sub.expirationDate ? fmt(sub.expirationDate) : '—'
 
-  // Current base-period coverage = the base plan's OWN holder count PLUS every plan
-  // tied to this base period (perpetual Unlimited/Lifetime + upgrades created or renewed
-  // under the current base). Expired previous-period upgrades are excluded.
-  //   baseOwnCount        = committed grand total − ALL group slots
-  //   currentBaseGroupSlots = Lifetime + current-period upgrade slots
-  // This is shown only as a REFERENCE ceiling (how many the active base covers) — never
-  // the renewal default, so the user never pays for base slots this add-on doesn't have.
+  // The base plan's OWN holder count = committed grand total − ALL group slots.
+  // Shown as a REFERENCE (what the active base covers); the add-on renewal stacks
+  // on top of it (see renewTierAnchor) rather than defaulting to it.
   const baseOwnCount = Math.max(0, Number(sub.committedCount || sub.holderCountValue || 0) - allGroupSlots(sub.holderGroups))
-  const syncedBaseCount = baseOwnCount + currentBaseGroupSlots(sub.holderGroups, sub.subscriptionDate)
 
   // Airline: committed holder count — user can adjust at renewal time.
   // A group renewal starts from THIS plan's own holder count and grows dynamically as the
@@ -1971,8 +1992,15 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   // This mirrors the logic in AirlinesStep1PlanAndDetails.jsx exactly.
   // We never read the stored pricePerCertificate here because the count may
   // have changed, which means the tier (and therefore the rate) may change too.
-  const renewPpc = isAirline ? getRenewPpc(plan, exactCount) : 0
-  const renewRange = isAirline ? airlineRenewRange(Math.max(1, exactCount)) : null
+  //
+  // A group renewal stacks ON TOP of the active base, so its tier is read at the
+  // cumulative position (anchor + exactCount). Example: active base = 6, this
+  // expired add-on renews to 3 → holders sit at positions 7-9, tier read at 9
+  // ("5 to 10"), not 3. With no active base the anchor is 0 (tier from 1).
+  const tierAnchor = isGroup ? renewTierAnchor(sub, group) : 0
+  const tierCount = Math.max(1, tierAnchor + exactCount)
+  const renewPpc = isAirline ? getRenewPpc(plan, tierCount) : 0
+  const renewRange = isAirline ? airlineRenewRange(tierCount) : null
 
   // For airlines with multi-year plan, multiply by year count (mirrors backend logic)
   const airlineRenewYears = isAirline && plan === 'Multiple Years Subscription Plan'
@@ -2206,15 +2234,15 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                         <span className="text-blue-600"> → <strong>{exactCount}</strong></span>
                       )}
                       {isGroup && baseLiveNow && (
-                        <span className="text-slate-400"> · Base: <strong className="text-slate-600">{syncedBaseCount}</strong></span>
+                        <span className="text-slate-400"> · Base: <strong className="text-slate-600">{baseOwnCount}</strong></span>
                       )}
                     </span>
                     <span className="font-semibold text-blue-600">Tier {renewRange} · ${renewPpc}/cert</span>
                   </div>
                   {isGroup && (
                     <p className="text-[10px] text-slate-500 font-semibold">
-                      {baseLiveNow
-                        ? `Add-on plan — adjust from 1 up to your base coverage (${syncedBaseCount}).`
+                      {tierAnchor > 0
+                        ? `Add-on stacks on your active base (${tierAnchor}) — these are holders ${tierAnchor + 1}–${tierAnchor + exactCount} (total ${tierAnchor + exactCount}). Tier priced at ${tierCount}.`
                         : 'No active base plan — renews independently (min 3 holders).'}
                     </p>
                   )}

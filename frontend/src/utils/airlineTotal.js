@@ -141,6 +141,34 @@ export function currentBaseGroupSlots(groups, periodStart, asOf = new Date()) {
 }
 
 /**
+ * Stacked-position anchor for renewing ONE holder-upgrade group (mirror of the
+ * backend utils/holderGroups.js renewTierAnchor).
+ *
+ * An add-on group's holders sit ON TOP of the currently-active coverage, so its
+ * renewal tier is read at the CUMULATIVE position (active base own count + other
+ * active add-ons), not the group's standalone count. Example: active base = 6,
+ * this expired add-on renews to 3 → holders occupy positions 7-9, tier read at 9.
+ * With no active base/other plan the anchor is 0 (tier starts from the group's
+ * own count, i.e. from 1).
+ *
+ * @param {object} record  - airline subscription record
+ * @param {object} group   - the group being renewed (excluded from the anchor)
+ * @param {Date}   [asOf]
+ * @returns {number} holders stacked BELOW this group's renewal
+ */
+export function renewTierAnchor(record, group, asOf = new Date()) {
+  if (!record) return 0
+  const committed = Number(record.committedCount || record.holderCountValue || record.certificateHolders?.length || 0)
+  const baseOwn = Math.max(0, committed - allGroupSlots(record.holderGroups))
+  const baseLive = (record.status === 'Active' || record.isPaid) &&
+    (record.subscriptionPlan === 'Unlimited Plan' || !record.expirationDate || new Date(record.expirationDate) > asOf)
+  const otherActiveSlots = (record.holderGroups || [])
+    .filter(g => String(g._id) !== String(group?._id) && isActiveHolderGroup(g, asOf))
+    .reduce((sum, g) => sum + Number(g.count || 0), 0)
+  return (baseLive ? baseOwn : 0) + otherActiveSlots
+}
+
+/**
  * Returns a formatted USD string for the airline total.
  * @param {object} record
  * @returns {string}  e.g. "$795.00"

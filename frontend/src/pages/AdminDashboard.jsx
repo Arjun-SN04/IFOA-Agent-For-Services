@@ -6,7 +6,7 @@ import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import { Plane } from 'lucide-react'
-import { getAirlineTotal, fmtAirlineTotal, activeGroupSlots, allGroupSlots, currentBaseGroupSlots } from '../utils/airlineTotal'
+import { getAirlineTotal, fmtAirlineTotal, activeGroupSlots, allGroupSlots, currentBaseGroupSlots, renewTierAnchor } from '../utils/airlineTotal'
 import { getExpiryStatus } from '../utils/expiryStatus'
 import { getInvoiceStatus } from '../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
@@ -2774,7 +2774,12 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
 
   const isMulti = plan === 'Multiple Years Subscription Plan'
   const isUnlimited = plan === 'Unlimited Plan'
-  const ppc = isAirline ? adminTierPpc(plan, Math.max(3, count)) : 0
+
+  // A group add-on stacks on the active base — its tier is read at the cumulative
+  // position (anchor + count), matching the backend renewTierAnchor + applyGroupRenewal.
+  const tierAnchor = isGroup ? renewTierAnchor(record, group) : 0
+  const totalCount = tierAnchor + count
+  const ppc = isAirline ? adminTierPpc(plan, Math.max(3, isGroup ? totalCount : count)) : 0
   const computed = isAirline
     ? ppc * Math.max(1, count) * (isMulti ? Math.max(2, years) : 1)
     : (isUnlimited ? 299 : isMulti ? 55 * Math.max(2, years) : 69)
@@ -2782,6 +2787,19 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
 
   const curExpiry = isGroup ? group.expirationDate : record.expirationDate
   const willQueue = curExpiry && new Date(curExpiry) > new Date()
+
+  // ── Which holders to KEEP when lowering the count (admin picks, not auto-by-index) ──
+  const [selectedHolderIds, setSelectedHolderIds] = useState(() => new Set(unitHolders.map(h => String(h._id))))
+  useEffect(() => {
+    if (!isAirline) return
+    if (count >= unitHolders.length) setSelectedHolderIds(new Set(unitHolders.map(h => String(h._id))))
+    else setSelectedHolderIds(new Set(unitHolders.slice(0, count).map(h => String(h._id))))
+  }, [count, isAirline]) // eslint-disable-line react-hooks/exhaustive-deps
+  const isDecreasing = isAirline && count < unitHolders.length
+  const holdersToRemove = isDecreasing
+    ? unitHolders.filter(h => !selectedHolderIds.has(String(h._id))).map(h => String(h._id))
+    : undefined
+  const selectionValid = !isDecreasing || selectedHolderIds.size >= 1
 
   const genInvoice = async () => {
     setGenBusy(true)
@@ -2796,6 +2814,7 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
         plan,
         multiYearCount: isMulti ? Math.max(2, years) : undefined,
         exactCount: isAirline ? Math.max(1, count) : undefined,
+        holdersToRemove: holdersToRemove && holdersToRemove.length ? holdersToRemove : undefined,
         holderGroupId: isGroup ? group._id : undefined,
         price: priceOverride !== '' ? Number(priceOverride) : undefined,
         invoiceNumber: invoiceNumber.trim() || undefined,
@@ -2853,25 +2872,48 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
                   <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded-full px-2 py-0.5">{unitHolders.length}</span>
                 </div>
                 <p className="text-[10px] text-slate-500 mb-2">
-                  {isGroup ? `${planShort(group.plan)} upgrade` : 'Base plan'} — these holders carry into the renewed term{count < unitHolders.length ? `. Lowering the count to ${count} drops the struck-through holders.` : '.'}
+                  {isGroup ? `${planShort(group.plan)} upgrade` : 'Base plan'} — these holders carry into the renewed term.
+                  {isDecreasing && ` Count lowered to ${count} — tick the ${count} holder${count !== 1 ? 's' : ''} to KEEP; the rest are dropped.`}
                 </p>
                 <div className="space-y-1 max-h-44 overflow-y-auto">
                   {unitHolders.map((h, i) => {
-                    const willRemove = i >= count
+                    const id = String(h._id || i)
+                    const checked = isDecreasing ? selectedHolderIds.has(id) : true
+                    const disabled = isDecreasing && !checked && selectedHolderIds.size >= count
                     return (
-                      <div key={String(h._id || i)} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${willRemove ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'}`}>
-                        <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-black text-slate-500 flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                      <label key={id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 select-none ${!checked ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'} ${isDecreasing ? (disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer') : ''}`}>
+                        {isDecreasing ? (
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => setSelectedHolderIds(prev => {
+                              const next = new Set(prev)
+                              if (next.has(id)) next.delete(id)
+                              else if (next.size < count) next.add(id)
+                              return next
+                            })}
+                            className="w-4 h-4 rounded flex-shrink-0 accent-slate-800"
+                          />
+                        ) : (
+                          <span className="w-5 h-5 rounded-full bg-slate-100 text-[9px] font-black text-slate-500 flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                        )}
                         <div className="min-w-0 flex-1">
-                          <p className={`text-xs font-semibold truncate ${willRemove ? 'text-red-600 line-through' : 'text-slate-800'}`}>{h.fullName || '(unnamed)'}</p>
+                          <p className={`text-xs font-semibold truncate ${!checked ? 'text-red-600 line-through' : 'text-slate-800'}`}>{h.fullName || '(unnamed)'}</p>
                           <p className="text-[10px] text-slate-400 truncate">{h.certificateType || '—'} · FTN {h.iacraFtnNumber || '—'}</p>
                         </div>
-                        {willRemove
+                        {!checked
                           ? <span className="text-[9px] font-bold uppercase tracking-wide text-red-600 flex-shrink-0">Dropped</span>
                           : <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
-                      </div>
+                      </label>
                     )
                   })}
                 </div>
+                {isDecreasing && (
+                  <p className={`text-[10px] font-semibold mt-1.5 ${selectionValid ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {selectedHolderIds.size} of {count} kept{!selectionValid && ' — select at least 1'}
+                  </p>
+                )}
               </div>
             )}
 
@@ -2885,8 +2927,19 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
             {isAirline && (
               <div>
                 <label className={lbl}>Certificate holders (count)</label>
-                <input className={inp} type="number" min={1} value={count} onChange={e => setCount(Math.max(1, Number(e.target.value) || 1))} />
+                <div className="flex items-center gap-3">
+                  <input className={`${inp} flex-1`} type="number" min={1} value={count} onChange={e => setCount(Math.max(1, Number(e.target.value) || 1))} />
+                  <div className="flex flex-col items-center justify-center rounded-xl border-2 border-blue-100 bg-blue-50/60 px-4 py-1.5 min-w-[88px]">
+                    <span className="text-3xl font-black text-slate-900 tabular-nums leading-none">{isGroup ? totalCount : count}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-0.5">total</span>
+                  </div>
+                </div>
                 <p className="text-[10px] text-slate-500 mt-1">Tier rate: ${ppc}/cert</p>
+                {isGroup && tierAnchor > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-semibold">
+                    Add-on stacks on active base ({tierAnchor}) — holders {tierAnchor + 1}–{totalCount}. Tier priced at {totalCount}.
+                  </p>
+                )}
               </div>
             )}
 
@@ -2919,7 +2972,8 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
 
           <div className="border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-2">
             <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
-            <button onClick={submit} disabled={busy}
+            <button onClick={submit} disabled={busy || !selectionValid}
+              title={!selectionValid ? 'Select at least 1 holder to keep' : undefined}
               className="rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-5 py-2 text-sm font-bold text-white transition">
               {busy ? 'Renewing…' : (willQueue ? 'Queue renewal + invoice' : 'Renew now + invoice')}
             </button>

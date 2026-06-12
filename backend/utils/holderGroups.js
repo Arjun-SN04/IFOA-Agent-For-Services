@@ -79,6 +79,34 @@ function currentBaseSlots(doc, asOf = new Date()) {
   return base + currentBaseGroupSlots(doc.holderGroups, doc.subscriptionDate, asOf);
 }
 
+/**
+ * Stacked-position anchor for renewing ONE holder-upgrade group.
+ *
+ * An add-on group's holders sit ON TOP of the currently-active coverage, so the
+ * volume-pricing tier for its renewal is decided by the CUMULATIVE position
+ * (active base own count + other active add-ons), not the group's standalone
+ * count. Example: active base = 6 holders, this expired add-on renews to 3 →
+ * its holders occupy positions 7-9, so the tier is read at 9 ("5 to 10"), not 3.
+ *
+ * When no active base / other active plan exists the group stands alone and the
+ * anchor is 0, so the tier starts from the group's own count (from 1).
+ *
+ * @param {object} doc          - airline registration
+ * @param {object} group        - the group being renewed (excluded from the anchor)
+ * @param {Date}   [asOf]
+ * @returns {number} number of holders stacked BELOW this group's renewal
+ */
+function renewTierAnchor(doc, group, asOf = new Date()) {
+  const committed = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+  const baseOwn = Math.max(0, committed - allHolderGroupSlots(doc.holderGroups));
+  const baseLive = (doc.status === 'Active' || doc.isPaid) &&
+    (doc.subscriptionPlan === 'Unlimited Plan' || !doc.expirationDate || new Date(doc.expirationDate) > asOf);
+  const otherActiveSlots = (doc.holderGroups || [])
+    .filter(g => String(g._id) !== String(group?._id) && isActiveHolderGroup(g, asOf))
+    .reduce((sum, g) => sum + Number(g.count || 0), 0);
+  return (baseLive ? baseOwn : 0) + otherActiveSlots;
+}
+
 module.exports = {
   isActiveHolderGroup,
   activeHolderGroupSlots,
@@ -86,4 +114,5 @@ module.exports = {
   isCurrentBaseGroup,
   currentBaseGroupSlots,
   currentBaseSlots,
+  renewTierAnchor,
 };

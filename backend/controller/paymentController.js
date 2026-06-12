@@ -39,7 +39,7 @@ const {
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
-const { activeHolderGroupSlots, allHolderGroupSlots, currentBaseSlots } = require('../utils/holderGroups');
+const { activeHolderGroupSlots, allHolderGroupSlots, currentBaseSlots, renewTierAnchor } = require('../utils/holderGroups');
 const {
   sendIndividualPaymentConfirmation,
   sendAirlinePaymentConfirmation,
@@ -469,7 +469,11 @@ async function applyGroupRenewal(registrationId, registrationModel, paymentDoc, 
   const now           = new Date();
   const plan          = paymentDoc.newSubscriptionPlan || group.plan;
   const count         = paymentDoc.renewalExactCount ? Number(paymentDoc.renewalExactCount) : Number(group.count || 1);
-  const ppc           = tierPpcForPlan(plan, Math.max(3, count));
+  // Add-on stacks on top of the active base — price its tier at the cumulative
+  // position (anchor + count), so renewing above the base coverage moves to the
+  // correct volume tier instead of always restarting at the 3-to-5 tier.
+  const tierAnchor    = renewTierAnchor(doc, group, now);
+  const ppc           = tierPpcForPlan(plan, Math.max(3, tierAnchor + count));
   const price         = paymentDoc.amountDollars || ppc * count;
   const currentExpiry = group.expirationDate ? new Date(group.expirationDate) : null;
   const base          = currentExpiry && currentExpiry > now ? currentExpiry : now;
@@ -777,7 +781,10 @@ exports.createPaymentIntent = async (req, res) => {
       const groupPlan = newSubscriptionPlan || group.plan;
       // Count = user-selected (downgrade) or the group's current count.
       const renewCount = bodyRenewalCount ? Number(bodyRenewalCount) : Number(group.count || 1);
-      const groupPpc = tierPpcForPlan(groupPlan, Math.max(3, renewCount));
+      // Add-on stacks on top of the active base — tier read at the cumulative
+      // position so the charged ppc matches what the frontend displayed.
+      const groupTierAnchor = renewTierAnchor(doc, group, new Date());
+      const groupPpc = tierPpcForPlan(groupPlan, Math.max(3, groupTierAnchor + renewCount));
       amountDollars = groupPpc * renewCount;
     } else if (registrationModel !== 'Individual') {
       const activePlanForAirline = newSubscriptionPlan || doc.subscriptionPlan;
@@ -2117,12 +2124,17 @@ exports.adminRenew = async (req, res) => {
       ? (exactCount ? Number(exactCount) : Number(group.count || 1))
       : (exactCount ? Number(exactCount) : Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1));
 
+    // A group add-on stacks on the active base — its tier is read at the cumulative
+    // position (anchor + count), matching applyGroupRenewal() and the frontend.
+    const tierAnchor = group ? renewTierAnchor(doc, group, now) : 0;
+    const tierCount  = Math.max(3, tierAnchor + count);
+
     // ── Amount: admin override, else computed from tier/plan pricing ──────────
     let amountDollars = Number(price);
     if (!(amountDollars > 0)) {
       if (isAirline) {
         // tierPpcForPlan returns UNLIMITED tier pricing when activePlan is Unlimited.
-        const ppc = tierPpcForPlan(activePlan, Math.max(3, count));
+        const ppc = tierPpcForPlan(activePlan, tierCount);
         amountDollars = ppc * count * (yearsVal || 1);
       } else {
         amountDollars = activePlan === 'Unlimited Plan'
@@ -2148,7 +2160,7 @@ exports.adminRenew = async (req, res) => {
       ? (group.expirationDate ? new Date(group.expirationDate) : null)
       : (doc.expirationDate ? new Date(doc.expirationDate) : null);
     const renewalBase = baseExpiry && baseExpiry > now ? baseExpiry : now;
-    const ppcForSnap = isAirline ? tierPpcForPlan(activePlan, Math.max(3, count)) : 0;
+    const ppcForSnap = isAirline ? tierPpcForPlan(activePlan, tierCount) : 0;
     const snapDocObj = {
       ...doc.toObject(),
       subscriptionPlan: activePlan,
