@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { createAdminIndividualForm, importIndividualsFromExcel } from '../../services/api'
 
 const C = {
@@ -65,7 +65,23 @@ const initialForm = {
 
 export default function AdminIndividualForm() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState(initialForm)
+  // Prefill from ?email/&firstName/&lastName when adding a plan for an existing account,
+  // so the created registration links to that user (matched by email).
+  useEffect(() => {
+    const email = searchParams.get('email')
+    const firstName = searchParams.get('firstName')
+    const lastName = searchParams.get('lastName')
+    if (email || firstName || lastName) {
+      setFormData(prev => ({
+        ...prev,
+        ...(email ? { email } : {}),
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
+      }))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(null)
   const [error, setError] = useState('')

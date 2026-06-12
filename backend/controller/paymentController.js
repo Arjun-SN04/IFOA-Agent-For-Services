@@ -634,9 +634,11 @@ async function applyHolderUpgrade(registrationId, registrationModel, paymentDoc,
 
   if (!updatedReg) {
     // Separate plan (default) — or merge target vanished: create a new independent group.
+    // The new group carries its OWN pricePerCert; we must NOT touch the base plan's
+    // pricePerCertificate here — the base keeps the rate the airline actually paid for
+    // it. (Previously a same-plan add-on clobbered the base rate with the new tier.)
     const groupExists = (doc.holderGroups || []).some(g => String(g.paymentId || '') === String(paymentDoc._id));
     const set = { committedCount: newCount, holderCountValue: String(newCount) };
-    if (batchPlan === doc.subscriptionPlan) set.pricePerCertificate = newPpc;
     const op = { $set: set };
     if (!groupExists) {
       op.$push = {
@@ -1721,7 +1723,20 @@ exports.getPaymentsByRegistration = async (req, res) => {
 
     const payments = await Payment.find({ registrationId: targetId })
       .sort({ createdAt: -1 });
-    res.json({ success: true, data: payments });
+
+    // Suppress invoices the admin has deleted (recorded on the registration's
+    // hiddenInvoiceNumbers) so they disappear for the customer too.
+    const regDoc =
+      (await Airlines.findById(targetId).select('hiddenInvoiceNumbers').lean()) ||
+      (await Individual.findById(targetId).select('hiddenInvoiceNumbers').lean());
+    const hiddenSet = new Set(
+      (regDoc?.hiddenInvoiceNumbers || []).map(n => normalizeInvoiceNumber(n))
+    );
+    const visiblePayments = hiddenSet.size
+      ? payments.filter(p => !hiddenSet.has(normalizeInvoiceNumber(p.invoiceNumber)))
+      : payments;
+
+    res.json({ success: true, data: visiblePayments });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -2005,7 +2020,10 @@ exports.adminHolderUpgrade = async (req, res) => {
 
     doc.committedCount   = newCommitted;
     doc.holderCountValue = String(newCommitted);
-    if (batchPlan === doc.subscriptionPlan) doc.pricePerCertificate = ppc;
+    // Only re-rate the BASE plan when these holders actually merge INTO the base.
+    // A separate add-on (even same plan type) keeps its own rate and must NOT change
+    // the per-cert price the airline already paid for the base.
+    if (mergeBase) doc.pricePerCertificate = ppc;
 
     let group; // the unit to invoice against (real group for separate; pseudo for merge)
     if (mergeBase) {
@@ -2268,7 +2286,7 @@ exports.activateQueuedRenewal = async (req, res) => {
   }
 };
 
-
+ 
 // ─── POST /api/payments/auto-activate-renewal (authenticated user) ─────────────
 // Called by the user's own subscription page when the page detects that a queued
 // renewal's activationDate has already passed.  Only activates if:

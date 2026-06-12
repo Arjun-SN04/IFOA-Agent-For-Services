@@ -9,6 +9,7 @@ router.post('/verify-otp-signup', authCtrl.verifyOtpAndSignup);
 router.post('/reset-password', authCtrl.resetPasswordWithOtp);
 router.post('/login', authCtrl.login);
 router.get('/me', authMiddleware, authCtrl.getMe);
+router.get('/admin/accounts-without-plan', authMiddleware, authCtrl.listAccountsWithoutPlan);
 router.post('/seed-admin-signup', authCtrl.seedAdminSignup);
 router.post('/seed-admin-login', authCtrl.seedAdminLogin);
 router.put('/update-credentials', authMiddleware, authCtrl.updateCredentials);

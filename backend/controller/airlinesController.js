@@ -211,6 +211,7 @@ function buildAirlinePayload(raw) {
     subscriptionPlan,
     holderCount,
     holderCountValue,
+    addedByAdmin: true, // Excel import is an admin action — gates invoice generation.
     airlineName,
     firstName,
     lastName,
@@ -890,6 +891,41 @@ exports.deleteAirlinesSubscription = async (req, res) => {
   }
 };
 
+// ── Admin: Delete ONE add-on/upgrade plan (holderGroup) ─────────────────────────
+// Removes the group, the certificate holders that belong to it, and reduces the
+// committed count by the group's slots. The base plan is NOT deletable here — to
+// remove the base, delete the whole subscription (deleteAirlinesSubscription).
+exports.deleteHolderGroup = async (req, res) => {
+  try {
+    const { id, groupId } = req.params;
+    const doc = await Airlines.findById(id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    const group = doc.holderGroups?.id ? doc.holderGroups.id(groupId) : null;
+    if (!group) return res.status(404).json({ success: false, message: 'Plan not found.' });
+
+    const removedSlots = Number(group.count || 0);
+
+    // Drop holders attached to this group.
+    doc.certificateHolders = (doc.certificateHolders || []).filter(
+      h => String(h.holderGroupId || '') !== String(groupId),
+    );
+
+    // Remove the group itself.
+    doc.holderGroups = (doc.holderGroups || []).filter(g => String(g._id) !== String(groupId));
+
+    // committedCount = base + all group slots; subtract the removed group's slots.
+    const newCommitted = Math.max(0, Number(doc.committedCount || doc.holderCountValue || 0) - removedSlots);
+    doc.committedCount = newCommitted;
+    doc.holderCountValue = String(newCommitted);
+
+    await doc.save();
+    res.json({ success: true, message: 'Plan deleted.', data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── Bulk Delete ────────────────────────────────────────────────────────────────
 exports.bulkDeleteAirlines = async (req, res) => {
   try {
@@ -1507,6 +1543,9 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // Normalize emails
     if (body.email) body.email = body.email.toLowerCase().trim();
     if (body.pointOfContactEmail) body.pointOfContactEmail = body.pointOfContactEmail.toLowerCase().trim();
+
+    // Mark as admin-created — gates invoice generation to admin-added registrations.
+    body.addedByAdmin = true;
 
     // Resolve price server-side
     body.pricePerCertificate = resolvePricePerCertificate(body);

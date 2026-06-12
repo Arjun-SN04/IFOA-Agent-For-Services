@@ -63,6 +63,8 @@ export const adminHolderUpgrade             = (id, data) => API.post(`/airlines/
 export const markHolderGroupPaid            = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/mark-paid`)
 // Force-activate a holder group's queued renewal now (admin)
 export const activateGroupRenewalNow        = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/activate-renewal`)
+// Delete one add-on/upgrade plan (admin)
+export const deleteHolderGroup              = (id, groupId) => API.delete(`/airlines/${id}/holder-group/${groupId}`)
 // Admin renews a subscription (no payment) + generates invoice. registrationModel: 'Airlines' | 'Individual'.
 export const adminRenewAirline              = (id, data) => API.post(`/airlines/${id}/admin-renew`, { ...data, registrationModel: 'Airlines' })
 export const adminRenewIndividual           = (id, data) => API.post(`/individuals/${id}/admin-renew`, { ...data, registrationModel: 'Individual' })
@@ -120,6 +122,8 @@ export const deleteInvoice = (registrationId, invoiceNumber) =>
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)
+// Admin: signed-up accounts (airline/individual) with no registration/plan yet
+export const getAccountsWithoutPlan = (role) => API.get('/auth/admin/accounts-without-plan', { params: role ? { role } : {} })
 export const signup            = (data) => API.post('/auth/signup', data)
 export const seedAdminLogin    = (data) => API.post('/auth/seed-admin-login', data)
 export const seedAdminSignup   = (data) => API.post('/auth/seed-admin-signup', data)

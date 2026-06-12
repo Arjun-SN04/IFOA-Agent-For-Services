@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const Individual = require('../models/Individual');
+const Airlines = require('../models/Airlines');
 const OTP  = require('../models/OTP');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -719,5 +721,43 @@ exports.addSubscription = async (req, res) => {
   } catch (err) {
     console.error('Add subscription error:', err);
     res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// ── Admin: list signed-up accounts that have NOT created a registration/plan ───
+// These are users (role airline/individual) with no linked registration — they
+// signed up but never filled the form, so the dashboard can surface them and let
+// admin add a plan on their behalf.
+exports.listAccountsWithoutPlan = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'Admin access required.' });
+
+    const roleParam = req.query.role;
+    const roleFilter = ['individual', 'airline'].includes(roleParam)
+      ? roleParam
+      : { $in: ['individual', 'airline'] };
+
+    const users = await User.find({ role: roleFilter, registrationId: null })
+      .select('email firstName lastName airlineName role createdAt mustChangePassword')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Defensive: exclude any whose email already has a registration (legacy records
+    // may not have linked registrationId back on the user).
+    const emails = users.map(u => u.email).filter(Boolean);
+    const [indDocs, airDocs] = await Promise.all([
+      Individual.find({ email: { $in: emails } }).select('email').lean(),
+      Airlines.find({ email: { $in: emails } }).select('email').lean(),
+    ]);
+    const taken = new Set([
+      ...indDocs.map(d => String(d.email || '').toLowerCase()),
+      ...airDocs.map(d => String(d.email || '').toLowerCase()),
+    ]);
+    const result = users.filter(u => !taken.has(String(u.email || '').toLowerCase()));
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };

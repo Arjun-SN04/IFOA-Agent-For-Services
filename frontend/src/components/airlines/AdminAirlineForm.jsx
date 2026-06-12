@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import axios from 'axios'
 import { importAirlinesFromExcel } from '../../services/api'
@@ -108,6 +108,25 @@ export default function AdminAirlineForm() {
     pointOfContactPhone: '',
     agreedToTerms: true,
   })
+
+  // Prefill from ?email/&firstName/&lastName/&airlineName when adding a plan for an
+  // existing account, so the created registration links to that user (matched by email).
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    const email = searchParams.get('email')
+    const firstName = searchParams.get('firstName')
+    const lastName = searchParams.get('lastName')
+    const airlineName = searchParams.get('airlineName')
+    if (email || firstName || lastName || airlineName) {
+      setFormData(prev => ({
+        ...prev,
+        ...(email ? { email, pointOfContactEmail: email } : {}),
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
+        ...(airlineName ? { airlineName } : {}),
+      }))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchAirlines = async () => {

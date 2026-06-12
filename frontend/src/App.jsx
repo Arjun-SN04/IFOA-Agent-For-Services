@@ -6,6 +6,7 @@ import { useAuth } from './context/AuthContext'
 import { DataCacheProvider } from './context/DataCacheContext'
 import ChatBot from './components/ChatBot'
 import HeaderNav from './components/layout/HeaderNav'
+import Navbar from './components/Navbar'
 
 // Public pages — eagerly loaded
 import Home from './pages/Home'
@@ -25,6 +26,7 @@ const UserDashboard       = lazy(() => import('./pages/dashboard/UserDashboard')
 const ProfilePage         = lazy(() => import('./pages/dashboard/ProfilePage'))
 const SubscriptionPage    = lazy(() => import('./pages/dashboard/SubscriptionPage'))
 const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'))
+const FaqPage             = lazy(() => import('./pages/dashboard/FaqPage'))
 
 // Tiny blank-slate while a lazy chunk loads — no spinner flash
 function PageFallback() {
@@ -174,6 +176,12 @@ function App() {
             <Route path="/seed-admin-signup" element={<SeedAdminSignupPage />} />
             <Route path="/seed-admin-login" element={<SeedAdminLoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/faq" element={
+              <div className="min-h-screen bg-white">
+                <Navbar />
+                <div className="pt-[76px] sm:pt-[100px]"><FaqPage /></div>
+              </div>
+            } />
 
             {/* ── Admin — single shell, header never remounts ── */}
             <Route element={<RequireAuth roles={['admin']} />}>
@@ -184,6 +192,7 @@ function App() {
                 <Route path="/admin/add-airline" element={<AdminDashboard />} />
                 <Route path="/admin/add-individual" element={<AdminDashboard />} />
                 <Route path="/admin/profile" element={<AdminProfilePage />} />
+                <Route path="/admin/faq" element={<FaqPage />} />
               </Route>
             </Route>
 
@@ -194,6 +203,7 @@ function App() {
                 <Route path="/dashboard/profile" element={<ProfilePage />} />
                 <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
                 <Route path="/dashboard/settings" element={<SettingsPage />} />
+                <Route path="/dashboard/faq" element={<FaqPage />} />
               </Route>
             </Route>
           </Routes>

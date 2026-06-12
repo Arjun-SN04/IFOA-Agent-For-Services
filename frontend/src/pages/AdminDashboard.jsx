@@ -25,6 +25,7 @@ import {
   exportIndividualsExcel,
   getAllAirlinesSubscriptions,
   getAllIndividuals,
+  getAccountsWithoutPlan,
   getPaymentsByRegistration,
   savePaymentInvoiceDraft,
   updateAirlinesSubscription,
@@ -40,6 +41,7 @@ import {
   adminHolderUpgrade,
   markHolderGroupPaid,
   activateGroupRenewalNow,
+  deleteHolderGroup,
   adminRenewAirline,
   adminRenewIndividual,
 } from '../services/api'
@@ -705,6 +707,9 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   const [saveErr, setSaveErr] = React.useState('')
   const [pdfBusy, setPdfBusy] = React.useState({})
   const [deletingNum, setDeletingNum] = React.useState(null)
+  // Numbers deleted this session — suppress them even if the synthetic fallback
+  // (built from record.invoiceNumber) would otherwise resurrect them.
+  const [deletedNums, setDeletedNums] = React.useState(() => new Set())
   // Admin custom-invoice creation (separate from inline edit so they don't clash).
   const [creating, setCreating] = React.useState(false)
   const [createForm, setCreateForm] = React.useState({})
@@ -731,6 +736,8 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
     setDeletingNum(num)
     try {
       await deleteInvoice(registrationId, num)
+      const normDeleted = String(num).replace(/^Invoice\s+/i, '').trim().toUpperCase()
+      setDeletedNums(prev => new Set(prev).add(normDeleted))
       await load()
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to delete invoice.')
@@ -756,6 +763,16 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
       const res = await getInvoiceByRegistration(registrationId)
       const data = res.data?.data || res.data || []
       setInvoices(data)
+      // Merge server-recorded hidden numbers so a deleted invoice stays gone
+      // even after the modal is reopened (synthetic fallback respects these).
+      const serverHidden = res.data?.hiddenInvoiceNumbers || []
+      if (serverHidden.length) {
+        setDeletedNums(prev => {
+          const next = new Set(prev)
+          serverHidden.forEach(n => next.add(String(n).replace(/^Invoice\s+/i, '').trim().toUpperCase()))
+          return next
+        })
+      }
     } catch (e) {
       setError('Failed to load invoices.')
     } finally {
@@ -769,15 +786,21 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
   // If record.invoiceNumber not represented in any source, synthesize an item from the record.
   const visibleInvoices = React.useMemo(() => {
     if (!invoices) return null
-    // If real Invoice docs exist, use them — no synthetic needed.
-    const hasRealDocs = invoices.some(d => !d._source)
-    if (hasRealDocs) return invoices
-    const regNum = record?.invoiceNumber
-    if (!regNum) return invoices
     const normalize = (s) => String(s || '').replace(/^Invoice\s+/i, '').trim().toUpperCase()
+    // Drop anything deleted this session (server hides it too, but the synthetic
+    // fallback below would otherwise rebuild it from record.invoiceNumber).
+    const list = deletedNums.size
+      ? invoices.filter(i => !deletedNums.has(normalize(i.invoiceNumber)))
+      : invoices
+    // If real Invoice docs exist, use them — no synthetic needed.
+    const hasRealDocs = list.some(d => !d._source)
+    if (hasRealDocs) return list
+    const regNum = record?.invoiceNumber
+    if (!regNum) return list
     const normReg = normalize(regNum)
-    const alreadyIn = invoices.some(i => normalize(i.invoiceNumber) === normReg)
-    if (alreadyIn) return invoices
+    if (deletedNums.has(normReg)) return list
+    const alreadyIn = list.some(i => normalize(i.invoiceNumber) === normReg)
+    if (alreadyIn) return list
     const isAirline = registrationModel !== 'Individual'
     const holderCount = Number(record?.committedCount || record?.holderCountValue || record?.certificateHolders?.length || 1)
     const pricePerCert = Number(record?.pricePerCertificate || record?.pricePerCert || 0)
@@ -818,8 +841,8 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
         lineItems,
       },
     }
-    return [synthetic, ...invoices]
-  }, [invoices, record, registrationId, registrationModel])
+    return [synthetic, ...list]
+  }, [invoices, record, registrationId, registrationModel, deletedNums])
 
   const buildPdfPayload = (inv) => {
     const d = inv.draft || {}
@@ -1228,7 +1251,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
 }
 
 
-function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
+function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated }) {
   const fullName = [record.firstName, record.middleName, record.lastName].filter(Boolean).join(' ') || 'Individual'
   const [showInvoices, setShowInvoices] = useState(false)
   const [showRenew, setShowRenew] = useState(false)
@@ -1253,7 +1276,11 @@ function IndividualViewModal({ record, onClose, onEdit, onRecordUpdated }) {
               >
                 All Invoices
               </button>
-              {record.subscriptionPlan !== 'Unlimited Plan' && (
+              {record.__noPlan ? (
+                <button onClick={() => onManagePlan?.(record)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition">
+                  Manage Plan
+                </button>
+              ) : record.subscriptionPlan !== 'Unlimited Plan' && (
                 <button onClick={() => setShowRenew(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition">
                   Renew
                 </button>
@@ -2026,6 +2053,22 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
     }
   }
 
+  const [deletingGroupId, setDeletingGroupId] = useState(null)
+  const handleDeleteGroup = async (group) => {
+    const slots = Number(group.count || 0)
+    const planLbl = group.plan === 'Unlimited Plan' ? 'Unlimited' : group.plan === 'Multiple Years Subscription Plan' ? 'Multiple Years' : '1 Year'
+    if (!window.confirm(`Delete this ${planLbl} upgrade plan?\n\nThis removes the plan, its ${slots} holder slot${slots !== 1 ? 's' : ''}, and the holders attached to it from the airline's account.\n\nThis cannot be undone.`)) return
+    setDeletingGroupId(String(group._id))
+    try {
+      const res = await deleteHolderGroup(record._id, group._id)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Failed to delete plan.')
+    } finally {
+      setDeletingGroupId(null)
+    }
+  }
+
   const handleActivateBaseRenewal = async () => {
     const planLbl = record.nextRenewal?.plan || 'queued plan'
     if (!window.confirm(`Start the queued base plan now?\n\nSwitch to: ${planLbl}\nExpiry is recomputed from today.\n\nThis cannot be undone automatically.`)) return
@@ -2113,16 +2156,17 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <ViewField label="Payment Email" value={record.paymentEmail} />
               </div>
             </div>
-            {Array.isArray(record.holderGroups) && record.holderGroups.length > 0 && (() => {
+            {(() => {
               const planShort = (plan, years) =>
                 plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
                   : plan === 'Unlimited Plan' ? 'Unlimited'
                     : plan === '1 Year Subscription Plan' ? '1 Year' : (plan || '—')
+              const hasGroups = Array.isArray(record.holderGroups) && record.holderGroups.length > 0
               return (
                 <div className="border-t border-slate-100 pt-5">
                   <div className="flex items-center justify-between mb-2">
                     <SectionHead label="Subscription Plans" />
-                    <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Holder Count</button>
+                    <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Plans</button>
                   </div>
                   <div className="space-y-2">
                     {/* BASE PLAN — main subscription driving holder capacity */}
@@ -2179,8 +2223,8 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                       )
                     })()}
 
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 pt-1">Added Holder Plans ({record.holderGroups.length})</p>
-                    {record.holderGroups.map((g, gi) => {
+                    {hasGroups && <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 pt-1">Added Holder Plans ({record.holderGroups.length})</p>}
+                    {hasGroups && record.holderGroups.map((g, gi) => {
                       const filled = (record.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
                       const pending = g.paymentStatus === 'pending'
                       const gExpiry = getExpiryStatus(g.expirationDate, { unlimited: g.plan === 'Unlimited Plan' })
@@ -2225,6 +2269,10 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                                 Renew
                               </button>
                             )}
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g) }} disabled={deletingGroupId === String(g._id)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white hover:bg-red-50 disabled:opacity-50 px-2 py-0.5 text-[10px] font-bold text-red-600 transition">
+                              {deletingGroupId === String(g._id) ? 'Deleting…' : 'Delete plan'}
+                            </button>
                           </div>
                         </div>
                       )
@@ -2233,14 +2281,6 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 </div>
               )
             })()}
-            {(!record.holderGroups || record.holderGroups.length === 0) && (
-              <div className="border-t border-slate-100 pt-5 flex items-center gap-2">
-                {record.subscriptionPlan !== 'Unlimited Plan' && (
-                  <button onClick={() => setRenewTarget({ group: null })} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 transition">Renew Subscription</button>
-                )}
-                <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Holder Count</button>
-              </div>
-            )}
             {record.certificateHolders?.length > 0 && (() => {
               const planShort = (plan, years) =>
                 plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
@@ -3298,7 +3338,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                           onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
                           className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Holder Count</span> in the view screen.</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Plans</span> in the view screen.</p>
                     </Field>
                     <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
                       value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
@@ -3730,9 +3770,14 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   // record.invoiceNumber is always set by the time this component mounts.
   const [fetchedInvoiceNumber] = React.useState(record.invoiceNumber || '')
   const defaultInvoiceNumber = fetchedInvoiceNumber
-  const holderCount = Number(
+  // The default airline invoice covers the BASE plan only. committedCount is the grand
+  // total (base + all add-on groups), so subtract the group slots to bill base holders
+  // at the base rate. Holder-upgrade/renewal invoices set their own count, so leave those.
+  const isBasePlanInvoice = isAirline && !record._wireInvoicePurpose
+  const grandCommitted = Number(
     record.committedCount || record.holderCountValue || record.certificateHolders?.length || 1
   ) || 1
+  const holderCount = Math.max(1, isBasePlanInvoice ? grandCommitted - allGroupSlots(record.holderGroups) : grandCommitted)
   const pricePerCert = Number(record.pricePerCertificate || record.pricePerCert || (isAirline ? 49 : 0))
   const paidConfirmed = record?.isPaid === true || record?.paymentStatus === 'paid'
 
@@ -3749,9 +3794,15 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   // Wire requests: use amountPaid admin entered as the authoritative total even before marking paid.
   const wireMode = Boolean(record?.wirePaymentRequested) && paidTotal > 0
   const totalAmt = isAirline
-    ? (wireMode ? paidTotal : (paidConfirmed && paidTotal > 0 ? Math.max(paidTotal, computedAirlineTotal) : computedAirlineTotal))
+    // Base-plan invoice: always base rate × base holders (paidTotal mixes in add-on
+    // groups, so don't let it inflate the base line).
+    ? (isBasePlanInvoice
+        ? computedAirlineTotal
+        : (wireMode ? paidTotal : (paidConfirmed && paidTotal > 0 ? Math.max(paidTotal, computedAirlineTotal) : computedAirlineTotal)))
     : (paidConfirmed && paidTotal > 0 ? paidTotal : fallbackTotal)
-  const unitPrice = isAirline ? Number((totalAmt / holderCount).toFixed(2)) : totalAmt
+  const unitPrice = isAirline
+    ? (isBasePlanInvoice ? pricePerCert : Number((totalAmt / holderCount).toFixed(2)))
+    : totalAmt
   const planDesc = `Agent For Service – ${(record.subscriptionPlan || '1 Year Plan').replace(' Subscription Plan', '').replace(' Plan', '')}`
 
   const paidByCard = record?.paymentMethodType === 'card' || Boolean(record?.stripePaymentIntentId)
@@ -4294,7 +4345,27 @@ function EmptyState({ message = 'No records found' }) {
 }
 
 // ─── InvoiceCell — Invoice Preview + Edit/Generate (always same width) ──────────
-function InvoiceCell({ onInvoice, onInvoicePreview, invoiceGenerated }) {
+// Invoice generation is only for admin-added/managed registrations. Airlines created
+// by admin carry addedByAdmin=true; individuals have no such field, so fall back to an
+// existing signal: a self-service registration pays through Stripe checkout (card), so
+// anything NOT self-paid via Stripe (wire/manual/admin-created) is admin-managed.
+function isAdminManaged(record) {
+  if (!record) return false
+  if (record.addedByAdmin === true) return true
+  if (record.wirePaymentRequested === true) return true
+  const selfPaidByStripe = Boolean(record.stripePaymentIntentId) || record.paymentMethodType === 'card'
+  return !selfPaidByStripe
+}
+
+function InvoiceCell({ onInvoice, onInvoicePreview, invoiceGenerated, canGenerate = true }) {
+  // Non-admin-added registration with no invoice yet → generation does not apply.
+  if (!invoiceGenerated && !canGenerate) {
+    return (
+      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+        <span className="text-[11px] text-slate-300 font-semibold" title="Invoice generation is only available for admin-added registrations">—</span>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col items-center gap-2" onClick={e => e.stopPropagation()}>
       <div className="flex flex-nowrap items-center justify-center gap-1.5">
@@ -4363,7 +4434,6 @@ function RowActions({ onView, onDelete, isDeleting }) {
   )
 }
 
-// ─── Grouped Individuals Table ─────────────────────────────────────────────────
 function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview, deleting, highlightedId, selectedIds = new Set(), onToggleSelect, onToggleSelectAll }) {
   const [expanded, setExpanded] = useState({})
 
@@ -4498,6 +4568,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                         onInvoice={() => onInvoice(primary)}
                         onInvoicePreview={() => onInvoicePreview(primary)}
                         invoiceGenerated={hasExistingInvoice(primary)}
+                        canGenerate={isAdminManaged(primary)}
                       />
                     </td>
                     <td className="px-4 py-4">
@@ -4563,6 +4634,7 @@ function IndividualsTable({ data, onView, onDelete, onInvoice, onInvoicePreview,
                           onInvoice={() => onInvoice(sub)}
                           onInvoicePreview={() => onInvoicePreview(sub)}
                           invoiceGenerated={hasExistingInvoice(sub)}
+                          canGenerate={isAdminManaged(sub)}
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -4728,6 +4800,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                         onInvoice={() => onInvoice(primary)}
                         onInvoicePreview={() => onInvoicePreview(primary)}
                         invoiceGenerated={hasExistingInvoice(primary)}
+                        canGenerate={isAdminManaged(primary)}
                       />
                     </td>
                     <td className="px-4 py-4">
@@ -4792,6 +4865,7 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
                           onInvoice={() => onInvoice(sub)}
                           onInvoicePreview={() => onInvoicePreview(sub)}
                           invoiceGenerated={hasExistingInvoice(sub)}
+                          canGenerate={isAdminManaged(sub)}
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -4940,6 +5014,9 @@ export default function AdminDashboard() {
 
   const [individuals, setIndividuals] = useState([])
   const [airlines, setAirlines] = useState([])
+  const [noPlanAccounts, setNoPlanAccounts] = useState([])
+  // 'all' = registrations + signed-up accounts without a plan; 'withPlan' = only those with data.
+  const [accountView, setAccountView] = useState('withPlan')
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState('')
   const [search, setSearch] = useState('')
@@ -4977,9 +5054,10 @@ export default function AdminDashboard() {
     if (showSpinner) setLoading(true)
     setLoadErr('')
     try {
-      const [ir, ar] = await Promise.all([getAllIndividuals(), getAllAirlinesSubscriptions()])
+      const [ir, ar, nr] = await Promise.all([getAllIndividuals(), getAllAirlinesSubscriptions(), getAccountsWithoutPlan().catch(() => null)])
       const newInds = Array.isArray(ir.data?.data) ? ir.data.data : Array.isArray(ir.data) ? ir.data : []
       const newAirs = Array.isArray(ar.data?.data) ? ar.data.data : Array.isArray(ar.data) ? ar.data : []
+      setNoPlanAccounts(Array.isArray(nr?.data?.data) ? nr.data.data : [])
 
       if (!showSpinner) {
         setIndividuals(prev => {
@@ -5254,8 +5332,20 @@ export default function AdminDashboard() {
   // Resolve an invoice number before opening any invoice modal.
   // persist=false (generate flow): number generated in-memory only, not written to DB until admin saves.
   // persist=true (edit flow): number persisted to Registration doc immediately (default).
-  const resolveInvoiceNumber = async (record, type, persist = true) => {
+  const resolveInvoiceNumber = async (record, type, persist = true, forceFresh = false) => {
     let resolved = record
+
+    // Generate flow (forceFresh): always suggest a brand-new, unused number instead of
+    // reusing the registration's existing invoiceNumber (which is already taken by a prior
+    // invoice and would collide on save). Uses peek — no counter burned until saved.
+    if (forceFresh) {
+      try {
+        const genRes = await generateInvoiceNumber()
+        const newNum = genRes.data?.invoiceNumber
+        if (newNum) resolved = { ...resolved, invoiceNumber: newNum, invoiceDraft: null }
+      } catch { /* fall through — keep existing */ }
+      return resolved
+    }
 
     // Always check Invoice collection first — it is the canonical source of truth.
     // Sync invoice number AND draft data so the modal opens with the latest saved data.
@@ -5335,7 +5425,8 @@ export default function AdminDashboard() {
   }
 
   const openInvoiceGenerate = async (record, type) => {
-    const resolved = await resolveInvoiceNumber(record, type, false)
+    // Brand-new invoice → force a fresh, unused number so it never collides on save.
+    const resolved = await resolveInvoiceNumber(record, type, false, true)
     setInvoiceModal({ record: resolved, type, initialStep: 'select', autoPreview: false, previewOnly: false })
   }
 
@@ -5384,21 +5475,53 @@ export default function AdminDashboard() {
     })
   }, [src, search, filterPlan, filterPayment, filterStatus, filterExpiry, sortOrder, tab])
 
+  // Signed-up accounts (current tab's role) that have no plan yet. Merged into
+  // the main table when accountView === 'all'; hidden under 'withPlan'. Admin
+  // toggles them via the account filter, so no separate panel is needed.
+  const noPlanForTab = useMemo(() => {
+    if (tab !== 'individuals' && tab !== 'airlines') return []
+    const role = tab === 'individuals' ? 'individual' : 'airline'
+    const q = search.toLowerCase()
+    return (noPlanAccounts || [])
+      .filter(u => u.role === role)
+      .filter(u => !q || [`${u.firstName || ''} ${u.lastName || ''}`, u.email, u.airlineName].some(v => String(v || '').toLowerCase().includes(q)))
+      .map(u => ({ ...u, __noPlan: true }))
+  }, [noPlanAccounts, tab, search])
+
+  // Rows shown in the table: real subscriptions plus, when viewing all
+  // accounts, the signed-up accounts that have no plan yet.
+  const tableData = useMemo(() => {
+    if (accountView === 'noPlan') return noPlanForTab
+    if (accountView === 'all') return [...filtered, ...noPlanForTab]
+    return filtered
+  }, [filtered, noPlanForTab, accountView])
+
   const uniqueAccountCount = useMemo(() => {
     if (tab === 'overview') return 0
     const keys = new Set()
-    filtered.forEach(r => {
+    tableData.forEach(r => {
       const key = tab === 'airlines'
         ? (r.airlineName || '').toLowerCase().trim() || r._id
         : (r.email || '').toLowerCase().trim() || r._id
       keys.add(key)
     })
     return keys.size
-  }, [filtered, tab])
+  }, [tableData, tab])
 
   const PLANS = ['All', '1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
+
+  // Open the full admin add-plan form, prefilled, for a signed-up account that
+  // has no plan yet (matched to the user by email).
+  const handleManagePlan = (u) => {
+    const params = new URLSearchParams()
+    if (u.email) params.set('email', u.email)
+    if (u.firstName) params.set('firstName', u.firstName)
+    if (u.lastName) params.set('lastName', u.lastName)
+    if (u.airlineName) params.set('airlineName', u.airlineName)
+    navigate(`/admin/add-${u.role === 'airline' ? 'airline' : 'individual'}?${params.toString()}`)
+  }
 
   const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterExpiry('All'); setSortOrder('desc') }
   const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || filterExpiry !== 'All' || sortOrder !== 'desc'
@@ -5433,6 +5556,7 @@ export default function AdminDashboard() {
           record={viewRec}
           onClose={closeView}
           onEdit={openEditFromView}
+          onManagePlan={handleManagePlan}
           onRecordUpdated={(updated) => {
             if (!updated) return
             setIndividuals(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))
@@ -5522,6 +5646,13 @@ export default function AdminDashboard() {
                 <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
                   className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-full sm:w-48 bg-white transition shadow-sm" />
               </div>
+              <select value={accountView} onChange={e => setAccountView(e.target.value)}
+                title="Show all signed-up accounts, or only those that have a plan"
+                className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
+                <option value="all">All accounts</option>
+                <option value="withPlan">With plan only</option>
+                <option value="noPlan">No plan only</option>
+              </select>
               <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)}
                 className="flex-grow sm:flex-grow-0 border border-slate-200 text-xs font-semibold px-3 py-2 rounded-xl bg-white outline-none focus:border-blue-500 text-slate-600 transition shadow-sm h-[38px]">
                 {PLANS.map(p => <option key={p} value={p}>{p === 'All' ? 'All Plans' : p}</option>)}
@@ -5633,8 +5764,9 @@ export default function AdminDashboard() {
           <AdminIndividualForm />
         </div>
       ) : tab === 'individuals' ? (
+        <>
         <IndividualsTable
-          data={filtered}
+          data={tableData}
           highlightedId={null}
           onView={r => openView(r, 'individual')}
           onDelete={handleDelete}
@@ -5645,9 +5777,11 @@ export default function AdminDashboard() {
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
         />
+        </>
       ) : (
+        <>
         <AirlinesTable
-          data={filtered}
+          data={tableData}
           highlightedId={highlightedAirlineId}
           onView={r => openView(r, 'airline')}
           onDelete={handleDelete}
@@ -5658,6 +5792,7 @@ export default function AdminDashboard() {
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
         />
+        </>
       )}
     </DashboardLayout>
   )

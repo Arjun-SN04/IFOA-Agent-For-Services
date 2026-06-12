@@ -28,6 +28,7 @@ const {
   renewAirlinesSubscription,
   activateWirePayment,
   activateGroupRenewalNow,
+  deleteHolderGroup,
 } = require('../controller/airlinesController');
 const { adminHolderUpgrade, markHolderGroupPaid, adminRenew } = require('../controller/paymentController');
 
@@ -140,6 +141,8 @@ router.post('/:id/admin-holder-upgrade', authMiddleware, requireAdmin, adminHold
 router.post('/:id/holder-group/:groupId/mark-paid', authMiddleware, requireAdmin, markHolderGroupPaid);
 // force-activate a holder group's queued renewal now (admin)
 router.post('/:id/holder-group/:groupId/activate-renewal', authMiddleware, requireAdmin, activateGroupRenewalNow);
+// delete one add-on/upgrade plan (admin)
+router.delete('/:id/holder-group/:groupId', authMiddleware, requireAdmin, deleteHolderGroup);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 // renew — ADMIN ONLY. This endpoint extends the plan WITHOUT collecting payment,

@@ -72,6 +72,17 @@ const COUNTRY_LIST = [
   'Yemen', 'Zambia', 'Zimbabwe',
 ]
 
+// Reverse map (iso2 → full name) so stored codes like "CZ" display as "Czech Republic".
+const ISO2_TO_COUNTRY = Object.fromEntries(
+  Object.entries(COUNTRY_TO_ISO2).map(([name, iso]) => [iso, name])
+)
+function countryDisplayName(val) {
+  if (!val) return val
+  const s = String(val).trim()
+  if (s.length === 2) return ISO2_TO_COUNTRY[s.toLowerCase()] || s.toUpperCase()
+  return s
+}
+
 function EditCountrySelect({ value, onChange }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -2911,6 +2922,14 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
         {/* Invoice list */}
         <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          {(!docs || docs.length === 0) && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <svg className="w-10 h-10 text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-sm font-semibold text-slate-500">No invoices available</p>
+            </div>
+          )}
           {docs.map((doc, i) => (
             <button
               key={String(doc._id || i)}
@@ -3157,15 +3176,28 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
 
   const handleInvoiceClick = async () => {
     const queuedInvoice = String(s.nextRenewal?.invoiceNumber || '').trim()
+    const normalizeNum = (n) => String(n || '').replace(/^Invoice\s+/i, '').trim().toUpperCase()
 
-    const docs = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
+    const resp = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
       headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.data?.data || []).catch(() => cachedInvoiceDocs || [])
+    }).then(r => r.data || {}).catch(() => ({ data: cachedInvoiceDocs || [] }))
+
+    const docs = resp?.data || []
+    const hiddenSet = new Set((resp?.hiddenInvoiceNumbers || []).map(normalizeNum))
 
     setCachedInvoiceDocs(docs)
 
     if (docs.length > 0) {
       onViewAllInvoices?.(docs, s)
+      return
+    }
+
+    // Admin deleted this registration's invoice — don't rebuild it from the
+    // registration's own invoiceNumber/invoiceDraft fallback below. Open the
+    // invoices modal with an empty list so it shows the "no invoices" state.
+    const curNum = normalizeNum(s.invoiceNumber || s.invoiceDraft?.invoiceNumber)
+    if (curNum && hiddenSet.has(curNum)) {
+      onViewAllInvoices?.([], s)
       return
     }
 
@@ -3473,7 +3505,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                 )
                 return null
               })()}
-              <Row label="Country" value={s.country} />
+              <Row label="Country" value={countryDisplayName(s.country)} />
               <Row label="Submitted" value={fmt(s.submittedAt || s.createdAt)} />
               {s.certificateHolders?.length > 0 && (() => {
                 return (

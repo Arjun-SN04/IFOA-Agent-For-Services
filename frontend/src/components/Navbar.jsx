@@ -33,6 +33,7 @@ export default function Navbar() {
 
   const dashPath = user?.role === 'admin' ? '/admin' : '/dashboard'
   const profilePath = user?.role === 'admin' ? '/admin/profile' : '/dashboard/profile'
+  const faqPath = user?.role === 'admin' ? '/admin/faq' : user ? '/dashboard/faq' : '/faq'
 
   return (
     <nav
@@ -137,6 +138,14 @@ export default function Navbar() {
                           </svg>
                           Profile
                         </Link>
+                        <Link to={faqPath} onClick={() => setProfileOpen(false)}
+                          className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <circle cx="12" cy="12" r="9" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 9.5a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5M12 17h.01" />
+                          </svg>
+                          Help &amp; FAQ
+                        </Link>
                         <button onClick={handleLogout}
                           className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors text-slate-600 hover:bg-slate-100"
                         >
@@ -152,6 +161,15 @@ export default function Navbar() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                <Link
+                  to="/faq"
+                  className="rounded-xl px-4 py-2.5 text-sm font-bold transition-all duration-200"
+                  style={isActive('/faq') ? { background: '#0f172a', color: '#ffffff' } : { color: '#374151' }}
+                  onMouseEnter={e => { if (!isActive('/faq')) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#0f172a' } }}
+                  onMouseLeave={e => { if (!isActive('/faq')) { e.currentTarget.style.background = ''; e.currentTarget.style.color = '#374151' } }}
+                >
+                  FAQ
+                </Link>
                 <Link
                   to="/login"
                   className="rounded-xl px-5 py-2.5 text-sm font-bold border transition-all duration-200"
@@ -213,6 +231,10 @@ export default function Navbar() {
                   className="rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
                   Profile
                 </Link>
+                <Link to={faqPath} onClick={() => setMenuOpen(false)}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
+                  Help &amp; FAQ
+                </Link>
                 <div className="my-1 h-px bg-gray-100" />
                 <button onClick={handleLogout}
                   className="rounded-xl px-4 py-3 text-sm font-semibold hover:bg-slate-100 transition-colors text-left text-slate-600">
@@ -221,6 +243,10 @@ export default function Navbar() {
               </>
             ) : (
               <>
+                <Link to="/faq" onClick={() => setMenuOpen(false)}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors">
+                  Help &amp; FAQ
+                </Link>
                 <div className="my-1 h-px bg-gray-100" />
                 <Link to="/login" onClick={() => setMenuOpen(false)}
                   className="rounded-xl border px-4 py-3 text-center text-sm font-bold transition-all"

@@ -199,7 +199,9 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
       .filter(item => !hiddenSet.has(normalizeInvoiceNumber(item.invoiceNumber)))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    res.json({ success: true, data: all });
+    // Return hidden numbers too so the client's synthetic fallback (built from
+    // the registration's own invoiceNumber) never resurrects a deleted invoice.
+    res.json({ success: true, data: all, hiddenInvoiceNumbers: [...hiddenSet] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -429,8 +429,19 @@ export default function HeaderNav() {
                       </svg>
                       {user?.role === 'admin' ? 'Profile' : 'My Profile'}
                     </Link>
+                    <Link
+                      to={user?.role === 'admin' ? '/admin/faq' : '/dashboard/faq'}
+                      onClick={() => setDropdownOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                    >
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <circle cx="12" cy="12" r="9" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 9.5a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 3.5M12 17h.01" />
+                      </svg>
+                      Help &amp; FAQ
+                    </Link>
                     <a
-                      href="mailto:agent@theifoa.com"
+                      href="mailto:agent@theifoa.com?subject=IFOA%20Agent%20for%20Service%20Enquiry"
                       className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
                     >
                       <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
