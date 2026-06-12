@@ -2286,7 +2286,61 @@ exports.activateQueuedRenewal = async (req, res) => {
   }
 };
 
- 
+
+// ─── POST /api/payments/admin/cancel-renewal (admin) ──────────────────────────
+// Admin-only: remove a queued (not-yet-active) renewal from a registration. Drops
+// the standalone Renewal doc, clears the nextRenewal fields, and removes/hides the
+// queued renewal invoice so it disappears for both admin and the customer.
+exports.cancelQueuedRenewal = async (req, res) => {
+  try {
+    const { registrationId, registrationModel } = req.body;
+    if (!registrationId || !registrationModel)
+      return res.status(400).json({ success: false, message: 'registrationId and registrationModel are required.' });
+
+    const { doc, Model } = await findRegistration(registrationId, registrationModel);
+    if (!doc || !Model)
+      return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    if (!doc.nextRenewal?.paidAt)
+      return res.status(400).json({ success: false, message: 'No queued renewal found on this record.' });
+
+    const queuedInvoice = doc.nextRenewal?.invoiceNumber;
+
+    // Remove the standalone Renewal doc(s) backing this queued renewal.
+    if (doc.nextRenewalId) await Renewal.findByIdAndDelete(doc.nextRenewalId);
+    if (queuedInvoice) await Renewal.deleteMany({ registrationId, invoiceNumber: queuedInvoice });
+
+    // Remove the queued renewal's invoice and hide its number so it never resurfaces.
+    if (queuedInvoice) {
+      const Invoice = require('../models/Invoice');
+      await Invoice.deleteMany({ registrationId, invoiceNumber: queuedInvoice });
+    }
+
+    const update = {
+      $set: {
+        nextRenewalId: null,
+        'nextRenewal.paidAt': null,
+        'nextRenewal.plan': null,
+        'nextRenewal.activationDate': null,
+        'nextRenewal.expiresAt': null,
+        'nextRenewal.invoiceNumber': null,
+        'nextRenewal.price': null,
+        'nextRenewal.multiYearCount': null,
+        'nextRenewal.committedCount': null,
+        'nextRenewal.holdersToRemove': null,
+      },
+    };
+    if (queuedInvoice)
+      update.$addToSet = { hiddenInvoiceNumbers: normalizeInvoiceNumber(queuedInvoice) };
+
+    const updated = await Model.findByIdAndUpdate(registrationId, update, { new: true });
+    return res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
 // ─── POST /api/payments/auto-activate-renewal (authenticated user) ─────────────
 // Called by the user's own subscription page when the page detects that a queued
 // renewal's activationDate has already passed.  Only activates if:

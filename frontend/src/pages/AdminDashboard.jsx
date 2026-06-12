@@ -36,6 +36,7 @@ import {
   createAdminInvoiceDoc,
   deleteInvoice,
   activateQueuedRenewal,
+  cancelQueuedRenewal,
   activateWirePayment,
   sendRenewalReminders,
   adminHolderUpgrade,
@@ -364,6 +365,21 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
     }
   }
 
+  const [cancelling, setCancelling] = React.useState(false)
+  const handleCancel = async () => {
+    if (!window.confirm(`Delete the queued plan?\n\nThe upcoming ${nrPlanLabel} renewal and its invoice will be removed. The current active plan is unaffected. This cannot be undone.`)) return
+    setCancelling(true)
+    setActivateErr('')
+    try {
+      const res = await cancelQueuedRenewal(record._id, registrationModel)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) {
+      setActivateErr(e?.response?.data?.message || 'Could not delete queued plan.')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   const handleSaveEdit = async () => {
     setSavingEdit(true)
     setEditErr('')
@@ -426,6 +442,13 @@ function NextRenewalSection({ record, registrationModel, onRecordUpdated }) {
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             )}
             {activating ? 'Activating�' : 'Activate Now'}
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white hover:bg-red-50 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-red-600 transition"
+          >
+            {cancelling ? 'Deleting…' : 'Delete Plan'}
           </button>
         </div>
       </div>
@@ -1251,7 +1274,7 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
 }
 
 
-function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated }) {
+function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onDeletePlan, onRecordUpdated }) {
   const fullName = [record.firstName, record.middleName, record.lastName].filter(Boolean).join(' ') || 'Individual'
   const [showInvoices, setShowInvoices] = useState(false)
   const [showRenew, setShowRenew] = useState(false)
@@ -1276,13 +1299,9 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onRecordUp
               >
                 All Invoices
               </button>
-              {record.__noPlan ? (
+              {record.__noPlan && (
                 <button onClick={() => onManagePlan?.(record)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition">
                   Manage Plan
-                </button>
-              ) : record.subscriptionPlan !== 'Unlimited Plan' && (
-                <button onClick={() => setShowRenew(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition">
-                  Renew
                 </button>
               )}
               <button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
@@ -1320,6 +1339,40 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onRecordUp
                 <ViewField label="Price" value={fmtMoney(record.price)} />
               </div>
             </div>
+            {!record.__noPlan && (() => {
+              const planShort = (plan, years) =>
+                plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
+                  : plan === 'Unlimited Plan' ? 'Unlimited'
+                    : plan === '1 Year Subscription Plan' ? '1 Year' : (plan || '—')
+              const unlimited = record.subscriptionPlan === 'Unlimited Plan'
+              const queued = !!record.nextRenewal?.paidAt
+              const expiry = getExpiryStatus(record.expirationDate, { unlimited })
+              return (
+                <div className="border-t border-slate-100 pt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <SectionHead label="Subscription Plan" />
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setShowRenew(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Plan</button>
+                      <button onClick={() => onDeletePlan?.(record)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition">Delete Plan</button>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border-2 border-blue-300 bg-blue-50/60 px-4 py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 rounded-full px-2 py-0.5">Plan</span>
+                        {planShort(record.subscriptionPlan, record.multiYearCount)}
+                        {queued && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-700">Renewed</span>}
+                        {!queued && expiry && <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${expiry.cls}`}>{expiry.label}</span>}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {fmtMoney(record.price)} · {unlimited ? 'No expiry' : (record.expirationDate ? `expires ${fmtDate(record.expirationDate)}` : '—')}{record.invoiceNumber ? ` · ${record.invoiceNumber}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+            {!record.__noPlan && <NextRenewalSection record={record} registrationModel="Individual" onRecordUpdated={onRecordUpdated} />}
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Personal Information" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <ViewField label="First Name" value={record.firstName} />
@@ -1359,7 +1412,6 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onRecordUp
                 <ViewField label="Updated" value={fmtDate(record.updatedAt)} />
               </div>
             </div>
-            <NextRenewalSection record={record} registrationModel="Individual" onRecordUpdated={onRecordUpdated} />
           </div>
         </motion.div>
         <AnimatePresence>
@@ -5557,6 +5609,7 @@ export default function AdminDashboard() {
           onClose={closeView}
           onEdit={openEditFromView}
           onManagePlan={handleManagePlan}
+          onDeletePlan={(r) => { closeView(); handleDelete(r._id, 'individual') }}
           onRecordUpdated={(updated) => {
             if (!updated) return
             setIndividuals(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))

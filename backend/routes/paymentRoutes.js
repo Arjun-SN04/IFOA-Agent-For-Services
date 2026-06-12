@@ -9,6 +9,7 @@ const {
   getPaymentById,
   getAllPayments,
   activateQueuedRenewal,
+  cancelQueuedRenewal,
   autoActivateRenewal,
   refreshInvoice,
   sendRenewalReminders,
@@ -44,6 +45,9 @@ router.post('/admin/send-renewal-reminders', auth, adminOnly, sendRenewalReminde
 
 // ── Admin: immediately activate a queued nextRenewal on a registration ───────
 router.post('/admin/activate-renewal', auth, adminOnly, activateQueuedRenewal);
+
+// ── Admin: cancel/remove a queued nextRenewal on a registration ──────────────
+router.post('/admin/cancel-renewal', auth, adminOnly, cancelQueuedRenewal);
 
 // ── User: auto-activate a queued renewal whose activation date has passed ────
 // Safe for non-admins — ownership + activationDate-past guard enforced in controller.

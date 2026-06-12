@@ -1594,6 +1594,118 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
   )
 }
 
+// Individual-side "Current Subscription" block — mirrors the airline
+// ActiveSubscriptionBlock but for a single person (no holders/groups). Shows the
+// active plan clearly and, when a renewal is queued, the upcoming plan below it.
+function IndividualSubscriptionBlock({ s, active }) {
+  const [expanded, setExpanded] = useState(false)
+  const money2 = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const unlimited = s.subscriptionPlan === 'Unlimited Plan'
+  const exp = getExpiryStatus(s.expirationDate, { unlimited })
+  const days = s.expirationDate ? Math.ceil((new Date(s.expirationDate) - new Date()) / 86400000) : null
+  const expired = active && !unlimited && days !== null && days <= 0
+  const nr = s.nextRenewal
+  const queued = !!(nr?.paidAt && nr.activationDate && new Date(nr.activationDate) > new Date())
+  const planLabel = planShortLabel(s.subscriptionPlan, s.multiYearCount)
+  const queuedLabel = queued ? planShortLabel(nr.plan, nr.multiYearCount) : ''
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+
+  const headBadge = queued
+    ? <span className="text-[9px] font-black uppercase tracking-wide text-emerald-300">Renewed</span>
+    : expired
+      ? <span className="text-[9px] font-black uppercase tracking-wide text-red-300">Expired</span>
+      : exp ? <span className="text-[9px] font-black uppercase tracking-wide text-amber-300">{exp.label}</span> : null
+
+  return (
+    <motion.div layout className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" transition={{ layout: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setExpanded(v => !v)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(v => !v) } }}
+        className="group cursor-pointer"
+      >
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 sm:px-5 py-3.5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-widest text-white">Current Subscription</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-extrabold text-white">{planLabel}</span>
+              {headBadge}
+            </div>
+            <p className="mt-1 text-[11px] text-white/80">{money2(s.price)}{!unlimited && s.expirationDate ? ` · expires ${fmtD(s.expirationDate)}` : unlimited ? ' · No expiry' : ''}</p>
+          </div>
+          <motion.svg
+            animate={{ rotate: expanded ? 180 : 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            className="w-4 h-4 text-white flex-shrink-0 mt-1"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </motion.svg>
+        </div>
+
+        {queued && (
+          <div className="px-4 sm:px-5 py-2.5 bg-emerald-50 border-b border-emerald-100">
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Upcoming Plan · Queued</p>
+            <p className="mt-0.5 text-[11px] text-emerald-800 font-semibold">
+              {queuedLabel}{nr.price != null ? ` · ${money2(nr.price)}` : ''} · activates {fmtD(nr.activationDate)}
+            </p>
+          </div>
+        )}
+
+        <div className="px-4 sm:px-5 py-2.5 flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
+          <span>{expanded ? 'Hide details' : 'View full details'}</span>
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 sm:px-5 py-4 space-y-3 border-t border-slate-100">
+              {/* Active plan card */}
+              <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white bg-indigo-600 rounded-full px-2 py-0.5">Active Plan</span>
+                  {headBadge && <span className="text-[9px] font-black uppercase tracking-wide text-slate-600">{queued ? 'Renewed' : expired ? 'Expired' : exp?.label}</span>}
+                </div>
+                <p className="mt-2 text-sm font-extrabold text-slate-900">{planLabel}</p>
+                <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                  <span>Price · <span className="font-bold text-slate-900">{money2(s.price)}</span></span>
+                  <span>{unlimited ? 'Expiry · Never' : `Expires · ${fmtD(s.expirationDate)}`}</span>
+                  <span>Start · {s.subscriptionDate ? fmtD(s.subscriptionDate) : '—'}</span>
+                  {s.invoiceNumber && <span className="truncate">Invoice · {String(s.invoiceNumber).replace(/^Invoice\s+/i, '')}</span>}
+                </div>
+              </div>
+
+              {/* Queued plan card */}
+              {queued && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white bg-emerald-600 rounded-full px-2 py-0.5">Queued Plan</span>
+                    <span className="text-[9px] font-black uppercase tracking-wide text-emerald-700">Activates {fmtD(nr.activationDate)}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-extrabold text-slate-900">{queuedLabel}</p>
+                  <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                    {nr.price != null && <span>Price · <span className="font-bold text-slate-900">{money2(nr.price)}</span></span>}
+                    {nr.expiresAt && <span>New expiry · {fmtD(nr.expiresAt)}</span>}
+                  </div>
+                  <p className="mt-2 text-[10px] text-emerald-700">This plan starts automatically when your current plan ends.</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
 // Resolve which plan a certificate holder is on. Holders in a holderGroup use the
 // group's plan/expiry; otherwise they fall back to the airline's base plan.
 function holderPlanInfo(h, sub) {
@@ -3576,6 +3688,13 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               <Row label="Secondary FAA Certificate #" value={s.secondaryFaaCertificateNumber || '—'} />
               <Row label="Secondary IACRA FTN #" value={s.secondaryIacraTrackingNumber || '—'} />
               <Row label="Submitted" value={fmt(s.submittedAt || s.createdAt)} />
+              <div className="py-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="h-4 w-1 rounded-full bg-slate-900" />
+                  <p className="text-sm font-extrabold text-slate-900">Current Subscription</p>
+                </div>
+                <IndividualSubscriptionBlock s={s} active={active} />
+              </div>
             </>
           )}
         </div>

@@ -96,6 +96,10 @@ export const savePaymentInvoiceDraft = (paymentId, invoiceDraft, invoiceNumber) 
 export const activateQueuedRenewal = (registrationId, registrationModel) =>
   API.post('/payments/admin/activate-renewal', { registrationId, registrationModel })
 
+// Admin: cancel/remove the queued nextRenewal on a registration
+export const cancelQueuedRenewal = (registrationId, registrationModel) =>
+  API.post('/payments/admin/cancel-renewal', { registrationId, registrationModel })
+
 // Admin: send renewal reminder emails to selected users
 export const sendRenewalReminders = (recipients) =>
   API.post('/payments/admin/send-renewal-reminders', { recipients })
