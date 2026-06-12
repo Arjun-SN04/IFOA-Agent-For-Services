@@ -2456,3 +2456,11 @@ exports.getAllPayments = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
+// ─── Internal helpers re-exported for the wire-approval flow ───────────────────
+// activateWirePayment (airlinesController) replays an admin-approved wire request
+// through the exact same logic as a successful card payment.
+exports._applyRenewalToRegistration = applyRenewalToRegistration;
+exports._applyGroupRenewal          = applyGroupRenewal;
+exports._applyHolderUpgrade         = applyHolderUpgrade;

@@ -142,6 +142,10 @@ const AirlinesSchema = new mongoose.Schema({
   wireRequestPurpose: { type: String, default: null },
   wireRequestRenewalPlan: { type: String, default: null },
   wireRequestAdditionalCount: { type: Number, default: null },
+  // Full snapshot of what the airline requested at wire-checkout time (plan, years,
+  // counts, merge target, amount…). Admin approval replays it through the same
+  // helpers as a card payment so the activated subscription matches the request.
+  wireRequestDetails: { type: mongoose.Schema.Types.Mixed, default: null },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'failed'],

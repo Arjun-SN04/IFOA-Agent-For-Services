@@ -27,6 +27,7 @@ const {
   requestAirlineInvoice,
   renewAirlinesSubscription,
   activateWirePayment,
+  declineWirePayment,
   activateGroupRenewalNow,
   deleteHolderGroup,
 } = require('../controller/airlinesController');
@@ -136,6 +137,7 @@ router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, update
 router.patch('/:id/request-invoice',        authMiddleware, requireOwnership, requestAirlineInvoice);
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markAirlinesInvoiceGenerated);
 router.patch('/:id/activate-wire', authMiddleware, requireAdmin, activateWirePayment);
+router.patch('/:id/decline-wire',  authMiddleware, requireAdmin, declineWirePayment);
 // admin manual holder-upgrade (increase committed count + create holder group)
 router.post('/:id/admin-holder-upgrade', authMiddleware, requireAdmin, adminHolderUpgrade);
 router.post('/:id/holder-group/:groupId/mark-paid', authMiddleware, requireAdmin, markHolderGroupPaid);

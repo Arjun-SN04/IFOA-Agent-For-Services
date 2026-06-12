@@ -55,6 +55,7 @@ export const updateIndividualRenewalDetails = (id, data) => API.patch(`/individu
 export const updateAirlinesRenewalDetails   = (id, data) => API.patch(`/airlines/${id}/renewal-details`, data)
 export const markAirlinesPaid               = (id)       => API.patch(`/airlines/${id}/mark-paid`)
 export const activateWirePayment            = (id)       => API.patch(`/airlines/${id}/activate-wire`)
+export const declineWirePayment             = (id)       => API.patch(`/airlines/${id}/decline-wire`)
 export const markAirlinesInvoiceGenerated   = (id)       => API.patch(`/airlines/${id}/mark-invoice-generated`)
 export const createAdminAirlineForm         = (data)     => API.post('/airlines/admin/create-form', data)
 export const requestAirlineInvoice          = (id, data) => API.patch(`/airlines/${id}/request-invoice`, data)

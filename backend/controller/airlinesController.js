@@ -1279,14 +1279,31 @@ exports.requestAirlineInvoice = async (req, res) => {
     }
 
     const purpose = req.body.purpose || 'initial';
+
+    // Whitelisted snapshot of the requested change — replayed on admin approval
+    // through the same apply* helpers as a successful card payment.
+    const d = req.body.details || {};
+    const wireRequestDetails = (purpose === 'renewal' || purpose === 'holder-upgrade') ? {
+      purpose,
+      plan:                  d.plan || req.body.renewalPlan || null,
+      multiYearCount:        d.multiYearCount ? Number(d.multiYearCount) : null,
+      exactCount:            d.exactCount ? Number(d.exactCount) : null,
+      holdersToRemove:       Array.isArray(d.holdersToRemove) && d.holdersToRemove.length ? d.holdersToRemove.map(String) : null,
+      holderGroupId:         d.holderGroupId ? String(d.holderGroupId) : null,
+      mergeTarget:           d.mergeTarget ? String(d.mergeTarget) : null,
+      additionalHolderCount: d.additionalHolderCount ? Number(d.additionalHolderCount) : (req.body.additionalHolderCount ? Number(req.body.additionalHolderCount) : null),
+      amount:                d.amount != null ? Number(d.amount) : null,
+    } : null;
+
     const update = {
       wirePaymentRequested: true,
       wirePaymentRequestedAt: Number.isNaN(now.getTime()) ? new Date() : now,
       paymentStatus: 'pending',
       invoiceStatus: 'Wire Requested',
       wireRequestPurpose: purpose,
-      wireRequestRenewalPlan: req.body.renewalPlan || null,
-      wireRequestAdditionalCount: req.body.additionalHolderCount ? Number(req.body.additionalHolderCount) : null,
+      wireRequestRenewalPlan: req.body.renewalPlan || wireRequestDetails?.plan || null,
+      wireRequestAdditionalCount: wireRequestDetails?.additionalHolderCount ?? (req.body.additionalHolderCount ? Number(req.body.additionalHolderCount) : null),
+      wireRequestDetails,
     };
     // Only reset status to Pending for initial requests — renewal/holder-upgrade airlines are already active
     if (purpose === 'initial') {
@@ -1883,6 +1900,103 @@ exports.activateWirePayment = async (req, res) => {
     const activationDate = doc.subscriptionDate ? new Date(doc.subscriptionDate) : now;
     const expiresAt      = doc.expirationDate    ? new Date(doc.expirationDate)   : null;
 
+    // ── Detail-based approval — replay the airline's exact request through the
+    // same helpers as a successful card payment (full parity: plan, years, counts,
+    // group renewals, merge targets). Falls back to the legacy path when the
+    // request predates wireRequestDetails or was admin-edited via legacy fields.
+    const details = doc.wireRequestDetails;
+    if (details && (purpose === 'renewal' || purpose === 'holder-upgrade')) {
+      const {
+        _applyRenewalToRegistration,
+        _applyGroupRenewal,
+        _applyHolderUpgrade,
+      } = require('./paymentController');
+
+      const invoiceNum = await generateInvoiceNumber();
+      const amount     = Number(details.amount != null ? details.amount : (doc.amountPaid || 0));
+      const synthetic  = {
+        // Fresh ObjectId: a synthetic doc with _id undefined would make the
+        // helpers' Payment.findById/findByIdAndUpdate calls match arbitrary docs
+        // (Mongoose strips undefined query values). A fresh id matches nothing.
+        _id:                    new (require('mongoose').Types.ObjectId)(),
+        newSubscriptionPlan:    details.plan || null,
+        renewalMultiYearCount:  details.multiYearCount || null,
+        renewalExactCount:      details.exactCount || null,
+        renewalHoldersToRemove: details.holdersToRemove || null,
+        mergeTarget:            details.mergeTarget || '',
+        amountDollars:          amount,
+        invoiceNumber:          invoiceNum,
+        paidAt:                 doc.wirePaymentRequestedAt || now,
+        stripePaymentIntentId:  null,
+      };
+
+      let applied;
+      if (purpose === 'renewal') {
+        applied = details.holderGroupId
+          ? await _applyGroupRenewal(doc._id, 'Airlines', synthetic, details.holderGroupId)
+          : await _applyRenewalToRegistration(doc._id, 'Airlines', synthetic);
+      } else {
+        const addCount = Number(details.additionalHolderCount || 0);
+        const ppc      = addCount > 0 && amount > 0 ? Math.round((amount / addCount / (details.multiYearCount || 1)) * 100) / 100 : 0;
+        applied = await _applyHolderUpgrade(doc._id, 'Airlines', synthetic, {
+          additionalCount: addCount,
+          batchPlan:       details.plan || doc.subscriptionPlan,
+          batchYears:      details.multiYearCount || null,
+          newPpc:          ppc || undefined,
+          mergeTarget:     details.mergeTarget || '',
+        });
+      }
+      if (!applied)
+        return res.status(400).json({ success: false, message: 'Could not apply the requested change.' });
+
+      // Clear all wire-request flags; payment is confirmed via wire.
+      const updated = await Airlines.findByIdAndUpdate(req.params.id, {
+        $set: {
+          wirePaymentRequested: false, wirePaymentRequestedAt: null,
+          wireRequestPurpose: null, wireRequestRenewalPlan: null,
+          wireRequestAdditionalCount: null, wireRequestDetails: null,
+          paymentStatus: 'paid', invoiceStatus: 'Paid',
+        },
+      }, { new: true });
+
+      // Canonical invoice for the approved request.
+      try {
+        const isUpgrade = purpose === 'holder-upgrade';
+        const addCount  = Number(details.additionalHolderCount || 0);
+        const count     = isUpgrade
+          ? addCount
+          : Number(details.exactCount || doc.committedCount || doc.holderCountValue || 0);
+        const years     = Number(details.multiYearCount || 1);
+        const unitPpc   = count > 0 ? Math.round((amount / count / years) * 100) / 100 : 0;
+        await createOrUpdateInvoice({
+          registrationId:    doc._id,
+          registrationModel: 'Airlines',
+          snapshot: {
+            name:             [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+            email:            doc.email || '',
+            isAirline:        true,
+            airlineName:      doc.airlineName || '',
+            subscriptionPlan: details.plan || doc.subscriptionPlan,
+            holderCount:      count,
+            pricePerCert:     unitPpc,
+            subtotal:         amount,
+            tax:              0,
+            totalPaid:        amount,
+          },
+          amountDollars:         amount,
+          paidAt:                now,
+          paymentMethod:         'wire',
+          existingInvoiceNumber: invoiceNum,
+          purpose:               isUpgrade ? 'holder-upgrade' : 'renewal',
+        });
+      } catch (e) {
+        console.warn('[activateWirePayment] Detail-based invoice failed:', e.message);
+      }
+
+      const queued = purpose === 'renewal' && !!updated?.nextRenewal?.paidAt;
+      return res.json({ success: true, activated: !queued, queued, data: updated });
+    }
+
     if (purpose === 'renewal') {
       const renewalPlan = doc.wireRequestRenewalPlan || doc.subscriptionPlan || '1 Year Subscription Plan';
       const invoiceNum  = doc.invoiceNumber || await generateInvoiceNumber();
@@ -2083,6 +2197,37 @@ exports.activateWirePayment = async (req, res) => {
 
       return res.json({ success: true, activated: true, data: updated });
     }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: decline a pending wire-payment request ─────────────────────────────
+// Clears the request flags + details without changing the subscription. For an
+// already-active airline (renewal / holder-upgrade request) payment/invoice
+// statuses are restored to paid; an initial request reverts to pending.
+exports.declineWirePayment = async (req, res) => {
+  try {
+    const doc = await Airlines.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+    if (!doc.wirePaymentRequested)
+      return res.status(400).json({ success: false, message: 'No pending wire request on this record.' });
+
+    const wasPaid = !!doc.isPaid;
+    const updated = await Airlines.findByIdAndUpdate(req.params.id, {
+      $set: {
+        wirePaymentRequested: false,
+        wirePaymentRequestedAt: null,
+        wireRequestPurpose: null,
+        wireRequestRenewalPlan: null,
+        wireRequestAdditionalCount: null,
+        wireRequestDetails: null,
+        paymentStatus: wasPaid ? 'paid' : 'pending',
+        invoiceStatus: wasPaid ? 'Paid' : 'Pending',
+      },
+    }, { new: true });
+
+    return res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

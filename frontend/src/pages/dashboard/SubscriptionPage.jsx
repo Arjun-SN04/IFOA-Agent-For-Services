@@ -1495,7 +1495,7 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
         className="group cursor-pointer"
       >
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 sm:px-5 py-3.5 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[9px] font-black uppercase tracking-widest text-white">Current Subscription</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {groups.length > 0 && (
@@ -1506,6 +1506,40 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
             <p className="mt-1 text-[11px] text-white">
               {planCount} plan{planCount !== 1 ? 's' : ''}
             </p>
+            {s.wirePaymentRequested && (() => {
+              const wd = s.wireRequestDetails || {}
+              const purpose = s.wireRequestPurpose || 'renewal'
+              const isHolderUpgrade = purpose === 'holder-upgrade'
+              const plan = wd.plan || s.wireRequestRenewalPlan || s.subscriptionPlan || '—'
+              const addCount = wd.additionalHolderCount ?? s.wireRequestAdditionalCount ?? null
+              const amt = wd.amount ? (wd.amount / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null
+              const submittedAt = s.wirePaymentRequestedAt ? new Date(s.wirePaymentRequestedAt) : null
+              const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+              return (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <svg className="w-3 h-3 text-white/60 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z" />
+                    </svg>
+                    <span className="text-[10px] font-bold text-white">Wire Transfer Under Review</span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-[9px] font-bold text-white/80 uppercase tracking-wide">
+                      <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse inline-block" />
+                      Pending
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-white/60 leading-relaxed">
+                    {isHolderUpgrade
+                      ? <>+<strong className="text-white/80">{addCount != null ? addCount : '?'} holder{addCount !== 1 ? 's' : ''}</strong> request pending approval</>
+                      : <>Renewal — <strong className="text-white/80">{plan}</strong> pending approval</>
+                    }
+                  </p>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap text-[10px] text-white/40">
+                    {amt && <span>{amt}</span>}
+                    {submittedAt && <span>Submitted {fmtDate(submittedAt)}</span>}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             {hasRenewable && (
@@ -1717,6 +1751,101 @@ function holderPlanInfo(h, sub) {
   return { label: planShortLabel(sub.subscriptionPlan, sub.multiYearCount), isGroup: false, expiry: sub.expirationDate }
 }
 
+// ─── Payment method chooser (airlines) — Card vs Wire Transfer ────────────────
+// Shown before any airline payment (renewal / holder expansion). Card continues
+// to the Stripe modal as before; Wire submits an invoice request carrying the
+// full requested change — admin approves (activates exactly what was requested)
+// or declines it.
+function PaymentMethodStep({ amountLabel, summary, onCard, onWire, onBack, submitting, error }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-modal-backdrop">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={submitting ? undefined : onBack} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-modal-panel">
+        <div className="px-5 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600 mb-1">Choose Payment Method</p>
+            <h3 className="text-lg font-black text-slate-900">How would you like to pay?</h3>
+            {summary && <p className="text-xs text-slate-500 mt-1">{summary}</p>}
+          </div>
+          <button onClick={onBack} disabled={submitting}
+            className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-600 flex items-center justify-center transition flex-shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 font-semibold">{error}</div>}
+
+          <button onClick={onCard} disabled={submitting}
+            className="w-full text-left rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 px-4 py-3.5 transition group disabled:opacity-60">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h2m4 0h2M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-slate-900">Credit / Debit Card</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Pay {amountLabel} now — activates instantly.</p>
+              </div>
+              <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+
+          <button onClick={onWire} disabled={submitting}
+            className="w-full text-left rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 px-4 py-3.5 transition group disabled:opacity-60">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-slate-900">{submitting ? 'Sending request…' : 'Wire Transfer'}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Request an invoice for {amountLabel} — admin reviews and activates your requested plan on approval.</p>
+              </div>
+              <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Wire request submitted — confirmation with bank details (mirrors registration Step 4).
+function WireRequestSentView({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-modal-backdrop">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-modal-panel">
+        <div className="flex flex-col items-center justify-center px-6 py-9 text-center">
+          <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-200 mb-5">
+            <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-blue-600 mb-2">Request Sent to Admin</p>
+          <h3 className="text-xl font-black text-slate-900 mb-2">Wire Request Submitted!</h3>
+          <p className="text-sm text-slate-500 mb-4 max-w-xs leading-relaxed">Our team will review your request. Once approved, your requested plan activates automatically.</p>
+          <div className="w-full max-w-xs rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 mb-6 text-left space-y-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-3">Bank Details for Wire Transfer</p>
+            {[['Bank', 'Bank of America'], ['Account Owner', 'IFOA USA Corp'], ['SWIFT', 'BOFAUS3N'], ['Account #', '8981 5632 1560']].map(([k, v]) => (
+              <div key={k} className="flex justify-between text-sm">
+                <span className="text-slate-400 font-medium">{k}</span>
+                <span className="font-bold text-slate-800">{v}</span>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={onClose}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-blue-200">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
   // "Current slots" = the CURRENT base plan + its current-period upgrade slots
   // (perpetual Unlimited + upgrades bought this base period). Previous-period upgrade
@@ -1736,6 +1865,11 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
   )
   const [batchYears, setBatchYears] = useState(2) // for Multi-Year
   const [showPayment, setShowPayment] = useState(false)
+  // Payment-method chooser (Card vs Wire) + wire request lifecycle.
+  const [showMethodStep, setShowMethodStep] = useState(false)
+  const [wireSubmitting, setWireSubmitting] = useState(false)
+  const [wireSent, setWireSent] = useState(false)
+  const [wireErr, setWireErr] = useState('')
   // '' = create a separate independent plan (default). 'base' or a group _id = merge
   // the added holders into that existing plan (they adopt its expiry).
   const [mergeTarget, setMergeTarget] = useState('')
@@ -1819,6 +1953,53 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
       if (attempt < 4) await sleep(700)
     }
     return latest
+  }
+
+  // ── Wire request: send the FULL requested holder expansion to admin ──────────
+  const submitWireRequest = async () => {
+    setWireSubmitting(true); setWireErr('')
+    try {
+      await API.patch(`/airlines/${sub._id}/request-invoice`, {
+        purpose: 'holder-upgrade',
+        additionalHolderCount: additionalCount,
+        details: {
+          plan: batchPlan,
+          multiYearCount: isMultiYear ? Math.max(2, batchYears) : null,
+          additionalHolderCount: additionalCount,
+          mergeTarget: mergeTarget || null,
+          amount: dueAmount,
+        },
+      })
+      setWireSent(true)
+    } catch (e) {
+      setWireErr(e?.response?.data?.message || 'Could not send the wire request. Please try again.')
+    } finally {
+      setWireSubmitting(false)
+    }
+  }
+
+  if (wireSent) {
+    return (
+      <WireRequestSentView onClose={() => {
+        forceUnlockScroll()
+        window.dispatchEvent(new Event('ifoa-subscription-refresh'))
+        onClose()
+      }} />
+    )
+  }
+
+  if (showMethodStep) {
+    return (
+      <PaymentMethodStep
+        amountLabel={`$${dueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+        summary={`Expand holders — +${additionalCount} on ${planShortLabel(batchPlan, isMultiYear ? batchYears : null)}`}
+        submitting={wireSubmitting}
+        error={wireErr}
+        onBack={() => { setWireErr(''); setShowMethodStep(false) }}
+        onCard={() => { setShowMethodStep(false); setShowPayment(true) }}
+        onWire={submitWireRequest}
+      />
+    )
   }
 
   if (showPayment) {
@@ -1990,7 +2171,7 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
             className="flex-1 rounded-xl border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
             Cancel
           </button>
-          <button onClick={() => setShowPayment(true)}
+          <button onClick={() => setShowMethodStep(true)}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-bold text-white transition"
             style={{ background: '#0000ff' }}>
             Proceed to Payment →
@@ -2081,6 +2262,11 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   const [showPayment, setShowPayment] = useState(false)
   const [showEditDetails, setShowEditDetails] = useState(false)
   const [showHolderSelector, setShowHolderSelector] = useState(false)
+  // Airline payment-method chooser (Card vs Wire) + wire request lifecycle.
+  const [showMethodStep, setShowMethodStep] = useState(false)
+  const [wireSubmitting, setWireSubmitting] = useState(false)
+  const [wireSent, setWireSent] = useState(false)
+  const [wireErr, setWireErr] = useState('')
 
   // Holder decrease warning: which holders to KEEP when count drops below current
   const currentHolderCount = unitHolders.length
@@ -2169,6 +2355,54 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
           if (updated.multiYearCount) setMultiYearRenewCount(Number(updated.multiYearCount))
           setShowEditDetails(false)
         }}
+      />
+    )
+  }
+
+  // ── Wire request: send the FULL requested renewal to admin for approval ──────
+  const submitWireRequest = async () => {
+    setWireSubmitting(true); setWireErr('')
+    try {
+      await API.patch(`/airlines/${currentSub._id}/request-invoice`, {
+        purpose: 'renewal',
+        renewalPlan: plan,
+        details: {
+          plan,
+          multiYearCount: plan === 'Multiple Years Subscription Plan' ? Math.max(2, multiYearRenewCount) : null,
+          exactCount: isAirline ? exactCount : null,
+          holdersToRemove: holdersToRemove && holdersToRemove.length ? holdersToRemove : null,
+          holderGroupId: isGroup ? String(group._id) : null,
+          mergeTarget: isGroup && mergeMode && canMergeToBase ? 'base' : null,
+          amount: renewalPrice,
+        },
+      })
+      setWireSent(true)
+    } catch (e) {
+      setWireErr(e?.response?.data?.message || 'Could not send the wire request. Please try again.')
+    } finally {
+      setWireSubmitting(false)
+    }
+  }
+
+  if (wireSent) {
+    return (
+      <WireRequestSentView onClose={() => {
+        window.dispatchEvent(new Event('ifoa-subscription-refresh'))
+        onClose()
+      }} />
+    )
+  }
+
+  if (showMethodStep) {
+    return (
+      <PaymentMethodStep
+        amountLabel={`$${renewalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+        summary={`Renewal — ${planShortLabel(plan, multiYearRenewCount)}${isAirline ? ` · ${exactCount} holder${exactCount !== 1 ? 's' : ''}` : ''}`}
+        submitting={wireSubmitting}
+        error={wireErr}
+        onBack={() => { setWireErr(''); setShowMethodStep(false) }}
+        onCard={() => { setShowMethodStep(false); setShowPayment(true) }}
+        onWire={submitWireRequest}
       />
     )
   }
@@ -2475,12 +2709,12 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                 Cancel
               </button>
               <button
-                onClick={() => setShowPayment(true)}
+                onClick={() => isAirline ? setShowMethodStep(true) : setShowPayment(true)}
                 disabled={chargedCents <= 0 || !selectionValid}
                 title={!selectionValid ? `Select at least 1 holder to keep` : undefined}
                 className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:hover:bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-all"
               >
-                {isAirline ? 'Pay with Card' : 'Proceed to Payment'}
+                Proceed to Payment
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                 </svg>
@@ -3117,6 +3351,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
     !s._autoActivateFailed
 
   const showRenew = active && !isUnlimited && !hasQueuedRenewalDue && !s.nextRenewal?.paidAt &&
+    !s.wirePaymentRequested &&
     (daysToExpiry === null || daysToExpiry <= 60)
 
   const [cachedInvoiceDocs, setCachedInvoiceDocs] = useState(null)
@@ -3511,7 +3746,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                 Invoices
               </button>
             )}
-            {isAirline && active && !isExpired && (
+            {isAirline && active && !isExpired && !s.wirePaymentRequested && (
               <button
                 onClick={onUpgrade}
                 className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition"
@@ -3586,10 +3821,10 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                     <ActiveSubscriptionBlock
                       s={s}
                       active={active}
-                      onAddHolders={onAddHolders}
+                      onAddHolders={s.wirePaymentRequested ? null : onAddHolders}
                       onManageGroup={onManageGroup}
-                      onRenew={onRenew}
-                      onRenewGroup={onRenewGroup}
+                      onRenew={s.wirePaymentRequested ? null : onRenew}
+                      onRenewGroup={s.wirePaymentRequested ? null : onRenewGroup}
                     />
                   </div>
                 )
@@ -3604,14 +3839,16 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                         <p className="text-xs font-bold text-slate-700">{remaining} slot{remaining !== 1 ? 's' : ''} not yet filled</p>
                         <p className="text-xs text-slate-500 mt-0.5">Total payment covers all committed slots.</p>
                       </div>
-                      <button onClick={onAddHolders}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-lg transition-all w-full sm:w-auto"
-                        style={{ background: '#0000ff' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}>
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                        Add Certificate Holder
-                      </button>
+                      {!s.wirePaymentRequested && (
+                        <button onClick={onAddHolders}
+                          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-lg transition-all w-full sm:w-auto"
+                          style={{ background: '#0000ff' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#0000e6'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#0000ff'}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                          Add Certificate Holder
+                        </button>
+                      )}
                     </div>
                   </div>
                 )

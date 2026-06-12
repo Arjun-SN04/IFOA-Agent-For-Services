@@ -38,6 +38,7 @@ import {
   activateQueuedRenewal,
   cancelQueuedRenewal,
   activateWirePayment,
+  declineWirePayment,
   sendRenewalReminders,
   adminHolderUpgrade,
   markHolderGroupPaid,
@@ -1547,6 +1548,20 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
     }
   }
 
+  const [declining, setDeclining] = React.useState(false)
+  const handleDecline = async () => {
+    if (!window.confirm(`Decline this wire payment request?\n\nThe request will be removed and the subscription stays unchanged. The airline can submit a new request or pay by card.`)) return
+    setDeclining(true); setActivateErr('')
+    try {
+      const res = await declineWirePayment(record._id)
+      onRecordUpdated?.(res.data?.data || res.data)
+    } catch (e) {
+      setActivateErr(e?.response?.data?.message || 'Decline failed.')
+    } finally {
+      setDeclining(false)
+    }
+  }
+
   const handleActivate = async () => {
     const purposeStr = record.wireRequestPurpose === 'renewal' ? 'renewal' : 'activation'
     const activationDate = record.subscriptionDate ? new Date(record.subscriptionDate) : new Date()
@@ -1665,7 +1680,14 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
             ) : (
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             )}
-            {activating ? 'Activating…' : 'Activate Now'}
+            {activating ? 'Activating…' : 'Approve & Activate'}
+          </button>
+          <button
+            onClick={handleDecline}
+            disabled={declining || activating}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white hover:bg-red-50 disabled:opacity-50 px-3 py-1.5 text-[11px] font-bold text-red-600 transition"
+          >
+            {declining ? 'Declining…' : 'Decline'}
           </button>
         </div>
       </div>
@@ -1762,6 +1784,22 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
           )}
           {record.wireRequestPurpose === 'holder-upgrade' && record.wireRequestAdditionalCount && (
             <ViewField label="Additional Holders" value={`+${record.wireRequestAdditionalCount}`} />
+          )}
+          {/* Full request snapshot — exactly what the airline asked for at checkout. */}
+          {record.wireRequestDetails?.multiYearCount && (
+            <ViewField label="Years" value={`${record.wireRequestDetails.multiYearCount} years`} />
+          )}
+          {record.wireRequestDetails?.exactCount != null && (
+            <ViewField label="Requested Holder Count" value={String(record.wireRequestDetails.exactCount)} />
+          )}
+          {record.wireRequestDetails?.holderGroupId && (
+            <ViewField label="Scope" value="Holder group renewal" />
+          )}
+          {record.wireRequestDetails?.mergeTarget && (
+            <ViewField label="Merge Into" value={record.wireRequestDetails.mergeTarget === 'base' ? 'Base plan' : 'Existing plan'} />
+          )}
+          {record.wireRequestDetails?.amount != null && (
+            <ViewField label="Requested Amount" value={fmtMoney(record.wireRequestDetails.amount)} />
           )}
           <ViewField label="Invoice Status" value={record.invoiceStatus} />
           {record.invoiceNumber && !(
