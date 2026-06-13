@@ -9,7 +9,7 @@ import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
 import InvoiceModal, { downloadInvoicePDF } from '../../components/payment/InvoiceModal'
 import { buildInvoice, serverPaymentToInvoice } from '../../components/payment/PaymentModal'
-import { getAirlineTotal, isActiveHolderGroup, isCurrentBaseGroup, activeGroupSlots, allGroupSlots, currentBaseGroupSlots, renewTierAnchor } from '../../utils/airlineTotal'
+import { getAirlineTotal, isActiveHolderGroup, isCurrentBaseGroup, activeGroupSlots, allGroupSlots, activeCoverageAnchor } from '../../utils/airlineTotal'
 import { getExpiryStatus } from '../../utils/expiryStatus'
 import { getInvoiceStatus } from '../../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
@@ -456,11 +456,11 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
 
   return (
     /* Backdrop */
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden animate-modal-backdrop">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 overflow-hidden animate-modal-backdrop">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal card — scrollable internally */}
-      <div ref={modalRef} className="relative z-10 w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-y-auto animate-modal-panel">
+      <div ref={modalRef} className="relative z-10 w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto animate-modal-panel">
 
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-t-2xl sticky top-0 z-10">
@@ -981,8 +981,8 @@ function AddHoldersModal({ sub, token, onClose, onSuccess, initialGroupId = '' }
   const inp = (err) => `w-full px-3 py-2 border rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-600/15 ${err ? 'border-red-300 bg-red-50/30' : 'border-gray-200 focus:border-blue-600'}`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-modal-backdrop">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col animate-modal-panel max-h-[90vh]">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center bg-black/50 px-4 pt-[88px] sm:pt-[96px] pb-4 animate-modal-backdrop">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col animate-modal-panel max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100">
           <div>
@@ -1305,7 +1305,7 @@ function PlanCard({
 }
 
 // One compact, nested row for a holder-upgrade plan attached to the base plan.
-function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight = false }) {
+function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight = false, onCancelPlan }) {
   const isUnlimited = g.plan === 'Unlimited Plan'
   const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
   const gDays = g.expirationDate ? Math.ceil((new Date(g.expirationDate) - new Date()) / 86400000) : null
@@ -1348,15 +1348,25 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight 
             {invNum && <span className="font-mono">Invoice {invNum}</span>}
           </p>
         </div>
-        {gCanRenew && onRenewGroup && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRenewGroup(g) }}
-            className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-white transition"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            Renew
-          </button>
-        )}
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          {gCanRenew && onRenewGroup && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onRenewGroup(g) }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-2.5 py-1.5 text-[11px] font-bold text-white transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Renew
+            </button>
+          )}
+          {onCancelPlan && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCancelPlan(String(g._id)) }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
       {gQueued && (
         <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600">
@@ -1370,7 +1380,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight 
 
 // The base/main plan rendered as a uniform card — same visual language as
 // AttachedPlanRow so every plan in the expanded view reads consistently.
-function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highlight = false }) {
+function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highlight = false, onCancelPlan, wirePending = false }) {
   const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
   const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
   const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
@@ -1380,15 +1390,26 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
   const baseCanRenew = active && !baseUnlimited && !baseQueued && baseDays !== null && baseDays <= 60
   const baseExp = getExpiryStatus(s.expirationDate, { unlimited: baseUnlimited })
   const invNum = String(s.invoiceNumber || '').replace(/^invoice\s+/i, '')
+  const wd = s.wireRequestDetails || {}
+  const wireAmt = wirePending && wd.amount ? Number(wd.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null
+  const wireSubmitted = wirePending && s.wirePaymentRequestedAt
+    ? new Date(s.wirePaymentRequestedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
   return (
-    <div className={`rounded-xl border bg-white px-3.5 py-3 transition ${highlight && baseCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : baseExpired ? 'border-red-200' : 'border-slate-200'}`}>
+    <div className={`rounded-xl border bg-white px-3.5 py-3 transition ${wirePending ? 'border-blue-300 ring-2 ring-blue-300/40 bg-blue-50/30' : highlight && baseCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : baseExpired ? 'border-red-200' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-bold text-slate-900">Base Plan</span>
-            {baseQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
-            {!baseQueued && baseExpired && <span className="text-[9px] font-bold uppercase tracking-wide text-red-500">Expired</span>}
-            {!baseQueued && !baseExpired && baseExp && <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500">{baseExp.label}</span>}
+            {wirePending && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 border border-blue-200 text-[9px] font-bold text-blue-700 uppercase tracking-wide">
+                <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse inline-block" />
+                Pending
+              </span>
+            )}
+            {!wirePending && baseQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
+            {!wirePending && !baseQueued && baseExpired && <span className="text-[9px] font-bold uppercase tracking-wide text-red-500">Expired</span>}
+            {!wirePending && !baseQueued && !baseExpired && baseExp && <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500">{baseExp.label}</span>}
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
             <span className="font-semibold text-slate-700">{baseFilled}/{baseCommitted}</span> holders
@@ -1398,8 +1419,10 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
             {baseUnlimited ? 'No expiry' : (s.expirationDate ? `Expires ${fmtYMD(s.expirationDate)}` : '—')}
           </p>
           <p className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
-            <span className="font-semibold">Main plan — drives holder capacity</span>
-            {invNum && <span className="font-mono">Invoice {invNum}</span>}
+            {wirePending
+              ? <><span className="font-semibold text-blue-500">Wire transfer under review</span>{wireAmt && <span>{wireAmt}</span>}{wireSubmitted && <span>Submitted {wireSubmitted}</span>}</>
+              : <><span className="font-semibold">Main plan — drives holder capacity</span>{invNum && <span className="font-mono">Invoice {invNum}</span>}</>
+            }
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -1420,6 +1443,14 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
               Manage
             </button>
           )}
+          {onCancelPlan && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCancelPlan('base') }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
       {baseQueued && (
@@ -1432,14 +1463,64 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
   )
 }
 
+// Pending wire-transfer request rendered as a uniform plan card — same visual
+// language as BasePlanRow / AttachedPlanRow so it reads like a plan awaiting
+// approval rather than a banner stuck on the header.
+function WirePendingRow({ s }) {
+  const wd = s.wireRequestDetails || {}
+  const purpose = s.wireRequestPurpose || 'renewal'
+  const isHolderUpgrade = purpose === 'holder-upgrade'
+  const plan = wd.plan || s.wireRequestRenewalPlan || s.subscriptionPlan || '—'
+  const addCount = wd.additionalHolderCount ?? s.wireRequestAdditionalCount ?? null
+  const amt = wd.amount ? Number(wd.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null
+  const submittedAt = s.wirePaymentRequestedAt ? new Date(s.wirePaymentRequestedAt) : null
+  const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+  const invNum = String(wd.invoiceNumber || s.wireRequestInvoiceNumber || '').replace(/^invoice\s+/i, '')
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50/40 px-3.5 py-3 transition">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-900">
+              {isHolderUpgrade ? 'Holder Upgrade' : 'Renewal'}
+            </span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 border border-blue-200 text-[9px] font-bold text-blue-700 uppercase tracking-wide">
+              <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse inline-block" />
+              Pending
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {isHolderUpgrade
+              ? <>+<span className="font-semibold text-slate-700">{addCount != null ? addCount : '?'} holder{addCount !== 1 ? 's' : ''}</span> requested</>
+              : <>Plan <span className="font-semibold text-slate-700">{plan}</span></>
+            }
+            {amt && <><span className="text-slate-300"> · </span><span className="font-semibold text-slate-700">{amt}</span></>}
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
+            <span className="font-semibold">Wire transfer under review</span>
+            {submittedAt && <span>Submitted {fmtDate(submittedAt)}</span>}
+            {invNum && <span className="font-mono">Invoice {invNum}</span>}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Consolidated "current active subscription" — preview header summarises the active
 // plan (and how many plans total); expanding reveals every plan (base + attached)
 // as uniform detail cards.
-function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup }) {
+function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup, onCancelPlan }) {
   const [expanded, setExpanded] = useState(false)
   const [highlightRenew, setHighlightRenew] = useState(false)
 
   const groups = s.holderGroups || []
+  // Wire request scope: an INITIAL request is for the base/existing subscription itself
+  // (show its pending status INSIDE the base plan). renewal/holder-upgrade requests are
+  // for a NEW additive plan → shown as their own pending row.
+  const wirePurpose = s.wirePaymentRequested ? (s.wireRequestPurpose || 'initial') : null
+  const wireIsAdditive = wirePurpose === 'renewal' || wirePurpose === 'holder-upgrade'
+  const baseWirePending = wirePurpose === 'initial'
   const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - allGroupSlots(groups))
   const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
   const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
@@ -1506,40 +1587,6 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
             <p className="mt-1 text-[11px] text-white">
               {planCount} plan{planCount !== 1 ? 's' : ''}
             </p>
-            {s.wirePaymentRequested && (() => {
-              const wd = s.wireRequestDetails || {}
-              const purpose = s.wireRequestPurpose || 'renewal'
-              const isHolderUpgrade = purpose === 'holder-upgrade'
-              const plan = wd.plan || s.wireRequestRenewalPlan || s.subscriptionPlan || '—'
-              const addCount = wd.additionalHolderCount ?? s.wireRequestAdditionalCount ?? null
-              const amt = wd.amount ? (wd.amount / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null
-              const submittedAt = s.wirePaymentRequestedAt ? new Date(s.wirePaymentRequestedAt) : null
-              const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
-              return (
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <svg className="w-3 h-3 text-white/60 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2m6-2a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z" />
-                    </svg>
-                    <span className="text-[10px] font-bold text-white">Wire Transfer Under Review</span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-[9px] font-bold text-white/80 uppercase tracking-wide">
-                      <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse inline-block" />
-                      Pending
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-white/60 leading-relaxed">
-                    {isHolderUpgrade
-                      ? <>+<strong className="text-white/80">{addCount != null ? addCount : '?'} holder{addCount !== 1 ? 's' : ''}</strong> request pending approval</>
-                      : <>Renewal — <strong className="text-white/80">{plan}</strong> pending approval</>
-                    }
-                  </p>
-                  <div className="flex items-center gap-3 mt-1 flex-wrap text-[10px] text-white/40">
-                    {amt && <span>{amt}</span>}
-                    {submittedAt && <span>Submitted {fmtDate(submittedAt)}</span>}
-                  </div>
-                </div>
-              )
-            })()}
           </div>
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
             {hasRenewable && (
@@ -1612,13 +1659,14 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
           >
             <div className="border-t border-slate-100 bg-slate-50/40">
               <div className="px-4 sm:px-5 pt-2.5 pb-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">All plans ({planCount})</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">All plans ({planCount + (wireIsAdditive ? 1 : 0)})</span>
               </div>
               <div className="px-3 sm:px-4 pb-3.5 space-y-2">
-                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} highlight={highlightRenew} />
+                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} wirePending={baseWirePending} />
                 {groups.map((g, gi) => (
-                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} highlight={highlightRenew} />
+                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} />
                 ))}
+                {wireIsAdditive && <WirePendingRow s={s} />}
               </div>
             </div>
           </motion.div>
@@ -1847,15 +1895,15 @@ function WireRequestSentView({ onClose }) {
 }
 
 function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
-  // "Current slots" = the CURRENT base plan + its current-period upgrade slots
-  // (perpetual Unlimited + upgrades bought this base period). Previous-period upgrade
-  // plans are NOT part of the current base count, so they're excluded here even
-  // though they remain as separate active plans.
-  const _committed = Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 0)
-  const _baseCommitted = Math.max(0, _committed - allGroupSlots(sub.holderGroups))
-  const currentCount = _baseCommitted + currentBaseGroupSlots(sub.holderGroups, sub.subscriptionDate)
-  // Business rule: minimum 1 holder per upgrade
-  const minAdditional = 1
+  // "Current slots" = holders already covered by EVERY currently-active plan (base if
+  // live + all active add-ons). Added holders stack on top, so the tier reads at
+  // currentCount + additionalCount. SINGLE SOURCE activeCoverageAnchor — same anchor
+  // the backend charges with, so the displayed price equals what's billed.
+  const currentCount = activeCoverageAnchor(sub, {})
+  // Min holders to add: when active coverage already exists the airline 3-holder floor
+  // is met, so an upgrade can be as small as 1. With NO active coverage (every plan
+  // expired) this batch stands alone and must meet the 3-holder floor itself.
+  const minAdditional = currentCount > 0 ? 1 : 3
 
   const [additionalCount, setAdditionalCount] = useState(minAdditional)
   // Plan this batch of holders will be on (independent of the base plan).
@@ -2028,9 +2076,9 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 animate-modal-backdrop">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-modal-panel flex flex-col max-h-[92vh]">
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-modal-panel flex flex-col max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)]">
 
         {/* Accent bar */}
         <div className="h-0.5 w-full bg-slate-200 flex-shrink-0" />
@@ -2183,6 +2231,225 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/*  CancelPlanModal — airline permanently deletes one of its plans               */
+/*  Flow: (optional) move holders to an active plan → confirm → confirm again    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+function CancelPlanModal({ sub, planRef, token, onClose, onDone }) {
+  const groups = sub.holderGroups || []
+  const isBase = planRef === 'base'
+  const grp = isBase ? null : groups.find(g => String(g._id) === String(planRef))
+  const planLabel = isBase
+    ? `Base Plan — ${planShortLabel(sub.subscriptionPlan, sub.multiYearCount)}`
+    : `${grp?.plan === 'Unlimited Plan' ? 'Lifetime' : 'Upgrade'} — ${planShortLabel(grp?.plan, grp?.multiYearCount)}`
+
+  const planHolders = (sub.certificateHolders || []).filter(h =>
+    isBase ? !h.holderGroupId : String(h.holderGroupId || '') === String(planRef))
+  const hasHolders = planHolders.length > 0
+
+  const baseActive = (sub.isPaid || sub.status === 'Active') &&
+    (sub.subscriptionPlan === 'Unlimited Plan' || !sub.expirationDate || new Date(sub.expirationDate) > new Date())
+
+  // Move targets = currently-active plans other than the one being cancelled.
+  const targets = []
+  if (!isBase && baseActive) targets.push({ ref: 'base', label: `Base Plan — ${planShortLabel(sub.subscriptionPlan, sub.multiYearCount)}` })
+  groups.forEach(g => {
+    if (String(g._id) === String(planRef)) return
+    if (!isActiveHolderGroup(g)) return
+    targets.push({ ref: String(g._id), label: `${g.plan === 'Unlimited Plan' ? 'Lifetime' : 'Upgrade'} — ${planShortLabel(g.plan, g.multiYearCount)}` })
+  })
+
+  // Free slots on a target = its fixed capacity − holders already on it.
+  const targetFreeFor = (ref) => {
+    if (!ref) return 0
+    if (ref === 'base') {
+      const baseOwn = Math.max(0, Number(sub.committedCount || sub.holderCountValue || 0) - allGroupSlots(groups))
+      const filled = (sub.certificateHolders || []).filter(h => !h.holderGroupId).length
+      return Math.max(0, baseOwn - filled)
+    }
+    const g = groups.find(x => String(x._id) === String(ref))
+    if (!g) return 0
+    const filled = (sub.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(ref)).length
+    return Math.max(0, Number(g.count || 0) - filled)
+  }
+
+  const holderName = (h) => h.fullName || h.faaCertificateNumber || h.email || 'Holder'
+
+  const [step, setStep] = useState(hasHolders && targets.length ? 'holders' : 'confirm1')
+  const [holderTarget, setHolderTarget] = useState('') // '' = delete holders with the plan
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
+
+  const chosenFree = holderTarget ? targetFreeFor(holderTarget) : 0
+  const needsSelection = !!holderTarget && planHolders.length > chosenFree
+
+  // When the target changes, pre-select the first `free` holders (the rest would be removed).
+  const pickTarget = (ref) => {
+    setHolderTarget(ref)
+    const free = ref ? targetFreeFor(ref) : 0
+    setSelectedIds(new Set(planHolders.slice(0, free).map(h => String(h._id))))
+  }
+  const toggleHolder = (hid) => setSelectedIds(prev => {
+    const n = new Set(prev)
+    if (n.has(hid)) n.delete(hid)
+    else if (n.size < chosenFree) n.add(hid)
+    return n
+  })
+
+  const movedCount = holderTarget ? (needsSelection ? selectedIds.size : planHolders.length) : 0
+  const removedCount = planHolders.length - movedCount
+  const targetLabel = targets.find(t => t.ref === holderTarget)?.label
+
+  const holderActionLabel = holderTarget
+    ? `Move ${movedCount} holder${movedCount !== 1 ? 's' : ''} to “${targetLabel}”${removedCount > 0 ? `, remove ${removedCount}` : ''}`
+    : hasHolders
+      ? `Permanently remove ${planHolders.length} holder${planHolders.length !== 1 ? 's' : ''} with this plan`
+      : 'No holders on this plan'
+
+  const doCancel = async () => {
+    setBusy(true); setErr('')
+    try {
+      const moveHolderIds = holderTarget ? [...selectedIds] : null
+      const res = await API.post(`/airlines/${sub._id}/cancel-plan`,
+        { planRef, holderTarget: holderTarget || null, moveHolderIds },
+        { headers: { Authorization: `Bearer ${token}` } })
+      onDone(res.data?.data)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Could not cancel the plan.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
+      <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4">
+        <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+          className="w-full max-w-md max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-red-50 text-red-600">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Cancel Plan</p>
+              <p className="text-sm font-extrabold text-slate-900 truncate">{planLabel}</p>
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            {step === 'holders' && (
+              <>
+                <p className="text-xs text-slate-600">
+                  This plan has <strong className="text-slate-900">{planHolders.length} holder{planHolders.length !== 1 ? 's' : ''}</strong>.
+                  Move them to another active plan so they keep coverage, or remove them with the plan.
+                </p>
+                <div className="space-y-1.5">
+                  {targets.map(t => {
+                    const free = targetFreeFor(t.ref)
+                    return (
+                      <label key={t.ref} className={`flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${holderTarget === t.ref ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300'}`}>
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <input type="radio" className="accent-blue-600" checked={holderTarget === t.ref} onChange={() => pickTarget(t.ref)} />
+                          <span className="text-xs font-semibold text-slate-800 truncate">{t.label}</span>
+                        </span>
+                        <span className={`text-[10px] font-bold flex-shrink-0 ${free >= planHolders.length ? 'text-emerald-600' : 'text-amber-600'}`}>{free} free</span>
+                      </label>
+                    )
+                  })}
+                  <label className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition ${holderTarget === '' ? 'border-red-400 bg-red-50/50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="radio" className="accent-red-600" checked={holderTarget === ''} onChange={() => pickTarget('')} />
+                    <span className="text-xs font-semibold text-slate-800">Remove the holders with this plan</span>
+                  </label>
+                </div>
+                {needsSelection && (
+                  <p className="text-[11px] font-semibold text-amber-700">
+                    “{targetLabel}” has only {chosenFree} free slot{chosenFree !== 1 ? 's' : ''} — you'll choose which {chosenFree} of {planHolders.length} holders to move next.
+                  </p>
+                )}
+              </>
+            )}
+
+            {step === 'select' && (
+              <>
+                <p className="text-xs text-slate-600">
+                  Select up to <strong className="text-slate-900">{chosenFree}</strong> holder{chosenFree !== 1 ? 's' : ''} to move to “{targetLabel}”.
+                  The <strong className="text-red-600">{removedCount}</strong> not selected will be permanently removed.
+                </p>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {planHolders.map(h => {
+                    const hid = String(h._id)
+                    const checked = selectedIds.has(hid)
+                    const disabled = !checked && selectedIds.size >= chosenFree
+                    return (
+                      <label key={hid} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition ${checked ? 'border-blue-500 bg-blue-50/60' : disabled ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed' : 'border-slate-200 hover:border-slate-300 cursor-pointer'}`}>
+                        <input type="checkbox" className="accent-blue-600" checked={checked} disabled={disabled} onChange={() => toggleHolder(hid)} />
+                        <span className="text-xs font-semibold text-slate-800 truncate">{holderName(h)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-slate-500">{selectedIds.size}/{chosenFree} selected to move · {removedCount} to remove</p>
+              </>
+            )}
+
+            {step === 'confirm1' && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3">
+                <p className="text-xs font-bold text-amber-800">Cancel this plan?</p>
+                <p className="mt-1 text-[11px] text-amber-700">The plan will be permanently deleted. {holderActionLabel}.</p>
+              </div>
+            )}
+
+            {step === 'confirm2' && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-3.5 py-3">
+                <p className="text-xs font-bold text-red-700">This cannot be undone.</p>
+                <p className="mt-1 text-[11px] text-red-600">Permanently delete <strong>{planLabel}</strong>? {holderActionLabel}.</p>
+              </div>
+            )}
+
+            {err && <p className="text-[11px] font-semibold text-red-600">{err}</p>}
+          </div>
+
+          <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50 flex gap-2.5">
+            <button
+              onClick={() => {
+                if (busy) return
+                if (step === 'confirm2') return setStep('confirm1')
+                if (step === 'confirm1') {
+                  if (needsSelection) return setStep('select')
+                  if (hasHolders && targets.length) return setStep('holders')
+                  return onClose()
+                }
+                if (step === 'select') return setStep('holders')
+                onClose()
+              }}
+              className="flex-1 rounded-xl border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+              {step === 'holders' ? 'Cancel' : 'Back'}
+            </button>
+            {step !== 'confirm2' ? (
+              <button onClick={() => setStep(
+                step === 'holders' ? (needsSelection ? 'select' : 'confirm1')
+                  : step === 'select' ? 'confirm1'
+                    : 'confirm2')}
+                className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 py-2 text-sm font-bold text-white transition">
+                Continue
+              </button>
+            ) : (
+              <button onClick={doCancel} disabled={busy}
+                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 py-2 text-sm font-bold text-white transition">
+                {busy ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /*  RenewModal                                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const INDIVIDUAL_PLANS = [
@@ -2236,7 +2503,15 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   // base plan this group stands alone and must meet the 3-holder minimum itself.
   const baseLiveNow = (sub.status === 'Active' || sub.isPaid) &&
     (sub.subscriptionPlan === 'Unlimited Plan' || !sub.expirationDate || new Date(sub.expirationDate) > new Date())
-  const countMin = isGroup ? (baseLiveNow ? 1 : 3) : 3
+  // ── SINGLE SOURCE: holders already covered by every ACTIVE plan except the one
+  // being renewed. Drives BOTH the tier position (stacking) AND the holder floor.
+  //   Renewing the base  → active add-on groups (Lifetime/Upgrade) act as coverage.
+  //   Renewing a group   → active base (if live) + other active groups.
+  const tierAnchor = activeCoverageAnchor(sub, isGroup ? { excludeGroupId: group._id } : { excludeBase: true })
+  // Any active coverage already meets the airline 3-holder floor → this renewal may
+  // shrink to 1. With nothing active, it stands alone and must start at ≥3.
+  const anyCoverageLive = tierAnchor > 0
+  const countMin = anyCoverageLive ? 1 : 3
 
   // Merge option — a same-plan upgrade group can fold back into the live base plan:
   // its holders become base holders (inherit base plan + expiry) and its slots fold
@@ -2302,14 +2577,18 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   // We never read the stored pricePerCertificate here because the count may
   // have changed, which means the tier (and therefore the rate) may change too.
   //
-  // A group renewal stacks ON TOP of the active base, so its tier is read at the
-  // cumulative position (anchor + exactCount). Example: active base = 6, this
-  // expired add-on renews to 3 → holders sit at positions 7-9, tier read at 9
-  // ("5 to 10"), not 3. With no active base the anchor is 0 (tier from 1).
-  const tierAnchor = isGroup ? renewTierAnchor(sub, group) : 0
+  // tierAnchor (computed above, single source) stacks this renewal on top of the
+  // active coverage, so its tier is read at the cumulative position (anchor + count).
+  // Example: active coverage = 6, renew 3 → holders sit at positions 7-9, tier read
+  // at 9 ("5 to 10"), not 3. With no active coverage the anchor is 0 (tier from 1).
   const tierCount = Math.max(1, tierAnchor + exactCount)
   const renewPpc = isAirline ? getRenewPpc(plan, tierCount) : 0
   const renewRange = isAirline ? airlineRenewRange(tierCount) : null
+  // "Tier updated" flag: the renewal rate differs from the rate this plan currently
+  // carries (volume tier shifted because of the stacked position / new count).
+  const renewPrevRate = Number(isGroup ? (group.pricePerCert || 0) : (sub.pricePerCertificate || sub.pricePerCert || 0))
+  const renewRateChanged = isAirline && renewPrevRate > 0 && renewPpc !== renewPrevRate
+  const newTotalHolders = tierAnchor + exactCount
 
   // For airlines with multi-year plan, multiply by year count (mirrors backend logic)
   const airlineRenewYears = isAirline && plan === 'Multiple Years Subscription Plan'
@@ -2430,10 +2709,10 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop overflow-y-auto">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 animate-modal-backdrop overflow-y-auto">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex flex-col lg:flex-row items-start gap-3 mt-auto mb-auto">
-        <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl shadow-black/20 border border-slate-200 bg-white flex flex-col max-h-[92vh] animate-modal-panel">
+      <div className="relative z-10 flex flex-col lg:flex-row items-start gap-3">
+        <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl overflow-hidden shadow-2xl shadow-black/20 border border-slate-200 bg-white flex flex-col max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] animate-modal-panel">
 
           {/* Clean light header */}
           <div className="bg-white px-5 pt-5 pb-4 flex-shrink-0 border-b border-slate-100">
@@ -2594,15 +2873,25 @@ function RenewModal({ sub, role, group = null, onClose, onSaved }) {
                         <span className="text-slate-400"> · Base: <strong className="text-slate-600">{baseOwnCount}</strong></span>
                       )}
                     </span>
-                    <span className="font-semibold text-blue-600">Tier {renewRange} · ${renewPpc}/cert</span>
                   </div>
-                  {isGroup && (
-                    <p className="text-[10px] text-slate-500 font-semibold">
-                      {tierAnchor > 0
-                        ? `Add-on stacks on your active base (${tierAnchor}) — these are holders ${tierAnchor + 1}–${tierAnchor + exactCount} (total ${tierAnchor + exactCount}). Tier priced at ${tierCount}.`
-                        : 'No active base plan — renews independently (min 3 holders).'}
-                    </p>
-                  )}
+                  <p className="text-[10px] text-slate-500 font-semibold">
+                    {tierAnchor > 0
+                      ? `Stacks on your active coverage (${tierAnchor}) — these are holders ${tierAnchor + 1}–${tierAnchor + exactCount} (total ${tierAnchor + exactCount}). Tier priced at ${tierCount}.`
+                      : 'No active plan — renews independently (min 3 holders).'}
+                  </p>
+                  <div className="border-t border-slate-100 pt-2 mt-1 space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">New total</span>
+                      <span className="font-bold text-slate-800">{newTotalHolders} holder{newTotalHolders !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">New rate</span>
+                      <span className="font-bold text-slate-800">
+                        ${renewPpc}/cert
+                        {renewRateChanged && <span className="ml-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-wider">Tier updated</span>}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2817,6 +3106,7 @@ export default function SubscriptionPage() {
   const [subs, setSubs] = useState([])
   const [sub, setSub] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showPayModal, setShowPayModal] = useState(false)
   const [payTarget, setPayTarget] = useState(null)
@@ -2829,6 +3119,7 @@ export default function SubscriptionPage() {
   const [editTarget, setEditTarget] = useState(null)
   const [renewTarget, setRenewTarget] = useState(null)
   const [upgradeTarget, setUpgradeTarget] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null) // { sub, planRef }
 
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
@@ -2914,6 +3205,7 @@ export default function SubscriptionPage() {
         setSub(null)
       } finally {
         setLoading(false)
+        setRefreshing(false)
       }
     }
     load()
@@ -2977,7 +3269,17 @@ export default function SubscriptionPage() {
   return (
     <DashboardLayout>
       <div className="max-w-3xl mx-auto px-0 sm:px-0">
-        <h1 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">Subscription</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900">Subscription</h1>
+          <button
+            onClick={() => { setRefreshing(true); invalidate(`subs_${user?.id || user?.email}`); setRefreshKey(k => k + 1) }}
+            disabled={loading || refreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition disabled:opacity-50"
+          >
+            <svg className={`w-3.5 h-3.5 ${loading || refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Refresh
+          </button>
+        </div>
 
         {loading ? (
           <div className="flex items-center gap-3 py-16 justify-center">
@@ -3057,6 +3359,7 @@ export default function SubscriptionPage() {
                 onEditForm={() => setEditTarget(s)}
                 onRenew={() => setRenewTarget({ sub: s, group: null })}
                 onRenewGroup={(group) => setRenewTarget({ sub: s, group })}
+                onCancelPlan={(planRef) => setCancelTarget({ sub: s, planRef })}
               />
             ))}
           </div>
@@ -3158,6 +3461,23 @@ export default function SubscriptionPage() {
         />
       )}
 
+      {cancelTarget && (
+        <CancelPlanModal
+          sub={cancelTarget.sub}
+          planRef={cancelTarget.planRef}
+          token={token}
+          onClose={() => setCancelTarget(null)}
+          onDone={(updated) => {
+            if (updated) {
+              setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
+              setSub((prev) => (prev?._id === updated._id ? updated : prev))
+              cacheSet(`subs_${user?.id || user?.email}`, [updated])
+            }
+            setCancelTarget(null)
+          }}
+        />
+      )}
+
       {upgradeTarget && (
         <UpgradeHoldersModal
           sub={upgradeTarget}
@@ -3249,9 +3569,9 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-modal-backdrop">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 animate-modal-backdrop">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] animate-modal-panel">
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] animate-modal-panel">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
@@ -3333,7 +3653,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup, onCancelPlan }) {
   const navigate = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid = s.isPaid === true || s.paymentStatus === 'paid'
@@ -3349,10 +3669,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
   const hasQueuedRenewalDue = isExpired && s.nextRenewal?.paidAt &&
     s.nextRenewal.activationDate && new Date(s.nextRenewal.activationDate) <= new Date() &&
     !s._autoActivateFailed
-
-  const showRenew = active && !isUnlimited && !hasQueuedRenewalDue && !s.nextRenewal?.paidAt &&
-    !s.wirePaymentRequested &&
-    (daysToExpiry === null || daysToExpiry <= 60)
 
   const [cachedInvoiceDocs, setCachedInvoiceDocs] = useState(null)
 
@@ -3746,7 +4062,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                 Invoices
               </button>
             )}
-            {isAirline && active && !isExpired && !s.wirePaymentRequested && (
+            {isAirline && active && !s.wirePaymentRequested && (
               <button
                 onClick={onUpgrade}
                 className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition"
@@ -3755,20 +4071,6 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
                 Expand Holders
-              </button>
-            )}
-            {showRenew && (
-              <button
-                onClick={onRenew}
-                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition ${isExpired
-                  ? 'bg-slate-900 text-white hover:bg-slate-700'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  }`}
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {isExpired ? 'Renew Now' : 'Renew'}
               </button>
             )}
           </div>
@@ -3825,6 +4127,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                       onManageGroup={onManageGroup}
                       onRenew={s.wirePaymentRequested ? null : onRenew}
                       onRenewGroup={s.wirePaymentRequested ? null : onRenewGroup}
+                      onCancelPlan={s.wirePaymentRequested ? null : onCancelPlan}
                     />
                   </div>
                 )

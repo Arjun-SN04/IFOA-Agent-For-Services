@@ -6,7 +6,7 @@ import DashboardLayout from '../components/layout/DashboardLayout'
 import AdminAirlineForm from '../components/airlines/AdminAirlineForm'
 import AdminIndividualForm from '../components/individual/AdminIndividualForm'
 import { Plane } from 'lucide-react'
-import { getAirlineTotal, fmtAirlineTotal, activeGroupSlots, allGroupSlots, currentBaseGroupSlots, renewTierAnchor } from '../utils/airlineTotal'
+import { getAirlineTotal, fmtAirlineTotal, activeGroupSlots, allGroupSlots, currentBaseGroupSlots, activeCoverageAnchor } from '../utils/airlineTotal'
 import { getExpiryStatus } from '../utils/expiryStatus'
 import { getInvoiceStatus } from '../utils/invoiceStatus'
 import PhoneInputLib from 'react-phone-input-2'
@@ -46,6 +46,8 @@ import {
   deleteHolderGroup,
   adminRenewAirline,
   adminRenewIndividual,
+  createAdminAirlineForm,
+  createAdminIndividualForm,
 } from '../services/api'
 
 // Convert a raw backend/Mongoose error into a short, user-friendly message.
@@ -275,6 +277,27 @@ function Field({ label, children }) {
       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</label>
       {children}
     </div>
+  )
+}
+
+// Invoice-number input with a one-click "Generate" that peeks a fresh, unused number.
+function InvoiceNumberField({ value, onChange }) {
+  const [busy, setBusy] = React.useState(false)
+  const gen = async () => {
+    setBusy(true)
+    try { const r = await generateInvoiceNumber(); if (r.data?.invoiceNumber) onChange(r.data.invoiceNumber) }
+    catch { /* ignore */ } finally { setBusy(false) }
+  }
+  return (
+    <Field label="Invoice Number">
+      <div className="flex gap-2">
+        <input className={inputCls} value={value || ''} onChange={e => onChange(e.target.value)} placeholder="e.g. Invoice US-30-26" />
+        <button type="button" onClick={gen} disabled={busy}
+          className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition">
+          {busy ? '…' : 'Generate'}
+        </button>
+      </div>
+    </Field>
   )
 }
 
@@ -1174,10 +1197,12 @@ function AdminInvoicesPanel({ registrationId, registrationModel, record, drawerM
                 String(li.description || '').toLowerCase().includes('holder')
               )
             const isRenewal = inv._source === 'renewal' || inv.purpose === 'renewal' || !!inv.plan
+            const isCustom = inv.purpose === 'custom'
             const purposeLabel = inv._source === 'payment' ? 'Legacy'
-              : isHolderUpgrade ? 'Holder Upgrade'
-                : isRenewal ? 'Subscription Renewed'
-                  : 'Subscription'
+              : isCustom ? 'Custom'
+                : isHolderUpgrade ? 'Holder Upgrade'
+                  : isRenewal ? 'Subscription Renewed'
+                    : 'Subscription'
             const purposeCls = inv._source === 'payment' ? 'bg-slate-100 border-slate-200 text-slate-500'
               : 'bg-slate-800 border-slate-700 text-white'
             const planLabel = inv.subscriptionPlan || inv.plan || ''
@@ -1282,8 +1307,8 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onDeletePl
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
+        className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[90] flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-2xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-100px)]"
@@ -1451,7 +1476,7 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onDeletePl
 }
 
 // ─── Wire Request Section ──────────────────────────────────────────────────────
-function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
+function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEditInvoice }) {
   const [editing, setEditing] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [saveErr, setSaveErr] = React.useState('')
@@ -1503,6 +1528,12 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
   const purposeLabel = isRenewalRequest ? 'Renewal'
     : isHolderUpgradeRequest ? 'Holder Upgrade'
       : 'Initial'
+
+  // Once admin generates THIS wire request's invoice, its invoiceStatus flips from
+  // 'Wire Requested' to 'Generated' — only then swap the button to "Edit Invoice".
+  // Do NOT key off record.invoiceGenerated: that flag belongs to the base plan's
+  // existing invoice and would falsely mark the wire invoice as already generated.
+  const wireInvoiceGenerated = record.invoiceStatus === 'Generated'
 
   // Labels differ by purpose so admin isn't confused when entering renewal dates
   const subDateLabel = form.wireRequestPurpose === 'renewal' ? 'Renewal Start Date' : 'Subscription Date'
@@ -1637,37 +1668,43 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
                 // Build a purpose-aware record so AdminInvoiceModal shows correct line items.
                 // For renewal: override subscriptionPlan with the renewal plan.
                 // For holder-upgrade: set count/price to reflect only the additional holders.
+                // Pricing source of truth = wireRequestDetails.amount (what airline committed),
+                // NOT the current price/cert (which may have drifted since the request).
+                const requestedAmount = record.wireRequestDetails?.amount != null
+                  ? Number(record.wireRequestDetails.amount) : null
                 let invoiceRecord = record
                 if (record.wireRequestPurpose === 'renewal') {
                   invoiceRecord = {
                     ...record,
                     subscriptionPlan: record.wireRequestRenewalPlan || record.subscriptionPlan,
-                    invoiceNumber: '',   // force fresh number — don't reuse current plan's
-                    invoiceDraft: null, // no stale draft from current plan
+                    // Only force a fresh number when generating anew; editing keeps the existing one.
+                    ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: null }),
                     _wireInvoicePurpose: 'renewal',
                   }
                 } else if (record.wireRequestPurpose === 'holder-upgrade') {
                   const additional = Number(record.wireRequestAdditionalCount || 1)
-                  const ppc = additional > 0 && record.amountPaid > 0
-                    ? Math.round((record.amountPaid / additional) * 100) / 100
-                    : Number(record.pricePerCertificate || 0)
+                  const ppc = additional > 0 && requestedAmount > 0
+                    ? Math.round((requestedAmount / additional) * 100) / 100
+                    : additional > 0 && record.amountPaid > 0
+                      ? Math.round((record.amountPaid / additional) * 100) / 100
+                      : Number(record.pricePerCertificate || 0)
                   invoiceRecord = {
                     ...record,
                     committedCount: additional,
                     holderCountValue: String(additional),
                     pricePerCertificate: ppc,
                     pricePerCert: ppc,
-                    invoiceNumber: '',   // force fresh number
-                    invoiceDraft: null,
+                    ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: null }),
                     _wireInvoicePurpose: 'holder-upgrade',
                   }
                 }
-                onGenerateInvoice(invoiceRecord)
+                if (wireInvoiceGenerated && onEditInvoice) onEditInvoice(invoiceRecord)
+                else onGenerateInvoice(invoiceRecord)
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              Generate Invoice
+              {wireInvoiceGenerated ? 'Edit Invoice' : 'Generate Invoice'}
             </button>
           )}
           <button
@@ -1808,16 +1845,19 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice }) {
             (isRenewalRequest || isHolderUpgradeRequest) && record.invoiceStatus === 'Wire Requested'
           ) && <ViewField label="Invoice #" value={record.invoiceNumber} />}
           {(() => {
-            // Wire request amount owed depends on purpose:
-            //  - holder-upgrade: additional holders × price/cert
-            //  - renewal: the renewal price stored in amountPaid
-            //  - initial: FULL committed amount (totalAmount), NOT just filled holders.
-            //    amountPaid only covers submitted holders, so it understates the bill.
-            const wireAmount = isHolderUpgradeRequest
-              ? Number(record.wireRequestAdditionalCount || 0) * Number(record.pricePerCertificate || record.pricePerCert || 0)
-              : isRenewalRequest
-                ? Number(record.amountPaid || record.totalAmount || 0)
-                : Number(record.totalAmount || record.amountPaid || 0)
+            // Wire request amount owed = exactly what the airline committed to at
+            // checkout (wireRequestDetails.amount). Prefer it as the single source of
+            // truth so Amount Due always matches Requested Amount — never recompute from
+            // the CURRENT price/cert (which may have drifted since the request).
+            const requestedAmount = record.wireRequestDetails?.amount != null
+              ? Number(record.wireRequestDetails.amount) : null
+            const wireAmount = requestedAmount != null
+              ? requestedAmount
+              : isHolderUpgradeRequest
+                ? Number(record.wireRequestAdditionalCount || 0) * Number(record.pricePerCertificate || record.pricePerCert || 0)
+                : isRenewalRequest
+                  ? Number(record.amountPaid || record.totalAmount || 0)
+                  : Number(record.totalAmount || record.amountPaid || 0)
             return wireAmount > 0 && (
               <ViewField label="Amount Due" value={`$${wireAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
             )
@@ -1845,6 +1885,167 @@ function adminTierPpc(plan, count) {
   return plan === 'Unlimited Plan' ? ADMIN_UNLIMITED_PPC[range] : ADMIN_ONE_YEAR_PPC[range]
 }
 
+// ── Set Base Plan ────────────────────────────────────────────────────────────
+// Popup shown for a signed-up account that has no plan yet (__noPlan). Lets the
+// admin pick the BASE plan, count (airlines), price (auto-tiered with override)
+// and paid/pending, then creates the real subscription via the admin create-form
+// endpoint — the same record the rest of the dashboard flow already understands.
+function AdminSetBasePlanModal({ record, onClose, onSaved }) {
+  const isAirline = record.role === 'airline'
+  const AIR_PLANS = ['1 Year Subscription Plan', 'Unlimited Plan']
+  const IND_PLANS = ['1 Year Subscription Plan', 'Multiple Years Subscription Plan', 'Unlimited Plan']
+  const plans = isAirline ? AIR_PLANS : IND_PLANS
+
+  const [plan, setPlan] = useState('1 Year Subscription Plan')
+  const [count, setCount] = useState(3)          // airline holder count
+  const [years, setYears] = useState(3)          // individual multi-year count
+  const [phone, setPhone] = useState(record.phone || '')
+  const [paid, setPaid] = useState(true)
+  const [priceOverride, setPriceOverride] = useState('')  // '' = use auto price
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const isUnlimited = plan === 'Unlimited Plan'
+  const isMulti = plan === 'Multiple Years Subscription Plan'
+
+  // Auto (tiered) per-unit price. Airlines price per certificate; individuals a flat plan price.
+  const autoPpc = isAirline
+    ? adminTierPpc(plan, Math.max(3, Number(count) || 3))
+    : (isUnlimited ? 299 : isMulti ? 55 * Math.max(2, Number(years) || 2) : 69)
+  const effPpc = priceOverride !== '' ? Number(priceOverride) : autoPpc
+  const total = isAirline ? effPpc * (Number(count) || 0) : effPpc
+
+  const name = isAirline ? (record.airlineName || 'Airline') : `${record.firstName || ''} ${record.lastName || ''}`.trim()
+
+  const submit = async () => {
+    setErr('')
+    if (!record.email) { setErr('Account has no email — cannot create a plan.'); return }
+    if (isAirline && (!count || Number(count) < 1)) { setErr('Holder count must be at least 1.'); return }
+    setBusy(true)
+    try {
+      let res
+      if (isAirline) {
+        const c = Number(count)
+        const range = c <= 5 ? '3 to 5' : c <= 10 ? '5 to 10' : 'More than 10'
+        res = await createAdminAirlineForm({
+          airlineName: record.airlineName,
+          firstName: record.firstName, lastName: record.lastName,
+          email: record.email, phone: phone.trim(),
+          pointOfContactEmail: record.email, pointOfContactPhone: phone.trim(),
+          subscriptionPlan: plan,
+          holderCount: range,
+          holderCountValue: c,
+          ...(priceOverride !== '' ? { pricePerCertificate: Number(priceOverride) } : {}),
+          paid,
+          paymentStatus: paid ? 'paid' : 'pending',
+          agreedToTerms: true,
+        })
+      } else {
+        res = await createAdminIndividualForm({
+          firstName: record.firstName, lastName: record.lastName,
+          email: record.email, phone: phone.trim(),
+          subscriptionPlan: plan,
+          ...(isMulti ? { multiYearCount: Number(years) } : {}),
+          ...(priceOverride !== '' ? { price: Number(priceOverride) } : {}),
+          isPaid: paid,
+          paymentStatus: paid ? 'paid' : 'pending',
+          agreedToTerms: true,
+        })
+      }
+      onSaved?.(res.data?.data)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to create the plan.')
+      setBusy(false)
+    }
+  }
+
+  const inp = 'w-full px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-slate-400'
+  const planShort = (p) => p === 'Unlimited Plan' ? 'Unlimited' : p === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year'
+
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-[88px] sm:pt-[96px]">
+        <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
+          className="w-full max-w-md max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+          onClick={e => e.stopPropagation()}>
+          <div className="flex-shrink-0 border-b border-slate-100 px-6 py-5 bg-slate-50 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Set Base Plan</p>
+              <h2 className="text-base font-extrabold text-slate-900">{name}</h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">{record.email}</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Plan</label>
+              <select value={plan} onChange={e => { setPlan(e.target.value); setPriceOverride('') }} className={inp}>
+                {plans.map(p => <option key={p} value={p}>{planShort(p)} — {p}</option>)}
+              </select>
+            </div>
+
+            {isAirline && (
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Holder Count</label>
+                <input type="number" min={1} value={count} onChange={e => { setCount(e.target.value); setPriceOverride('') }} className={inp} />
+              </div>
+            )}
+            {isMulti && (
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Number of Years</label>
+                <input type="number" min={2} value={years} onChange={e => { setYears(e.target.value); setPriceOverride('') }} className={inp} />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Phone</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone number" className={inp} />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                {isAirline ? 'Price / Certificate' : 'Plan Price'} <span className="font-normal normal-case text-slate-400">— auto, editable</span>
+              </label>
+              <input type="number" min={0} step="0.01" value={priceOverride} onChange={e => setPriceOverride(e.target.value)} placeholder={String(autoPpc)} className={inp} />
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2.5">
+              <span className="text-sm font-semibold text-slate-700">Mark as paid &amp; active</span>
+              <button type="button" onClick={() => setPaid(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${paid ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${paid ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            <p className="-mt-2 text-[11px] text-slate-500">{paid ? 'Generates an invoice and activates the plan immediately.' : 'Created as Pending / Unpaid — activates on payment, no invoice yet.'}</p>
+
+            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/60 px-4 py-3 flex items-center justify-between">
+              <div className="text-[11px] text-slate-600">
+                {planShort(plan)}{isAirline ? ` · ${count} holder${Number(count) === 1 ? '' : 's'}` : isMulti ? ` · ${years}y` : ''}
+                {!isUnlimited && isAirline && ` · $${effPpc}/cert`}
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Total</p>
+                <p className="text-lg font-extrabold text-slate-900">${Number(total).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+
+            {err && <p className="text-sm font-semibold text-red-600">{err}</p>}
+          </div>
+          <div className="flex-shrink-0 border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-2 bg-slate-50">
+            <button onClick={onClose} disabled={busy} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
+            <button onClick={submit} disabled={busy} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+              {busy ? 'Creating…' : 'Set Base Plan'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
 function AdminHolderCountModal({ record, onClose, onSaved }) {
   // Raw stored committed (base + all not-expired groups) — used to derive base for
   // the decrease path. The "current base slots" shown to the admin excludes
@@ -1866,7 +2067,11 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const newTotal = currentBaseSlots + addCount
+  // Added holders stack on ALL currently-active coverage (base if live + every active
+  // add-on) → tier read at (activeCoverageAnchor + addCount). SINGLE SOURCE, matches the
+  // backend charge so the admin's displayed price equals what's billed.
+  const coverageAnchor = activeCoverageAnchor(record, {})
+  const newTotal = coverageAnchor + addCount
   const ppc = adminTierPpc(plan, Math.max(3, newTotal))
   const amount = ppc * addCount
 
@@ -1963,10 +2168,10 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[61] flex items-start justify-center p-4 pt-20 overflow-y-auto">
+        className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[101] flex items-start justify-center p-4 pt-[80px] sm:pt-[84px]">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
-          className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-92px)] sm:max-h-[calc(100vh-100px)]" onClick={e => e.stopPropagation()}>
           <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between bg-slate-50 flex-shrink-0">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Holder Count</p>
@@ -2106,7 +2311,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
 }
 
 // ─── Airline View Modal ────────────────────────────────────────────────────────
-function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerateInvoice }) {
+function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated, onGenerateInvoice, onEditInvoice }) {
   const [showInvoices, setShowInvoices] = useState(false)
   const [showHolderCount, setShowHolderCount] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState(null)
@@ -2176,8 +2381,8 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
+        className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[90] flex flex-col lg:flex-row items-start justify-center p-4 sm:p-6 pt-20 sm:pt-20 gap-4 overflow-y-auto lg:overflow-x-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
           className="w-full max-w-3xl flex-shrink-0 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-100px)]"
@@ -2194,6 +2399,11 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
               >
                 All Invoices
               </button>
+              {record.__noPlan && (
+                <button onClick={() => onManagePlan?.(record)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition">
+                  Add Plan
+                </button>
+              )}
               <button onClick={onEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
                 Edit
@@ -2246,7 +2456,7 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 <ViewField label="Payment Email" value={record.paymentEmail} />
               </div>
             </div>
-            {(() => {
+            {!record.__noPlan && (() => {
               const planShort = (plan, years) =>
                 plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
                   : plan === 'Unlimited Plan' ? 'Unlimited'
@@ -2371,6 +2581,9 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 </div>
               )
             })()}
+            {record.wirePaymentRequested && (
+              <WireRequestSection record={record} onRecordUpdated={onRecordUpdated} onGenerateInvoice={onGenerateInvoice} onEditInvoice={onEditInvoice} />
+            )}
             {record.certificateHolders?.length > 0 && (() => {
               const planShort = (plan, years) =>
                 plan === 'Multiple Years Subscription Plan' ? `Multi-Year${years ? ` ${years}y` : ''}`
@@ -2425,9 +2638,6 @@ function AirlineViewModal({ record, onClose, onEdit, onRecordUpdated, onGenerate
                 </div>
               )
             })()}
-            {record.wirePaymentRequested && (
-              <WireRequestSection record={record} onRecordUpdated={onRecordUpdated} onGenerateInvoice={onGenerateInvoice} />
-            )}
             <div className="border-t border-slate-100 pt-5"><SectionHead label="Record Info" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <ViewField label="Submitted" value={fmtDate(record.createdAt)} />
@@ -2656,8 +2866,8 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[61] flex items-start justify-center p-4 pt-20 overflow-y-auto">
+        className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[101] flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
           className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
 
@@ -2905,11 +3115,13 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
   const isMulti = plan === 'Multiple Years Subscription Plan'
   const isUnlimited = plan === 'Unlimited Plan'
 
-  // A group add-on stacks on the active base — its tier is read at the cumulative
-  // position (anchor + count), matching the backend renewTierAnchor + applyGroupRenewal.
-  const tierAnchor = isGroup ? renewTierAnchor(record, group) : 0
+  // Any renewal stacks on whatever coverage is still active — tier read at the
+  // cumulative position (anchor + count). SINGLE SOURCE: activeCoverageAnchor, same
+  // helper the airline-side modal + backend pricing use (excludeBase for base renewal,
+  // excludeGroupId for an add-on). Base renewal therefore stacks on active add-ons too.
+  const tierAnchor = activeCoverageAnchor(record, isGroup ? { excludeGroupId: group?._id } : { excludeBase: true })
   const totalCount = tierAnchor + count
-  const ppc = isAirline ? adminTierPpc(plan, Math.max(3, isGroup ? totalCount : count)) : 0
+  const ppc = isAirline ? adminTierPpc(plan, Math.max(3, totalCount)) : 0
   const computed = isAirline
     ? ppc * Math.max(1, count) * (isMulti ? Math.max(2, years) : 1)
     : (isUnlimited ? 299 : isMulti ? 55 * Math.max(2, years) : 69)
@@ -2965,8 +3177,8 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[71] flex items-start justify-center p-4 pt-20 overflow-y-auto">
+        className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[101] flex items-start justify-center p-4 pt-20 overflow-y-auto">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
           className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
           {/* Header */}
@@ -3134,20 +3346,20 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
+        className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
+      <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-[88px] sm:pt-[96px]">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+          className="w-full max-w-2xl max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
           onClick={e => e.stopPropagation()}>
-          <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
+          <div className="flex-shrink-0 border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Individual</p>
               <h2 className="text-lg font-extrabold text-slate-900">{fullName}</h2>
             </div>
             <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
           </div>
-          <div className="px-6 py-5 space-y-6 max-h-[68vh] overflow-y-auto overflow-x-clip">
+          <div className="flex-1 px-6 py-5 space-y-6 overflow-y-auto overflow-x-clip">
             {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
             {showInvoiceWarning && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
@@ -3248,11 +3460,11 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
                 </Field>
                 <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
                 <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
-                <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
+                <InvoiceNumberField value={form.invoiceNumber} onChange={(v) => set('invoiceNumber', v)} />
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <div className="flex-shrink-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={() => onClose()} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
             <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
@@ -3267,14 +3479,27 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
 
 // ─── Airline Edit Modal ────────────────────────────────────────────────────────
 function AirlineEditModal({ record, onClose, onSave, saving }) {
-  const [form, setForm] = useState({ ...record })
+  // The BASE PLAN section edits the base plan's OWN holder count only. The grand total
+  // (committedCount = base + every add-on group's slots) is derived from it + the groups,
+  // shown separately, and re-synced on save so the client always sees the correct overall.
+  const [form, setForm] = useState(() => {
+    const groups = record.holderGroups || []
+    const committed = Number(record.committedCount || record.holderCountValue || record.certificateHolders?.length || 0)
+    const groupSlots = groups.reduce((s, g) => s + Number(g.count || 0), 0)
+    return { ...record, baseOwnCount: Math.max(0, committed - groupSlots) }
+  })
   const [err, setErr] = useState('')
   const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const setHolder = (idx, field, value) =>
     setForm(p => ({ ...p, certificateHolders: p.certificateHolders.map((h, i) => i === idx ? { ...h, [field]: value } : h) }))
-  // Admin can add holders up to the committed count.
-  const committedSlots = Number(form.committedCount || form.holderCountValue || form.certificateHolders?.length || 0)
+  // Live overall = base own count + every add-on group's slots. Updates as the admin
+  // edits the base count OR any group count, so the displayed grand total stays in sync.
+  const groupSlotsTotal = (form.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0)
+  const baseOwnCount = Math.max(0, Number(form.baseOwnCount || 0))
+  const overallCommitted = baseOwnCount + groupSlotsTotal
+  // Admin can add holders up to the OVERALL committed count.
+  const committedSlots = overallCommitted
   const holdersCount = form.certificateHolders?.length || 0
   const canAddHolder = holdersCount < committedSlots
   const addHolder = () => setForm(p => ({
@@ -3355,8 +3580,19 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
         },
       } : {}),
     }))
+    // Re-sync the grand total: committedCount = base own count + all add-on group slots.
+    // The client derives base = committedCount − groupSlots, so this keeps both sides aligned.
+    const finalGroupSlots = cleanGroups.reduce((s, g) => s + Number(g.count || 0), 0)
+    const finalCommitted = Math.max(0, Number(form.baseOwnCount || 0) + finalGroupSlots)
+    const { baseOwnCount: _omitBaseOwn, ...rest } = form
     try {
-      const saved = await onSave(record._id, { ...form, certificateHolders: cleanHolders, holderGroups: cleanGroups })
+      const saved = await onSave(record._id, {
+        ...rest,
+        committedCount: finalCommitted,
+        holderCountValue: String(finalCommitted),
+        certificateHolders: cleanHolders,
+        holderGroups: cleanGroups,
+      })
       onClose(saved)
     } catch (e) {
       setErr(friendlySaveError(e))
@@ -3365,20 +3601,20 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
-      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
+        className="fixed inset-0 z-[80] bg-slate-900/50 backdrop-blur-sm" onClick={() => onClose()} />
+      <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-[88px] sm:pt-[96px]">
         <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-          className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+          className="w-full max-w-2xl max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
           onClick={e => e.stopPropagation()}>
-          <div className="border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
+          <div className="flex-shrink-0 border-b border-slate-100 px-6 py-5 flex items-center justify-between bg-slate-50">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Edit Airline</p>
               <h2 className="text-lg font-extrabold text-slate-900">{record.airlineName || 'Airline'}</h2>
             </div>
             <button onClick={() => onClose()} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition">✕</button>
           </div>
-          <div className="px-6 py-5 space-y-6 max-h-[68vh] overflow-y-auto overflow-x-clip">
+          <div className="flex-1 px-6 py-5 space-y-6 overflow-y-auto overflow-x-clip">
             {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
             {showInvoiceWarning && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
@@ -3394,6 +3630,18 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
             <div><SectionHead label="Account Status" />
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Status"><select className={selectCls} value={form.status || 'Pending'} onChange={e => set('status', e.target.value)}><option>Pending</option><option>Active</option><option>Inactive</option></select></Field>
+                <Field label="Overall Holder Count">
+                  <input className={`${inputCls} font-bold text-slate-900`} type="number" min={groupSlotsTotal}
+                    value={overallCommitted}
+                    onChange={e => setForm(p => {
+                      const v = parseFloat(e.target.value) || 0
+                      const gs = (p.holderGroups || []).reduce((s, g) => s + Number(g.count || 0), 0)
+                      const newBase = Math.max(0, v - gs) // overall edits flow into the base plan's own count
+                      return { ...p, baseOwnCount: newBase, totalServiceFees: newBase * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) }
+                    })} />
+                  <p className="text-[10px] text-slate-500 mt-1">Total across all plans{groupSlotsTotal > 0 ? <> — editing adjusts the base ({baseOwnCount}); add-ons fixed at <strong className="text-slate-700">{groupSlotsTotal}</strong> slot{groupSlotsTotal !== 1 ? 's' : ''}</> : null}.</p>
+                </Field>
+                <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
               </div>
             </div>
 
@@ -3413,27 +3661,28 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2.5">Subscription</p>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
-                    <Field label="Holder Count Range"><input className={inputCls} placeholder="e.g. 3 to 5" value={form.holderCount || ''} onChange={e => set('holderCount', e.target.value)} /></Field>
                     <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0, 10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
                     <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0, 10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
-                    <Field label="Exact Holder Count">
+                    <Field label="Base Holder Count">
                       <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
                         <button type="button"
-                          onClick={() => setForm(p => { const c = Math.max(1, Number(p.holderCountValue || 1) - 1); return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                          onClick={() => setForm(p => { const c = Math.max(0, Number(p.baseOwnCount || 0) - 1); return { ...p, baseOwnCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
                           className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-r border-slate-200">−</button>
-                        <input className="flex-1 min-w-0 text-xs text-center py-1.5 bg-transparent focus:outline-none" type="number" min="1"
-                          value={form.holderCountValue || ''}
-                          onChange={e => setForm(p => { const c = parseFloat(e.target.value) || 0; return { ...p, holderCountValue: e.target.value, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })} />
+                        <input className="flex-1 min-w-0 text-xs text-center py-1.5 bg-transparent focus:outline-none" type="number" min="0"
+                          value={form.baseOwnCount ?? ''}
+                          onChange={e => setForm(p => { const c = parseFloat(e.target.value) || 0; return { ...p, baseOwnCount: e.target.value === '' ? '' : c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })} />
                         <button type="button"
-                          onClick={() => setForm(p => { const c = Number(p.holderCountValue || 0) + 1; return { ...p, holderCountValue: c, committedCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
+                          onClick={() => setForm(p => { const c = Number(p.baseOwnCount || 0) + 1; return { ...p, baseOwnCount: c, totalServiceFees: c * (Number(p.pricePerCertificate ?? p.pricePerCert) || 0) } })}
                           className="w-8 h-9 flex items-center justify-center text-slate-500 hover:bg-slate-100 transition flex-shrink-0 text-base font-bold border-l border-slate-200">+</button>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-1">Raw correction only. To bill an increase (with plan + invoice) or remove specific holders, use <span className="font-bold">Manage Plans</span> in the view screen.</p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Base plan only.{groupSlotsTotal > 0 ? <> Overall committed = <strong className="text-slate-700">{overallCommitted}</strong> (base {baseOwnCount} + {groupSlotsTotal} add-on slot{groupSlotsTotal !== 1 ? 's' : ''}).</> : null} Raw correction only — to bill an increase or remove holders use <span className="font-bold">Manage Plans</span>.
+                      </p>
                     </Field>
-                    <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
+                    <Field label="Base Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0"
                       value={form.pricePerCertificate ?? form.pricePerCert ?? ''}
-                      onChange={e => setForm(p => { const price = parseFloat(e.target.value) || 0; const count = Number(p.committedCount ?? p.holderCountValue) || 0; return { ...p, pricePerCertificate: price, pricePerCert: price, totalServiceFees: count * price } })} /></Field>
-                    <div className="sm:col-span-2"><Field label="Total Amount (USD)">
+                      onChange={e => setForm(p => { const price = parseFloat(e.target.value) || 0; const count = Number(p.baseOwnCount) || 0; return { ...p, pricePerCertificate: price, pricePerCert: price, totalServiceFees: count * price } })} /></Field>
+                    <div className="sm:col-span-2"><Field label="Base Total (USD)">
                       <div className="relative">
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-bold">$</span>
                         <input className={`${inputCls} pl-6 bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold`} type="number" step="0.01" min="0"
@@ -3461,7 +3710,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
                     </Field>
                     <Field label="Payment Status"><select className={selectCls} value={form.paymentStatus || 'pending'} onChange={e => set('paymentStatus', e.target.value)}><option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option></select></Field>
                     <Field label="Invoice Status"><select className={selectCls} value={form.invoiceStatus || ''} onChange={e => set('invoiceStatus', e.target.value)}><option value="">— Select —</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option></select></Field>
-                    <Field label="Invoice Number"><input className={inputCls} value={form.invoiceNumber || ''} onChange={e => set('invoiceNumber', e.target.value)} /></Field>
+                    <InvoiceNumberField value={form.invoiceNumber} onChange={(v) => set('invoiceNumber', v)} />
                   </div>
                 </div>
               </div>
@@ -3618,7 +3867,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
               </div>
             )}
           </div>
-          <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <div className="flex-shrink-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
             <button onClick={() => onClose()} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
             <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
@@ -4086,8 +4335,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
       {!previewOnly && (
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 overflow-y-auto">
+            className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+          <div className="fixed inset-0 z-[111] flex items-start justify-center p-4 pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
               className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -4348,8 +4597,8 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
       {previewData && (
         <AnimatePresence>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm" onClick={closePreviewModal} />
-          <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-20 overflow-y-auto">
+            className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm" onClick={closePreviewModal} />
+          <div className="fixed inset-0 z-[121] flex items-start justify-center p-4 pt-20 overflow-y-auto">
             <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }} transition={{ duration: 0.2 }}
               className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
@@ -5118,6 +5367,7 @@ export default function AdminDashboard() {
 
   const [viewRec, setViewRec] = useState(null)
   const [viewType, setViewType] = useState(null)
+  const [basePlanRec, setBasePlanRec] = useState(null)
   const [editRec, setEditRec] = useState(null)
   const [editType, setEditType] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -5329,9 +5579,23 @@ export default function AdminDashboard() {
       const wirePurpose = payload.wireInvoicePurpose  // 'renewal' | 'holder-upgrade' | null
 
       if (wirePurpose) {
-        // Wire renewal/upgrade: always create a new dedicated Invoice doc.
-        // Never reuse the current-plan Invoice doc — that would destroy it.
-        await createAdminInvoiceDoc(id, model, payload.invoiceDraft, payload.invoiceNumber, wirePurpose)
+        // Wire renewal/upgrade gets its own dedicated Invoice doc, gated behind
+        // wirePending until the admin approves the wire request (hidden from airline).
+        // If one already exists for this purpose, EDIT it in place (PATCH) so renaming
+        // the number updates the same doc and the uniqueness check surfaces an error —
+        // creating a fresh doc by number would instead silently leave a duplicate.
+        let existingWireDoc = null
+        try {
+          const invRes = await getInvoiceByRegistration(id)
+          const docs = (invRes.data?.data || []).filter(d => !d._source)
+          existingWireDoc = docs.find(d => d.purpose === wirePurpose && d.adminGenerated) || null
+        } catch { /* non-critical */ }
+
+        if (existingWireDoc?._id) {
+          await saveInvoiceDraftToDoc(existingWireDoc._id, payload.invoiceDraft, payload.invoiceNumber)
+        } else {
+          await createAdminInvoiceDoc(id, model, payload.invoiceDraft, payload.invoiceNumber, wirePurpose, true)
+        }
       } else {
         // Standard flow: prefer updating existing Payment/Invoice doc.
         let paidDoc = null
@@ -5371,18 +5635,29 @@ export default function AdminDashboard() {
         }
       }
 
-      const registrationUpdate = {
-        invoiceStatus: payload.invoiceStatus,
-        invoiceGenerated: payload.invoiceGenerated,
-        invoiceNumber: payload.invoiceNumber,
-        invoiceDraft: payload.invoiceDraft,
-      }
+      // Additive wire invoices (renewal / holder-upgrade) get their OWN dedicated
+      // Invoice doc — they must NOT overwrite the registration's invoiceNumber, which
+      // still points at the base/current plan. Writing the additive number here would
+      // fail uniqueness (the doc we just created already owns it) → "already exists".
+      const registrationUpdate = wirePurpose
+        ? {
+            invoiceStatus: payload.invoiceStatus,
+            invoiceGenerated: payload.invoiceGenerated,
+          }
+        : {
+            invoiceStatus: payload.invoiceStatus,
+            invoiceGenerated: payload.invoiceGenerated,
+            invoiceNumber: payload.invoiceNumber,
+            invoiceDraft: payload.invoiceDraft,
+          }
 
-      const mergeRecord = (x, saved) => ({
-        ...x, ...saved,
-        invoiceDraft: payload.invoiceDraft,
-        invoiceNumber: payload.invoiceNumber,
-      })
+      const mergeRecord = (x, saved) => wirePurpose
+        ? { ...x, ...saved }
+        : {
+            ...x, ...saved,
+            invoiceDraft: payload.invoiceDraft,
+            invoiceNumber: payload.invoiceNumber,
+          }
 
       if (type === 'airline') {
         const res = await updateAirlinesSubscription(id, registrationUpdate)
@@ -5602,16 +5877,10 @@ export default function AdminDashboard() {
   const PAYMENTS = ['All', 'pending', 'paid', 'failed']
   const STATUSES = ['All', 'Pending', 'Active', 'Inactive']
 
-  // Open the full admin add-plan form, prefilled, for a signed-up account that
-  // has no plan yet (matched to the user by email).
-  const handleManagePlan = (u) => {
-    const params = new URLSearchParams()
-    if (u.email) params.set('email', u.email)
-    if (u.firstName) params.set('firstName', u.firstName)
-    if (u.lastName) params.set('lastName', u.lastName)
-    if (u.airlineName) params.set('airlineName', u.airlineName)
-    navigate(`/admin/add-${u.role === 'airline' ? 'airline' : 'individual'}?${params.toString()}`)
-  }
+  // Open the inline base-plan popup for a signed-up account that has no plan yet.
+  // Admin picks plan/count/price/paid; we create the real subscription in place
+  // (matched to the user by email) without leaving the dashboard.
+  const handleManagePlan = (u) => { closeView(); setBasePlanRec(u) }
 
   const clearFilters = () => { setSearch(''); setFilterPlan('All'); setFilterPayment('All'); setFilterStatus('All'); setFilterExpiry('All'); setSortOrder('desc') }
   const hasActiveFilters = search || filterPlan !== 'All' || filterPayment !== 'All' || filterStatus !== 'All' || filterExpiry !== 'All' || sortOrder !== 'desc'
@@ -5660,12 +5929,25 @@ export default function AdminDashboard() {
           record={viewRec}
           onClose={closeView}
           onEdit={openEditFromView}
+          onManagePlan={handleManagePlan}
           onRecordUpdated={(updated) => {
             if (!updated) return
             setAirlines(p => p.map(x => x._id === updated._id ? { ...x, ...updated } : x))
             setViewRec(updated)
           }}
           onGenerateInvoice={r => openInvoiceGenerate(r, 'airline')}
+          onEditInvoice={r => openInvoiceEdit(r, 'airline')}
+        />
+      )}
+      {basePlanRec && (
+        <AdminSetBasePlanModal
+          record={basePlanRec}
+          onClose={() => setBasePlanRec(null)}
+          onSaved={() => {
+            setBasePlanRec(null)
+            showToast('Base plan set — account now has an active subscription', basePlanRec.role === 'airline' ? 'airline' : 'individual')
+            loadData(false)
+          }}
         />
       )}
       {editRec && editType === 'individual' && (

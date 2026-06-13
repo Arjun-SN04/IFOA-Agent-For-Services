@@ -101,8 +101,13 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
     }
 
     // Fetch Invoice docs + Renewal docs + Payment docs (legacy invoiceDraft) in parallel.
+    // Airline/individual requesters never see wire invoices that are still pending
+    // admin approval (wirePending) — only the admin sees those.
+    const invoiceQuery = req.user.role === 'admin'
+      ? { registrationId: regId }
+      : { registrationId: regId, wirePending: { $ne: true } };
     const [invoices, renewals, payments] = await Promise.all([
-      Invoice.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
+      Invoice.find(invoiceQuery).sort({ createdAt: -1 }).lean(),
       Renewal.find({ registrationId: regId }).sort({ createdAt: -1 }).lean(),
       Payment.find({ registrationId: regId, isPaid: true })
         .select('_id invoiceNumber invoiceDraft invoiceSnapshot amountDollars paidAt paymentMethodType createdAt updatedAt purpose stripePaymentIntentId')
@@ -214,7 +219,7 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
 // registration it updates the draft rather than creating a duplicate.
 router.post('/admin-create', auth, adminOnly, async (req, res) => {
   try {
-    const { registrationId, registrationModel, draft, invoiceNumber, purpose } = req.body;
+    const { registrationId, registrationModel, draft, invoiceNumber, purpose, wirePending } = req.body;
     if (!registrationId || !registrationModel) {
       return res.status(400).json({ success: false, message: 'registrationId and registrationModel required.' });
     }
@@ -231,6 +236,12 @@ router.post('/admin-create', auth, adminOnly, async (req, res) => {
     let existing = norm
       ? await Invoice.findOne({ registrationId, invoiceNumber: norm })
       : null;
+    // Additive invoices must not hijack a DIFFERENT-purpose doc that happens to carry
+    // the same number (e.g. setting the wire renewal number to the base plan's number
+    // would otherwise overwrite the base invoice). Treat that as a collision.
+    if (existing && isAdditive && existing.purpose !== purpose) {
+      return res.status(400).json({ success: false, message: 'Invoice number already exists. Please use a different value.' });
+    }
     if (!existing && !isAdditive) {
       existing = await Invoice.findOne({ registrationId, adminGenerated: true, paymentId: null })
         .sort({ createdAt: -1 });
@@ -261,6 +272,7 @@ router.post('/admin-create', auth, adminOnly, async (req, res) => {
       existing.markModified('draft');
       existing.adminGenerated = true;
       if (purpose) existing.purpose = purpose;
+      if (wirePending !== undefined) existing.wirePending = !!wirePending;
       if (draft?.lineItems?.length) {
         existing.lineItems = draft.lineItems;
         const t = draft.lineItems.reduce((s, li) => s + (Number(li.totalPrice) || 0), 0);
@@ -309,6 +321,7 @@ router.post('/admin-create', auth, adminOnly, async (req, res) => {
       registrationModel,
       status:            'paid',
       adminGenerated:    true,
+      wirePending:       !!wirePending,
       purpose:           purpose || 'payment',
       draft:             { ...draft, invoiceNumber: norm },
       issueDate:         draft?.issueDate   ? new Date(draft.issueDate)  : now,
@@ -353,26 +366,20 @@ router.patch('/:id/draft', auth, adminOnly, async (req, res) => {
     const oldInvoiceNumber = invoice.invoiceNumber;
 
     if (requestedInvoiceNumber && requestedInvoiceNumber !== oldInvoiceNumber) {
-      const sibling = await Invoice.findOne({
-        invoiceNumber:  requestedInvoiceNumber,
-        registrationId: invoice.registrationId,
-        _id:            { $ne: invoice._id },
+      // Never silently steal/delete another invoice's number — if the requested number
+      // is in use anywhere (this registration or another), reject so the admin picks a
+      // different value. This prevents accidentally renaming an existing invoice.
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
+        excludeInvoiceId:         invoice._id,
+        excludePaymentId:         invoice.paymentId || null,
+        excludeRegistrationId:    invoice.registrationId || null,
+        excludeRegistrationModel: invoice.registrationModel || null,
       });
-      if (sibling) {
-        await sibling.deleteOne();
-      } else {
-        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
-          excludeInvoiceId:         invoice._id,
-          excludePaymentId:         invoice.paymentId || null,
-          excludeRegistrationId:    invoice.registrationId || null,
-          excludeRegistrationModel: invoice.registrationModel || null,
+      if (alreadyUsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invoice number already exists. Please use a different value.',
         });
-        if (alreadyUsed) {
-          return res.status(400).json({
-            success: false,
-            message: 'Invoice number already exists. Please use a different value.',
-          });
-        }
       }
       invoice.invoiceNumber = requestedInvoiceNumber;
     }

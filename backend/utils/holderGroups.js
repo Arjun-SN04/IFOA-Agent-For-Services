@@ -80,31 +80,49 @@ function currentBaseSlots(doc, asOf = new Date()) {
 }
 
 /**
- * Stacked-position anchor for renewing ONE holder-upgrade group.
+ * ── SINGLE SOURCE OF TRUTH for stacked holder pricing ────────────────────────
  *
- * An add-on group's holders sit ON TOP of the currently-active coverage, so the
- * volume-pricing tier for its renewal is decided by the CUMULATIVE position
- * (active base own count + other active add-ons), not the group's standalone
- * count. Example: active base = 6 holders, this expired add-on renews to 3 →
- * its holders occupy positions 7-9, so the tier is read at 9 ("5 to 10"), not 3.
+ * activeCoverageAnchor = holders ALREADY covered by every currently-ACTIVE plan,
+ * EXCEPT the one being renewed/expanded. A renewal/expansion stacks ON TOP of this,
+ * so the volume-pricing tier is read at (anchor + new holders), and the airline's
+ * 3-holder floor is already met whenever anchor > 0.
  *
- * When no active base / other active plan exists the group stands alone and the
- * anchor is 0, so the tier starts from the group's own count (from 1).
+ * The unit being acted on is excluded so it never anchors on itself:
+ *   - Renewing the BASE plan      → { excludeBase: true }
+ *   - Renewing an add-on group g  → { excludeGroupId: g._id }
  *
- * @param {object} doc          - airline registration
- * @param {object} group        - the group being renewed (excluded from the anchor)
- * @param {Date}   [asOf]
- * @returns {number} number of holders stacked BELOW this group's renewal
+ * Mirror of frontend utils/airlineTotal.js activeCoverageAnchor — keep in sync.
+ *
+ * @param {object} doc
+ * @param {{ excludeBase?: boolean, excludeGroupId?: string }} [opts]
+ * @param {Date} [asOf]
+ * @returns {number} holders stacked BELOW the unit being acted on
  */
-function renewTierAnchor(doc, group, asOf = new Date()) {
+function activeCoverageAnchor(doc, opts = {}, asOf = new Date()) {
+  if (!doc) return 0;
+  const { excludeBase = false, excludeGroupId = null } = opts;
   const committed = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
   const baseOwn = Math.max(0, committed - allHolderGroupSlots(doc.holderGroups));
   const baseLive = (doc.status === 'Active' || doc.isPaid) &&
     (doc.subscriptionPlan === 'Unlimited Plan' || !doc.expirationDate || new Date(doc.expirationDate) > asOf);
-  const otherActiveSlots = (doc.holderGroups || [])
-    .filter(g => String(g._id) !== String(group?._id) && isActiveHolderGroup(g, asOf))
+  const baseSlots = (!excludeBase && baseLive) ? baseOwn : 0;
+  const groupSlots = (doc.holderGroups || [])
+    .filter(g => String(g._id) !== String(excludeGroupId || '') && isActiveHolderGroup(g, asOf))
     .reduce((sum, g) => sum + Number(g.count || 0), 0);
-  return (baseLive ? baseOwn : 0) + otherActiveSlots;
+  return baseSlots + groupSlots;
+}
+
+/**
+ * Stacked-position anchor for renewing ONE holder-upgrade group. Thin wrapper over
+ * activeCoverageAnchor (base counts as coverage; this group is excluded).
+ *
+ * @param {object} doc
+ * @param {object} group   - the group being renewed (excluded from the anchor)
+ * @param {Date}   [asOf]
+ * @returns {number}
+ */
+function renewTierAnchor(doc, group, asOf = new Date()) {
+  return activeCoverageAnchor(doc, { excludeGroupId: group?._id || null }, asOf);
 }
 
 module.exports = {
@@ -114,5 +132,6 @@ module.exports = {
   isCurrentBaseGroup,
   currentBaseGroupSlots,
   currentBaseSlots,
+  activeCoverageAnchor,
   renewTierAnchor,
 };

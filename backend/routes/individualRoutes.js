@@ -17,7 +17,6 @@ const {
   markInvoiceGenerated,
   adminCreateIndividualForm,
   adminImportIndividualsFromExcel,
-  renewIndividual,
 } = require('../controller/individualController');
 const { adminRenew } = require('../controller/paymentController');
 
@@ -69,12 +68,10 @@ router.patch('/:id/mark-paid',              authMiddleware, requireAdmin, markIn
 router.patch('/:id/mark-invoice-generated', authMiddleware, requireAdmin, markInvoiceGenerated);
 router.patch('/:id/renewal-invoice',        authMiddleware, requireAdmin, setRenewalInvoiceNumber);
 router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, updateRenewalDetails);
-// renew — ADMIN ONLY. This endpoint extends the plan WITHOUT collecting payment,
-// so it must never be reachable by record owners (that was a free-renewal loophole).
-// Paid self-service renewals go through the Stripe flow: POST /api/payments/create-intent
-// (purpose:'renewal') + /confirm, which applies the renewal only after payment succeeds.
-router.post('/:id/renew',                   authMiddleware, requireAdmin, renewIndividual);
 // Admin renews on the customer's behalf (no payment) + generates invoice.
+// (The legacy /:id/renew route was removed — it extended the plan without creating
+// Payment/Invoice/Renewal docs, leaving renewals invisible in payment history.
+// adminRenew runs the exact same queued/immediate logic as a paid Stripe renewal.)
 router.post('/:id/admin-renew',             authMiddleware, requireAdmin, adminRenew);
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────

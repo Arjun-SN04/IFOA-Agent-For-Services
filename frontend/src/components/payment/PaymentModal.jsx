@@ -272,20 +272,12 @@ function CheckoutForm({ registrationId, registrationModel, amount, subscriptionD
           console.warn('[PaymentModal] /payments/confirm network error:', networkErr.message)
         }
 
-        // Fallback: directly mark the registration paid if primary confirm failed
+        // No client-side fallback when confirm fails: the mark-paid endpoints are
+        // admin-only (a customer call always 403s), and the Stripe webhook is the
+        // authoritative backup — it records the payment and activates the
+        // subscription server-side even if this confirm call never lands.
         if (!confirmJson.success) {
-          console.warn('[PaymentModal] Primary confirm failed, running fallback mark-paid:', confirmJson.message)
-          try {
-            const markPaidUrl = registrationModel === 'Individual'
-              ? `${BASE_URL}/individuals/${registrationId}/mark-paid`
-              : `${BASE_URL}/airlines/${registrationId}/mark-paid`
-            await fetch(markPaidUrl, {
-              method: 'PATCH',
-              headers: { Authorization: `Bearer ${token}` },
-            })
-          } catch (fallbackErr) {
-            console.warn('[PaymentModal] Fallback mark-paid also failed:', fallbackErr.message)
-          }
+          console.warn('[PaymentModal] /payments/confirm failed — webhook will reconcile:', confirmJson.message)
         }
 
         // Prefer canonical Invoice doc for accurate holder count / totals
@@ -555,11 +547,11 @@ export default function PaymentModal({
       {visible && (
         <motion.div
           variants={BACKDROP} initial="hidden" animate="visible" exit="exit"
-          className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
+          className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4" style={{ zIndex: 9999 }}>
           <motion.div
             variants={PANEL} initial="hidden" animate="visible" exit="exit"
             className="w-full max-w-md rounded-3xl bg-white flex flex-col overflow-hidden"
-            style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(85vh, 700px)' }}>
+            style={{ boxShadow: '0 32px 80px -12px rgba(15,23,42,0.35), 0 0 0 1px rgba(15,23,42,0.06)', maxHeight: 'min(85vh, calc(100vh - 120px))' }}>
 
             {/* Header */}
             <div className="flex-shrink-0 px-5 py-3.5 flex items-center justify-between bg-white border-b border-slate-100">

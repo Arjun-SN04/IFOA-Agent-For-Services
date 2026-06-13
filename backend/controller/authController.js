@@ -514,7 +514,9 @@ exports.resetPasswordWithOtp = async (req, res) => {
     record.used = true;
     await record.save();
 
-    user.password = await bcrypt.hash(newPassword, 12);
+    // Assign the PLAIN password — the User pre-save hook hashes it exactly once.
+    // (Hashing here too double-hashed the password and locked the user out.)
+    user.password = newPassword;
     user.mustChangePassword = false;
     await user.save();
 

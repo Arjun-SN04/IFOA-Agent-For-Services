@@ -66,6 +66,10 @@ export const markHolderGroupPaid            = (id, groupId) => API.post(`/airlin
 export const activateGroupRenewalNow        = (id, groupId) => API.post(`/airlines/${id}/holder-group/${groupId}/activate-renewal`)
 // Delete one add-on/upgrade plan (admin)
 export const deleteHolderGroup              = (id, groupId) => API.delete(`/airlines/${id}/holder-group/${groupId}`)
+// Airline cancels (permanently deletes) one of its plans. planRef = 'base' | groupId.
+// holderTarget = 'base' | groupId | null — move this plan's holders to an active plan
+// so they persist (null = delete them with the plan).
+export const cancelAirlinePlan              = (id, planRef, holderTarget, moveHolderIds) => API.post(`/airlines/${id}/cancel-plan`, { planRef, holderTarget: holderTarget || null, moveHolderIds: moveHolderIds || null })
 // Admin renews a subscription (no payment) + generates invoice. registrationModel: 'Airlines' | 'Individual'.
 export const adminRenewAirline              = (id, data) => API.post(`/airlines/${id}/admin-renew`, { ...data, registrationModel: 'Airlines' })
 export const adminRenewIndividual           = (id, data) => API.post(`/individuals/${id}/admin-renew`, { ...data, registrationModel: 'Individual' })
@@ -119,8 +123,8 @@ export const getInvoiceByRegistration  = (regId)      => API.get(`/invoices/by-r
 export const saveInvoiceDraftToDoc     = (invoiceId, draft, invoiceNumber) =>
   API.patch(`/invoices/${invoiceId}/draft`, { draft, invoiceNumber })
 // Admin creates a new canonical Invoice doc when none exists (wire/no-payment registrations)
-export const createAdminInvoiceDoc = (registrationId, registrationModel, draft, invoiceNumber, purpose) =>
-  API.post('/invoices/admin-create', { registrationId, registrationModel, draft, invoiceNumber, purpose })
+export const createAdminInvoiceDoc = (registrationId, registrationModel, draft, invoiceNumber, purpose, wirePending) =>
+  API.post('/invoices/admin-create', { registrationId, registrationModel, draft, invoiceNumber, purpose, wirePending })
 // Admin deletes an invoice — removed for both admin and the airline/individual
 export const deleteInvoice = (registrationId, invoiceNumber) =>
   API.delete(`/invoices/by-registration/${registrationId}/${encodeURIComponent(invoiceNumber)}`)

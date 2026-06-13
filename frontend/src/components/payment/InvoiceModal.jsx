@@ -188,10 +188,10 @@ export default function InvoiceModal({ invoice, onClose }) {
       {visible && (
         <motion.div
           variants={INV_BACKDROP} initial="hidden" animate="visible" exit="exit"
-          className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          className="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4">
           <motion.div
             variants={INV_PANEL} initial="hidden" animate="visible" exit="exit"
-            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
+            className="w-full max-w-lg max-h-[calc(100vh-104px)] sm:max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden">
 
             {/* Accent bar */}
             <div className="h-0.5 w-full bg-slate-200" />

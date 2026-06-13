@@ -39,7 +39,7 @@ const {
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
-const { activeHolderGroupSlots, allHolderGroupSlots, currentBaseSlots, renewTierAnchor } = require('../utils/holderGroups');
+const { activeHolderGroupSlots, allHolderGroupSlots, currentBaseSlots, renewTierAnchor, activeCoverageAnchor } = require('../utils/holderGroups');
 const {
   sendIndividualPaymentConfirmation,
   sendAirlinePaymentConfirmation,
@@ -297,12 +297,18 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
   const base    = currentExpiry && currentExpiry > now ? currentExpiry : now;
   const isQueued = currentExpiry && currentExpiry > now;
 
-  // Holder count: from Payment doc (user-adjusted at renewal) > original doc
+  // Holder count: from Payment doc (user-adjusted at renewal) > original doc.
+  // Fallback derives the BASE count (committedCount minus all group slots) — a base
+  // renewal never covers holder-upgrade groups; they renew on their own plans.
   const renewalExactCount = paymentDoc.renewalExactCount
     ? Number(paymentDoc.renewalExactCount)
     : null;
-  const effectiveCount = renewalExactCount ||
-    Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1);
+  const fallbackBaseCount = Math.max(
+    1,
+    Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1)
+      - allHolderGroupSlots(doc.holderGroups),
+  );
+  const effectiveCount = renewalExactCount || fallbackBaseCount;
   // Holder IDs to remove when this queued renewal activates (airline downgrade scenario)
   const renewalHoldersToRemove = Array.isArray(paymentDoc.renewalHoldersToRemove) && paymentDoc.renewalHoldersToRemove.length
     ? paymentDoc.renewalHoldersToRemove
@@ -396,8 +402,11 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
       update.committedCount       = grandTotal;
       update.holderCountValue     = String(grandTotal);
       update.holderCount          = holderRangeFromCount(grandTotal);
-      // Price/cert tier is based on the base renewal count the user actually paid for.
-      const renewalPpc            = tierPpcForPlan(activePlan, Math.max(3, renewalExactCount));
+      // Price/cert tier stacks the base renewal on top of whatever coverage is still
+      // active (SAME single-source anchor used by the charge calc + frontend display),
+      // so the stored pricePerCert matches what the airline was actually billed.
+      const baseRenewAnchor       = activeCoverageAnchor(doc, { excludeBase: true });
+      const renewalPpc            = tierPpcForPlan(activePlan, Math.max(3, baseRenewAnchor + renewalExactCount));
       if (renewalPpc > 0) {
         update.pricePerCertificate = renewalPpc;
         update.pricePerCert        = renewalPpc;
@@ -469,16 +478,21 @@ async function applyGroupRenewal(registrationId, registrationModel, paymentDoc, 
   const now           = new Date();
   const plan          = paymentDoc.newSubscriptionPlan || group.plan;
   const count         = paymentDoc.renewalExactCount ? Number(paymentDoc.renewalExactCount) : Number(group.count || 1);
+  // Years actually paid for (Multi-Year renewals) — stored on the Payment doc from
+  // Stripe metadata / adminRenew. Term and price must both honor it.
+  const groupYears    = plan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(paymentDoc.renewalMultiYearCount || group.multiYearCount || 2))
+    : null;
   // Add-on stacks on top of the active base — price its tier at the cumulative
   // position (anchor + count), so renewing above the base coverage moves to the
   // correct volume tier instead of always restarting at the 3-to-5 tier.
   const tierAnchor    = renewTierAnchor(doc, group, now);
   const ppc           = tierPpcForPlan(plan, Math.max(3, tierAnchor + count));
-  const price         = paymentDoc.amountDollars || ppc * count;
+  const price         = paymentDoc.amountDollars || ppc * count * (groupYears || 1);
   const currentExpiry = group.expirationDate ? new Date(group.expirationDate) : null;
   const base          = currentExpiry && currentExpiry > now ? currentExpiry : now;
   const isQueued      = currentExpiry && currentExpiry > now;
-  const newExpiry     = computeExpiry(plan, base, null);
+  const newExpiry     = computeExpiry(plan, base, groupYears);
   const holdersToRemove = Array.isArray(paymentDoc.renewalHoldersToRemove) && paymentDoc.renewalHoldersToRemove.length
     ? paymentDoc.renewalHoldersToRemove
     : null;
@@ -510,7 +524,7 @@ async function applyGroupRenewal(registrationId, registrationModel, paymentDoc, 
 
   if (isQueued) {
     group.nextRenewal = {
-      plan, count, pricePerCert: ppc, price,
+      plan, multiYearCount: groupYears, count, pricePerCert: ppc, price,
       paidAt:          paymentDoc.paidAt || now,
       activationDate:  base,
       expiresAt:       newExpiry || null,
@@ -520,6 +534,7 @@ async function applyGroupRenewal(registrationId, registrationModel, paymentDoc, 
   } else {
     // Immediate activation — group already expired.
     group.plan           = plan;
+    group.multiYearCount = groupYears;
     group.count          = count;
     group.pricePerCert   = ppc;
     group.amount         = price;
@@ -609,7 +624,9 @@ async function applyHolderUpgrade(registrationId, registrationModel, paymentDoc,
   const now        = new Date();
   const batchPlan  = meta.batchPlan || doc.subscriptionPlan;
   const batchYears = meta.batchYears || (batchPlan === 'Multiple Years Subscription Plan' ? 3 : null);
-  const newPpc     = Number(meta.newPpc || tierPpcForPlan(batchPlan, additionalCount));
+  // Added holders stack on ALL currently-active coverage → tier read at
+  // (activeCoverageAnchor + additional). SINGLE SOURCE, matches the add/expand modals.
+  const newPpc     = Number(meta.newPpc || tierPpcForPlan(batchPlan, Math.max(3, activeCoverageAnchor(doc, {}, now) + additionalCount)));
   const mergeTarget = meta.mergeTarget || '';
   const currentCommitted = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
   const newCount = currentCommitted + additionalCount;
@@ -757,11 +774,10 @@ exports.createPaymentIntent = async (req, res) => {
       // Fall back to the airline's current plan when none is supplied.
       const batchPlan = newSubscriptionPlan || doc.subscriptionPlan;
 
-      // Determine new total count and look up tier-based ppc (pricing logic
-      // unchanged: tier derived from the new total committed count).
-      // Tier is based on current base slots (excludes previous-period upgrade plans)
-      // so a stale leftover plan can't shift the tier.
-      const newTotal = Math.max(3, currentBaseSlots(doc) + additional);
+      // Added holders stack on ALL currently-active coverage → tier read at
+      // (activeCoverageAnchor + additional). SINGLE SOURCE, same anchor as the charge
+      // metadata, snapshots, admin add and the frontend display.
+      const newTotal = Math.max(3, activeCoverageAnchor(doc, {}) + additional);
       const newPpc   = tierPpcForPlan(batchPlan, newTotal);
 
       // Multi-Year batches multiply by the selected year count.
@@ -787,18 +803,38 @@ exports.createPaymentIntent = async (req, res) => {
       // position so the charged ppc matches what the frontend displayed.
       const groupTierAnchor = renewTierAnchor(doc, group, new Date());
       const groupPpc = tierPpcForPlan(groupPlan, Math.max(3, groupTierAnchor + renewCount));
-      amountDollars = groupPpc * renewCount;
+      if (groupPlan === 'Multiple Years Subscription Plan') {
+        // Multi-Year group renewal bills ppc × count × years — without the year
+        // multiplier the airline was charged one year but granted the multi-year term.
+        computedYears = computedYears || group.multiYearCount || 2;
+        amountDollars = groupPpc * renewCount * Math.max(2, computedYears);
+      } else {
+        amountDollars = groupPpc * renewCount;
+      }
     } else if (registrationModel !== 'Individual') {
       const activePlanForAirline = newSubscriptionPlan || doc.subscriptionPlan;
       // For renewals the user may have adjusted the holder count — use that if supplied.
       const renewalCount = bodyRenewalCount ? Number(bodyRenewalCount) : null;
-      const count = renewalCount ||
+      // Fallback count: committedCount is the GRAND TOTAL (base + ALL holder-upgrade
+      // groups). A BASE renewal covers only the base slots — groups renew separately —
+      // so subtract group slots or the airline gets billed for them twice.
+      const grandCommitted =
         Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
+      const baseFallbackCount = purpose === 'renewal'
+        ? Math.max(1, grandCommitted - allHolderGroupSlots(doc.holderGroups))
+        : grandCommitted;
+      const count = renewalCount || baseFallbackCount;
       // Renewals: always recalculate tier-based ppc from the effective count so the
       // backend amount matches what the frontend getRenewPpc() displayed to the user.
+      // A BASE renewal stacks on whatever coverage is still active (e.g. an active
+      // Lifetime/Upgrade add-on), so its tier is read at (activeCoverage + count) —
+      // SAME single-source anchor the frontend uses (activeCoverageAnchor excludeBase).
       // Initial payments: use the stored pricePerCertificate set by admin at registration.
+      const baseRenewAnchor = purpose === 'renewal'
+        ? activeCoverageAnchor(doc, { excludeBase: true })
+        : 0;
       const ppc = purpose === 'renewal'
-        ? tierPpcForPlan(activePlanForAirline, Math.max(3, count))
+        ? tierPpcForPlan(activePlanForAirline, Math.max(3, baseRenewAnchor + count))
         : Number(doc.pricePerCertificate || doc.pricePerCert || 0);
       if (ppc > 0 && count > 0) {
         if (activePlanForAirline === 'Multiple Years Subscription Plan') {
@@ -871,7 +907,7 @@ exports.createPaymentIntent = async (req, res) => {
     if (purpose === 'holder-upgrade') {
       const _batchPlan  = newSubscriptionPlan || doc.subscriptionPlan;
       const _additional = Number(bodyAdditionalCount || 0);
-      const _newTotal   = Math.max(3, currentBaseSlots(doc) + _additional);
+      const _newTotal   = Math.max(3, activeCoverageAnchor(doc, {}) + _additional);
       metadata.newPricePerCertificate = String(tierPpcForPlan(_batchPlan, _newTotal));
       // batchPlan mirrors newSubscriptionPlan; set explicitly so confirm/webhook
       // always have the group's plan even when it equals the base plan.
@@ -1026,9 +1062,19 @@ exports.confirmPayment = async (req, res) => {
     const renewalMultiYearCount = pi.metadata?.renewalMultiYearCount
       ? Number(pi.metadata.renewalMultiYearCount)
       : null;
-    const renewalExactCount = pi.metadata?.renewalExactCount
+    let renewalExactCount = pi.metadata?.renewalExactCount
       ? Number(pi.metadata.renewalExactCount)
       : null;
+    // Base airline renewal without an explicit count: derive the BASE count the
+    // intent actually charged for (committedCount minus group slots) so the
+    // snapshot/registration stay consistent with the charge.
+    if (!renewalExactCount && isPurposeRenewal && !pi.metadata?.holderGroupId && registrationModel !== 'Individual') {
+      renewalExactCount = Math.max(
+        1,
+        Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1)
+          - allHolderGroupSlots(doc.holderGroups),
+      );
+    }
     let renewalHoldersToRemove = null;
     try {
       if (pi.metadata?.renewalHoldersToRemove) {
@@ -1048,7 +1094,7 @@ exports.confirmPayment = async (req, res) => {
       // For airline renewals: use renewal-tier PPC so buildInvoiceSnapshot totalPaid
       // matches what Stripe actually charged (not the original admin-set pricePerCertificate).
       const renewalPpcForSnapshot = registrationModel !== 'Individual' && renewalExactCount
-        ? tierPpcForPlan(renewalPlan, Math.max(3, renewalExactCount))
+        ? tierPpcForPlan(renewalPlan, Math.max(3, activeCoverageAnchor(doc, { excludeBase: true }) + renewalExactCount))
         : null;
       const renewalDocObj = {
         ...doc.toObject(),
@@ -1066,7 +1112,7 @@ exports.confirmPayment = async (req, res) => {
       const addCount  = Number(pi.metadata?.additionalHolderCount || 0) || 1;
       const batchPpc  = pi.metadata?.newPricePerCertificate
         ? Number(pi.metadata.newPricePerCertificate)
-        : tierPpcForPlan(batchPlan, addCount);
+        : tierPpcForPlan(batchPlan, Math.max(3, activeCoverageAnchor(doc, {}) + addCount));
       const upgradeDocObj = {
         ...doc.toObject(),
         subscriptionPlan:    batchPlan,
@@ -1471,8 +1517,18 @@ exports.stripeWebhook = async (req, res) => {
       // Build invoice snapshot — for renewals use activationDate as period start
       const webhookRenewalYears = pi.metadata?.renewalMultiYearCount
         ? Number(pi.metadata.renewalMultiYearCount) : null;
-      const webhookRenewalCount = pi.metadata?.renewalExactCount
+      let webhookRenewalCount = pi.metadata?.renewalExactCount
         ? Number(pi.metadata.renewalExactCount) : null;
+      // Base airline renewal without an explicit count: derive the BASE count the
+      // intent actually charged for (committedCount minus group slots) — mirrors
+      // confirmPayment so both confirm paths stay consistent.
+      if (!webhookRenewalCount && isPurposeRenewal && !pi.metadata?.holderGroupId && registrationModel !== 'Individual') {
+        webhookRenewalCount = Math.max(
+          1,
+          Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1)
+            - allHolderGroupSlots(doc.holderGroups),
+        );
+      }
       let webhookHoldersToRemove = null;
       try {
         if (pi.metadata?.renewalHoldersToRemove) {
@@ -1488,7 +1544,7 @@ exports.stripeWebhook = async (req, res) => {
         const renewalBase   = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
         // price set to amountDollars so buildInvoiceSnapshot can derive Individual years from it.
         const webhookRenewalPpc = registrationModel !== 'Individual' && webhookRenewalCount
-          ? tierPpcForPlan(renewalPlan, Math.max(3, webhookRenewalCount))
+          ? tierPpcForPlan(renewalPlan, Math.max(3, activeCoverageAnchor(doc, { excludeBase: true }) + webhookRenewalCount))
           : null;
         const renewalDocObj = {
           ...doc.toObject(),
@@ -1506,7 +1562,7 @@ exports.stripeWebhook = async (req, res) => {
         const batchPlan = pi.metadata?.batchPlan || pi.metadata?.newSubscriptionPlan || doc.subscriptionPlan;
         const batchPpc = pi.metadata?.newPricePerCertificate
           ? Number(pi.metadata.newPricePerCertificate)
-          : tierPpcForPlan(batchPlan, Math.max(3, additionalCount || 1));
+          : tierPpcForPlan(batchPlan, Math.max(3, activeCoverageAnchor(doc, {}) + (additionalCount || 1)));
         const upgradeDocObj = {
           ...doc.toObject(),
           subscriptionPlan:    batchPlan,
@@ -1656,21 +1712,37 @@ exports.stripeWebhook = async (req, res) => {
 
     if (registrationId && registrationModel) {
       try {
-        const { doc, Model } = await findRegistration(registrationId, registrationModel);
-        if (doc && !doc.isPaid && Model) {
-          await Model.findByIdAndUpdate(
-            registrationId,
-            { $set: { paymentStatus: 'failed', isFormCompleted: false, status: 'Inactive' } },
-          );
-        }
-        await Payment.findOneAndUpdate(
-          { stripePaymentIntentId: pi.id },
-          {
-            $setOnInsert: {
+        // Stripe events can arrive out of order: a payment_failed for an intent
+        // that LATER succeeded (or whose success event was processed first) must
+        // never flip an already-paid Payment doc back to failed.
+        const existingPayment = await Payment.findOne({ stripePaymentIntentId: pi.id });
+        if (existingPayment?.isPaid) {
+          console.log(`[stripeWebhook] Ignoring late payment_failed for already-paid intent ${pi.id}`);
+        } else {
+          const { doc, Model } = await findRegistration(registrationId, registrationModel);
+          if (doc && !doc.isPaid && Model) {
+            await Model.findByIdAndUpdate(
+              registrationId,
+              { $set: { paymentStatus: 'failed', isFormCompleted: false, status: 'Inactive' } },
+            );
+          }
+          if (existingPayment) {
+            await Payment.findByIdAndUpdate(existingPayment._id, {
+              $set: { status: 'failed', isPaid: false, confirmedVia: 'webhook' },
+            });
+          } else {
+            // New failed-attempt record. Invoice number generated only on this
+            // insert path (the schema requires one) — never burned on updates.
+            await Payment.create({
               stripePaymentIntentId: pi.id,
-              amountCents:           pi.amount,
-              amountDollars:         pi.amount / 100,
-              currency:              pi.currency || 'usd',
+              status:        'failed',
+              isPaid:        false,
+              confirmedVia:  'webhook',
+              purpose:       pi.metadata?.purpose && ['payment', 'renewal', 'holder-upgrade'].includes(pi.metadata.purpose)
+                ? pi.metadata.purpose : 'payment',
+              amountCents:   pi.amount,
+              amountDollars: pi.amount / 100,
+              currency:      pi.currency || 'usd',
               registrationId,
               registrationModel,
               invoiceSnapshot: {
@@ -1684,18 +1756,14 @@ exports.stripeWebhook = async (req, res) => {
               },
               invoiceNumber: await generateInvoiceNumber(),
               invoiceDraft:  null,
-            },
-            $set: {
-              status:      'failed',
-              isPaid:      false,
-              confirmedVia:'webhook',
-              purpose:     'payment',
-            },
-          },
-          { upsert: true, new: true, setDefaultsOnInsert: true },
-        );
+            });
+          }
+        }
       } catch (err) {
-        console.error('[stripeWebhook] Failed payment update error:', err.message);
+        // Duplicate-key on concurrent insert = another worker recorded it; ignore.
+        if (err?.code !== 11000) {
+          console.error('[stripeWebhook] Failed payment update error:', err.message);
+        }
       }
     }
   }
@@ -1914,6 +1982,7 @@ async function performQueuedGroupRenewals(doc, Model) {
     const nr = group.nextRenewal;
     if (!nr || !nr.paidAt || !nr.activationDate || new Date(nr.activationDate) > now) return;
     group.plan = nr.plan || group.plan;
+    if (nr.multiYearCount) group.multiYearCount = nr.multiYearCount;
     if (nr.count)        group.count        = nr.count;
     if (nr.pricePerCert) group.pricePerCert = nr.pricePerCert;
     if (nr.price)        group.amount       = nr.price;
@@ -1931,7 +2000,7 @@ async function performQueuedGroupRenewals(doc, Model) {
       );
     }
     group.nextRenewal = {
-      plan: null, count: null, pricePerCert: null, price: null, paidAt: null,
+      plan: null, multiYearCount: null, count: null, pricePerCert: null, price: null, paidAt: null,
       activationDate: null, expiresAt: null, invoiceNumber: null, holdersToRemove: null,
     };
     changed = true;
@@ -2003,7 +2072,9 @@ exports.adminHolderUpgrade = async (req, res) => {
     // on the current base slots (excludes previous-period upgrade plans) so a stale
     // leftover plan can't bump the airline into a higher/lower tier.
     const newCommitted = currentCommitted + addCount;
-    const tierBasis    = currentBaseSlots(doc, now) + addCount;
+    // Added holders stack on ALL currently-active coverage → tier read at
+    // (activeCoverageAnchor + addCount). SINGLE SOURCE, matches charge + frontend.
+    const tierBasis    = activeCoverageAnchor(doc, {}, now) + addCount;
     const ppc          = tierPpcForPlan(batchPlan, Math.max(3, tierBasis));
     const amount       = ppc * addCount;
     const expiry   = computeExpiry(batchPlan, now, null);
@@ -2142,13 +2213,15 @@ exports.adminRenew = async (req, res) => {
       ? (exactCount ? Number(exactCount) : Number(group.count || 1))
       : (exactCount ? Number(exactCount) : Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1));
 
-    // A group add-on stacks on the active base — its tier is read at the cumulative
-    // position (anchor + count), matching applyGroupRenewal() and the frontend.
-    const tierAnchor = group ? renewTierAnchor(doc, group, now) : 0;
+    // Any renewal stacks on whatever coverage is still active — tier read at the
+    // cumulative position (anchor + count). SINGLE SOURCE activeCoverageAnchor, same as
+    // applyGroupRenewal()/applyRenewalToRegistration() and the frontend modals.
+    const tierAnchor = activeCoverageAnchor(doc, group ? { excludeGroupId: group._id } : { excludeBase: true }, now);
     const tierCount  = Math.max(3, tierAnchor + count);
 
     // ── Amount: admin override, else computed from tier/plan pricing ──────────
     let amountDollars = Number(price);
+    const adminPriceOverride = amountDollars > 0;
     if (!(amountDollars > 0)) {
       if (isAirline) {
         // tierPpcForPlan returns UNLIMITED tier pricing when activePlan is Unlimited.
@@ -2178,7 +2251,14 @@ exports.adminRenew = async (req, res) => {
       ? (group.expirationDate ? new Date(group.expirationDate) : null)
       : (doc.expirationDate ? new Date(doc.expirationDate) : null);
     const renewalBase = baseExpiry && baseExpiry > now ? baseExpiry : now;
-    const ppcForSnap = isAirline ? tierPpcForPlan(activePlan, tierCount) : 0;
+    // When the admin overrode the price, derive the per-cert unit from the actual
+    // charge so the invoice reconciles (count × unit × years ≈ amount) instead of
+    // showing the tier price the admin deliberately replaced.
+    const ppcForSnap = !isAirline
+      ? 0
+      : adminPriceOverride && count > 0
+        ? Math.round((amountDollars / count / (yearsVal || 1)) * 100) / 100
+        : tierPpcForPlan(activePlan, tierCount);
     const snapDocObj = {
       ...doc.toObject(),
       subscriptionPlan: activePlan,
@@ -2189,6 +2269,12 @@ exports.adminRenew = async (req, res) => {
       ...(isAirline ? { pricePerCertificate: ppcForSnap, pricePerCert: ppcForSnap } : {}),
     };
     const snapshot = buildInvoiceSnapshot(snapDocObj, registrationModel, amountDollars, renewalBase);
+    if (adminPriceOverride) {
+      // buildInvoiceSnapshot recomputes airline totals from ppc × count × years —
+      // pin the totals to the EXACT amount the admin charged (rounding-safe).
+      snapshot.subtotal  = amountDollars;
+      snapshot.totalPaid = amountDollars;
+    }
 
     // ── Synthetic (manual) Payment doc — drives the same renewal application ──
     const paymentDoc = await Payment.create({

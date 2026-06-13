@@ -11,7 +11,7 @@ const {
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice }  = require('../services/invoiceService');
 const { sendAirlinePaymentConfirmation, sendWireRequestAdminNotification } = require('../services/emailService');
-const { allHolderGroupSlots } = require('../utils/holderGroups');
+const { allHolderGroupSlots, isActiveHolderGroup } = require('../utils/holderGroups');
 
 // Server-side pricing tables (used to validate / recompute price on create)
 const UNLIMITED_PRICES = { '3 to 5': 265, '5 to 10': 255, 'More than 10': 245 };
@@ -345,15 +345,50 @@ function isAirlineSheet(sheetName, rows) {
   );
 }
 
+// Fields the PUBLIC airline registration form may set. Payment/status/invoice
+// fields are server-controlled — accepting them from the client lets anyone
+// register an already-"paid" active subscription (mass assignment).
+const PUBLIC_AIRLINE_FIELDS = [
+  'subscriptionPlan', 'multiYearCount', 'holderCount', 'holderCountValue',
+  'airlineName', 'logoUrl',
+  'firstName', 'lastName', 'middleName', 'dateOfBirth',
+  'email', 'phone',
+  'pointOfContact', 'pointOfContactEmail', 'pointOfContactPhone',
+  'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
+  'certificateHolders', 'paymentEmail',
+  'agreedToTerms',
+];
+
 // ── Create ────────────────────────────────────────────────────────────────────
 exports.createAirlinesSubscription = async (req, res) => {
   try {
-    const body = { ...req.body };
+    const body = {};
+    PUBLIC_AIRLINE_FIELDS.forEach((f) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, f)) body[f] = req.body[f];
+    });
     // Normalize email fields
-    if (body.email)        body.email        = body.email.toLowerCase().trim();
-    if (body.contactEmail) body.contactEmail = body.contactEmail.toLowerCase().trim();
+    if (body.email)               body.email               = body.email.toLowerCase().trim();
+    if (body.pointOfContactEmail) body.pointOfContactEmail = String(body.pointOfContactEmail).toLowerCase().trim();
+    if (body.paymentEmail)        body.paymentEmail        = String(body.paymentEmail).toLowerCase().trim();
 
-    const normalizedEmail = body.email || body.contactEmail;
+    // Multi-year count only meaningful for the Multi-Year plan; clamp to >= 2.
+    if (body.subscriptionPlan === 'Multiple Years Subscription Plan') {
+      const y = Number(body.multiYearCount);
+      body.multiYearCount = Number.isFinite(y) && y >= 2 ? Math.round(y) : 2;
+    } else {
+      delete body.multiYearCount;
+    }
+
+    // Public submissions never assign holders to upgrade groups.
+    if (Array.isArray(body.certificateHolders)) {
+      body.certificateHolders = body.certificateHolders.map(({ holderGroupId, ...h }) => h);
+    }
+
+    // contactEmail is a legacy field used only for the duplicate-submission check.
+    const legacyContactEmail = req.body.contactEmail
+      ? String(req.body.contactEmail).toLowerCase().trim()
+      : '';
+    const normalizedEmail = body.email || legacyContactEmail;
     if (normalizedEmail) {
       const emailRegex = new RegExp('^' + normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
       const [primaryDoc, legacyContactDoc, legacyEmailDoc] = await Promise.all([
@@ -372,9 +407,6 @@ exports.createAirlinesSubscription = async (req, res) => {
       }
     }
 
-    // Always resolve price server-side to prevent client-side tampering
-    body.pricePerCertificate = resolvePricePerCertificate(body);
-
     const isUnlimited   = body.subscriptionPlan === 'Unlimited Plan';
     const holdersFilled = body.certificateHolders?.length || 0;
 
@@ -382,6 +414,15 @@ exports.createAirlinesSubscription = async (req, res) => {
     body.committedCount = body.holderCountValue
       ? parseInt(body.holderCountValue, 10)
       : holdersFilled;
+
+    // Tier range derived from the actual count — a client-supplied range that
+    // disagrees with the count could buy a cheaper volume tier.
+    if (body.committedCount > 0) {
+      body.holderCount = holderRangeFromCount(body.committedCount);
+    }
+
+    // Always resolve price server-side to prevent client-side tampering
+    body.pricePerCertificate = resolvePricePerCertificate(body);
 
     // totalAmount = full amount for all committed slots (even if not all filled yet)
     // Unlimited Plan uses the same formula: pricePerCert × committedCount
@@ -627,6 +668,16 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
       'holderGroups',
+      // Subscription period is server/admin-controlled — a user who could set
+      // these directly would be able to extend their own coverage for free.
+      'subscriptionDate', 'expirationDate', 'multiYearCount',
+    ]);
+
+    // Plan/capacity fields a user may change ONLY before payment (pre-checkout
+    // adjustments). Once paid, slot increases go through the paid holder-upgrade
+    // flow and plan changes through renewal.
+    const paidLockedFields = new Set([
+      'subscriptionPlan', 'holderCount', 'holderCountValue', 'committedCount',
     ]);
 
     const allowedFields = [
@@ -637,8 +688,9 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
       'holderGroups',
+      'subscriptionDate', 'expirationDate', 'multiYearCount',
       // User-editable profile fields
-      'subscriptionPlan', 'subscriptionDate', 'expirationDate',
+      'subscriptionPlan',
       'holderCount', 'holderCountValue', 'committedCount',
       'airlineName',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
@@ -649,9 +701,19 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'paymentEmail',
     ];
 
+    // Non-admin editing a PAID record: plan/capacity changes are locked too.
+    let recordIsPaid = false;
+    if (!isAdmin) {
+      let cur = await Airlines.findById(req.params.id).select('isPaid paymentStatus');
+      if (!cur) cur = await AirlinesSubscription.findById(req.params.id).select('isPaid paymentStatus');
+      if (!cur) return res.status(404).json({ success: false, message: 'Not found' });
+      recordIsPaid = !!(cur.isPaid || cur.paymentStatus === 'paid');
+    }
+
     const payload = {};
     allowedFields.forEach((field) => {
       if (!isAdmin && adminOnlyFields.has(field)) return; // non-admins cannot set these
+      if (!isAdmin && recordIsPaid && paidLockedFields.has(field)) return;
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         payload[field] = req.body[field];
       }
@@ -827,12 +889,15 @@ exports.updateAirlinesSubscription = async (req, res) => {
         const Invoice = require('../models/Invoice');
         const Payment = require('../models/Payment');
         const newNum  = payload.invoiceNumber;
-        // Only the invoice the registration was pointing to (old number) follows the
-        // rename — renewal/upgrade invoices for the same registration are untouched.
-        const matchInvoice = oldInvoiceNumberForSync
-          ? { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }
-          : { registrationId: req.params.id, paymentId: null };
-        const targetInvoice = await Invoice.findOne(matchInvoice).sort({ createdAt: 1 });
+        // ONLY the invoice that exactly carried the registration's OLD number follows the
+        // rename. When the registration had no prior number there is nothing to rename —
+        // we must NOT grab an arbitrary paymentId:null doc, since that could be a
+        // renewal/holder-upgrade additive invoice and renaming it would silently OVERRIDE
+        // a different invoice's number. In that case the new number simply lives on the
+        // registration and a base invoice picks it up when generated.
+        const targetInvoice = oldInvoiceNumberForSync
+          ? await Invoice.findOne({ registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }).sort({ createdAt: 1 })
+          : null;
         if (targetInvoice) {
           targetInvoice.invoiceNumber = newNum;
           if (targetInvoice.draft) {
@@ -921,6 +986,150 @@ exports.deleteHolderGroup = async (req, res) => {
 
     await doc.save();
     res.json({ success: true, message: 'Plan deleted.', data: doc });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Cancel a plan (owner) ──────────────────────────────────────────────────────
+// POST /api/airlines/:id/cancel-plan   body: { planRef, holderTarget }
+//   planRef      = 'base' | <holderGroup _id>   — the plan to permanently remove
+//   holderTarget = 'base' | <holderGroup _id> | null — where to move this plan's
+//                  holders so they persist (must be an ACTIVE plan that survives the
+//                  cancel). null/omitted → the holders are deleted with the plan.
+//
+// Rules (locked with product):
+//   • Invoices are KEPT (financial history) — we never touch the Invoice collection.
+//   • The LAST remaining plan cannot be cancelled.
+//   • If the base plan is removed (baseOwn drops to 0) and ≥1 group survives, the most
+//     suitable surviving plan is PROMOTED to the new base (active first; perpetual
+//     Unlimited preferred; otherwise the largest/most-recent). This also covers the
+//     "only one plan remains → it becomes the base regardless of its type" case.
+exports.cancelPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { planRef, holderTarget } = req.body || {};
+    if (!planRef) return res.status(400).json({ success: false, message: 'planRef is required.' });
+
+    const doc = await Airlines.findById(id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    let groups = doc.holderGroups || [];
+    const committed = Number(doc.committedCount || doc.holderCountValue || 0);
+    let baseOwn = Math.max(0, committed - allHolderGroupSlots(groups));
+
+    // ── Validate the plan being cancelled exists ───────────────────────────────
+    const isBaseRef = planRef === 'base';
+    const targetGroup = isBaseRef ? null : groups.find(g => String(g._id) === String(planRef));
+    if (!isBaseRef && !targetGroup)
+      return res.status(404).json({ success: false, message: 'Plan not found.' });
+    if (isBaseRef && baseOwn <= 0)
+      return res.status(400).json({ success: false, message: 'No base plan to cancel.' });
+
+    // ── Guard: never cancel the last remaining plan ────────────────────────────
+    const totalPlans = (baseOwn > 0 ? 1 : 0) + groups.length;
+    if (totalPlans <= 1)
+      return res.status(400).json({ success: false, message: 'You cannot cancel your only plan.' });
+
+    // ── Resolve which currently-active plan a ref points to (for holder moves) ──
+    const baseActive = (doc.status === 'Active' || doc.isPaid) &&
+      (doc.subscriptionPlan === 'Unlimited Plan' || !doc.expirationDate || new Date(doc.expirationDate) > new Date());
+    const refIsActive = (ref) => {
+      if (ref === 'base') return baseOwn > 0 && baseActive;
+      const g = groups.find(x => String(x._id) === String(ref));
+      return !!(g && isActiveHolderGroup(g));
+    };
+
+    // Holders sitting on the plan being cancelled.
+    const onPlan  = (doc.certificateHolders || []).filter(h =>
+      isBaseRef ? !h.holderGroupId : String(h.holderGroupId || '') === String(planRef));
+    const others  = (doc.certificateHolders || []).filter(h =>
+      isBaseRef ? !!h.holderGroupId : String(h.holderGroupId || '') !== String(planRef));
+
+    // ── Holder reassignment (optional) ─────────────────────────────────────────
+    // The target plan keeps its FIXED capacity — holders fill its free slots only.
+    // If more holders sit on the cancelled plan than the target has free slots, the
+    // caller selects which holders to keep (moveHolderIds); the rest are removed.
+    const moveHolderIds = Array.isArray(req.body?.moveHolderIds)
+      ? req.body.moveHolderIds.map(String) : null;
+    if (holderTarget && onPlan.length) {
+      if (String(holderTarget) === String(planRef))
+        return res.status(400).json({ success: false, message: 'Cannot move holders into the plan being cancelled.' });
+      if (!refIsActive(holderTarget))
+        return res.status(400).json({ success: false, message: 'Holders can only be moved to a currently-active plan.' });
+
+      // Free slots on the target = its capacity − holders already on it.
+      const targetCapacity = holderTarget === 'base'
+        ? baseOwn
+        : Number((groups.find(g => String(g._id) === String(holderTarget)) || {}).count || 0);
+      const targetFilled = (doc.certificateHolders || []).filter(h =>
+        holderTarget === 'base' ? !h.holderGroupId : String(h.holderGroupId || '') === String(holderTarget)).length;
+      const freeSlots = Math.max(0, targetCapacity - targetFilled);
+
+      // Which holders move: explicit selection, else as many as fit (first N).
+      const toMove = moveHolderIds
+        ? onPlan.filter(h => moveHolderIds.includes(String(h._id)))
+        : onPlan.slice(0, freeSlots);
+      if (toMove.length > freeSlots)
+        return res.status(400).json({ success: false, message: `The target plan has only ${freeSlots} free slot(s). Select up to ${freeSlots} holder(s) to move.` });
+
+      const newGid = holderTarget === 'base' ? null : holderTarget;
+      toMove.forEach(h => { h.holderGroupId = newGid; });
+      const movedSet = new Set(toMove.map(h => String(h._id)));
+      // Kept = everyone NOT on the cancelled plan + the moved ones. Unmoved on-plan holders drop.
+      doc.certificateHolders = [...others, ...onPlan.filter(h => movedSet.has(String(h._id)))];
+    } else {
+      // No move (or no holders) → holders go away with the plan.
+      doc.certificateHolders = others;
+    }
+
+    // ── Remove the cancelled plan's own capacity ───────────────────────────────
+    if (isBaseRef) {
+      baseOwn = 0;                                  // base removed — promotion below
+    } else {
+      groups = groups.filter(g => String(g._id) !== String(planRef));
+    }
+
+    // ── Promote a surviving plan to base when the base is gone ─────────────────
+    if (baseOwn <= 0 && groups.length > 0) {
+      const actives = groups.filter(g => isActiveHolderGroup(g));
+      const pool = actives.length ? actives : groups;
+      // Prefer perpetual Unlimited, then the latest-expiring, then the largest.
+      const pick = [...pool].sort((a, b) => {
+        const au = a.plan === 'Unlimited Plan' ? 1 : 0;
+        const bu = b.plan === 'Unlimited Plan' ? 1 : 0;
+        if (au !== bu) return bu - au;
+        const ae = a.expirationDate ? new Date(a.expirationDate).getTime() : Infinity;
+        const be = b.expirationDate ? new Date(b.expirationDate).getTime() : Infinity;
+        if (ae !== be) return be - ae;
+        return Number(b.count || 0) - Number(a.count || 0);
+      })[0];
+
+      doc.subscriptionPlan   = pick.plan;
+      doc.expirationDate     = pick.plan === 'Unlimited Plan' ? null : (pick.expirationDate || null);
+      doc.subscriptionDate   = pick.subscriptionDate || doc.subscriptionDate;
+      doc.pricePerCertificate = Number(pick.pricePerCert || doc.pricePerCertificate || 0);
+      doc.pricePerCert        = doc.pricePerCertificate;
+      if (pick.multiYearCount) doc.multiYearCount = pick.multiYearCount;
+      if (pick.invoiceNumber)  doc.invoiceNumber  = pick.invoiceNumber;
+
+      // The promoted plan's holders become base holders.
+      (doc.certificateHolders || []).forEach(h => {
+        if (String(h.holderGroupId || '') === String(pick._id)) h.holderGroupId = null;
+      });
+      baseOwn = Number(pick.count || 0);
+      groups = groups.filter(g => String(g._id) !== String(pick._id));
+    }
+
+    // ── Persist the rebuilt plan set + committed-count invariant ───────────────
+    doc.holderGroups   = groups;
+    const newCommitted = Math.max(0, baseOwn + allHolderGroupSlots(groups));
+    doc.committedCount   = newCommitted;
+    doc.holderCountValue = String(newCommitted);
+    doc.holderCount      = holderRangeFromCount(newCommitted);
+
+    await doc.save();
+    res.json({ success: true, message: 'Plan cancelled.', data: doc });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1136,13 +1345,14 @@ exports.activateGroupRenewalNow = async (req, res) => {
 
     const now = new Date();
     group.plan = nr.plan || group.plan;
+    if (nr.multiYearCount) group.multiYearCount = nr.multiYearCount;
     if (nr.count)        group.count        = nr.count;
     if (nr.pricePerCert) group.pricePerCert = nr.pricePerCert;
     if (nr.price)        group.amount       = nr.price;
     group.subscriptionDate = now;
     group.expirationDate   = group.plan === 'Unlimited Plan'
       ? null
-      : computeAirlinesExpirationDate(group.plan, now, nr.multiYearCount);
+      : computeAirlinesExpirationDate(group.plan, now, nr.multiYearCount || group.multiYearCount);
     if (nr.invoiceNumber) group.invoiceNumber = nr.invoiceNumber;
     group.lastRenewal = {
       plan: nr.plan, count: nr.count, paidAt: nr.paidAt, activationDate: now,
@@ -1155,7 +1365,7 @@ exports.activateGroupRenewalNow = async (req, res) => {
       );
     }
     group.nextRenewal = {
-      plan: null, count: null, pricePerCert: null, price: null, paidAt: null,
+      plan: null, multiYearCount: null, count: null, pricePerCert: null, price: null, paidAt: null,
       activationDate: null, expiresAt: null, invoiceNumber: null, holdersToRemove: null,
     };
     await doc.save();
@@ -1226,7 +1436,14 @@ exports.markAirlinesPaid = async (req, res) => {
     try {
       const holderCount  = Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 0);
       const pricePerCert = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
-      const totalAmount  = pricePerCert > 0 && holderCount > 0 ? pricePerCert * holderCount : Number(doc.totalAmount || 0);
+      // Multi-Year wire payments cover ppc × count × years — same formula as the
+      // Stripe path (buildInvoiceSnapshot) and the totalAmount pre-save hook.
+      const yearsMult = doc.subscriptionPlan === 'Multiple Years Subscription Plan' && Number(doc.multiYearCount) > 1
+        ? Number(doc.multiYearCount)
+        : 1;
+      const totalAmount  = pricePerCert > 0 && holderCount > 0
+        ? pricePerCert * holderCount * yearsMult
+        : Number(doc.totalAmount || 0);
       await createOrUpdateInvoice({
         registrationId:    doc._id,
         registrationModel: doc.constructor.modelName || 'Airlines',
@@ -1239,6 +1456,7 @@ exports.markAirlinesPaid = async (req, res) => {
           isAirline:        true,
           airlineName:      doc.airlineName || '',
           subscriptionPlan: doc.subscriptionPlan || '',
+          multiYearCount:   yearsMult > 1 ? yearsMult : null,
           subscriptionDate: now,
           expirationDate:   update.expirationDate || null,
           holderCount,
@@ -1564,10 +1782,13 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // Mark as admin-created — gates invoice generation to admin-added registrations.
     body.addedByAdmin = true;
 
-    // Resolve price server-side
-    body.pricePerCertificate = resolvePricePerCertificate(body);
+    // Resolve price server-side — honor an explicit per-cert override when the
+    // admin sets one in the base-plan popup, otherwise fall back to tier pricing.
+    const overridePpc = Number(body.pricePerCertificate);
+    body.pricePerCertificate = (Number.isFinite(overridePpc) && overridePpc > 0)
+      ? overridePpc
+      : resolvePricePerCertificate(body);
 
-    const isUnlimited = body.subscriptionPlan === 'Unlimited Plan';
     const holdersFilled = body.certificateHolders?.length || 0;
 
     body.committedCount = body.holderCountValue
@@ -1575,20 +1796,34 @@ exports.adminCreateAirlineForm = async (req, res) => {
       : holdersFilled;
 
     body.totalAmount = body.pricePerCertificate * body.committedCount;
-    body.amountPaid  = body.pricePerCertificate * body.committedCount;
 
-    body.status = 'Active';
-    body.paymentStatus = 'paid';
-    body.isPaid = true;
-    body.subscriptionDate = new Date();
+    // Payment state — admin chooses paid+active (subscription dates set, invoice
+    // generated) or pending/unpaid (activates on payment, no invoice yet).
+    const markPaid = body.paid === true || body.paid === 'true' || body.paymentStatus === 'paid';
+    if (markPaid) {
+      body.status = 'Active';
+      body.paymentStatus = 'paid';
+      body.isPaid = true;
+      body.subscriptionDate = new Date();
+      body.expirationDate = computeAirlinesExpirationDate(body.subscriptionPlan, body.subscriptionDate, body.multiYearCount);
+      body.amountPaid = body.pricePerCertificate * body.committedCount;
+    } else {
+      body.status = 'Pending';
+      body.paymentStatus = 'pending';
+      body.isPaid = false;
+      body.subscriptionDate = null;
+      body.expirationDate = null;
+      body.amountPaid = 0;
+    }
 
     // Create airline record
     const airline = new Airlines(body);
     await airline.save();
 
-    // Create canonical Invoice document for admin-created (paid) airlines so
-    // the airline user immediately sees the Invoice button in the dashboard.
-    try {
+    // Generate the canonical Invoice document only for PAID admin-created airlines
+    // so the airline user immediately sees the Invoice button. Pending base plans
+    // get their invoice when payment is later recorded.
+    if (markPaid) try {
       const invoiceNumber = await generateInvoiceNumber();
       await createOrUpdateInvoice({
         registrationId:    airline._id,
@@ -1670,9 +1905,11 @@ exports.adminCreateAirlineForm = async (req, res) => {
       message: 'Airline form created successfully. Login credentials have been set.',
     });
 
-    sendAirlinePaymentConfirmation(airline).catch((e) =>
-      console.warn('[adminCreateAirlineForm] Email failed:', e.message)
-    );
+    if (markPaid) {
+      sendAirlinePaymentConfirmation(airline).catch((e) =>
+        console.warn('[adminCreateAirlineForm] Email failed:', e.message)
+      );
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -1811,65 +2048,9 @@ exports.adminImportAirlinesFromExcel = async (req, res) => {
   }
 };
 
-// ── Renew Subscription ────────────────────────────────────────────────────────
-// Extends an existing subscription without re-filling the form.
-// Body may include { subscriptionPlan } to change plan on renewal.
-// Unlimited plan subscriptions cannot be renewed (they never expire).
-exports.renewAirlinesSubscription = async (req, res) => {
-  try {
-    const doc = await Airlines.findById(req.params.id);
-    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-
-    if (doc.subscriptionPlan === 'Unlimited Plan') {
-      return res.status(400).json({ success: false, message: 'Unlimited plan does not require renewal.' });
-    }
-
-    const newPlan = req.body.subscriptionPlan || doc.subscriptionPlan;
-    if (newPlan === 'Unlimited Plan') {
-      return res.status(400).json({ success: false, message: 'Switching to Unlimited plan requires a new subscription.' });
-    }
-
-    // Extend from current expiry (or now if already expired)
-    const base = doc.expirationDate && new Date(doc.expirationDate) > new Date()
-      ? new Date(doc.expirationDate)
-      : new Date();
-
-    const renewMultiYearCount = req.body.multiYearCount || doc.multiYearCount || 2;
-    const newExpiry = computeAirlinesExpirationDate(newPlan, base, renewMultiYearCount);
-    if (!newExpiry) {
-      return res.status(400).json({ success: false, message: 'Cannot compute expiry for the selected plan.' });
-    }
-
-    const newPrice = resolvePricePerCertificate({ subscriptionPlan: newPlan, holderCount: doc.holderCount });
-
-    const renewedCount = doc.committedCount || Number(doc.holderCountValue) || doc.certificateHolders?.length || 1;
-    const renewedRange = holderRangeFromCount(renewedCount);
-
-    const updated = await Airlines.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: {
-          subscriptionPlan: newPlan,
-          expirationDate: newExpiry,
-          pricePerCertificate: newPrice,
-          holderCount: renewedRange,
-          holderCountValue: String(renewedCount),
-          committedCount: renewedCount,
-          totalAmount: newPrice * renewedCount,
-          status: 'Active',
-          // Reset reminder flags so renewed users get reminders again
-          expiryReminder60SentAt: null,
-          expiryReminder30SentAt: null,
-        },
-      },
-      { new: true },
-    );
-
-    res.json({ success: true, data: updated });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+// (renewAirlinesSubscription removed — admin renewals go through adminRenew in
+// paymentController, which creates the Payment/Invoice/Renewal docs and runs the
+// same queued/immediate activation logic as a paid Stripe renewal.)
 
 // ─── PATCH /api/airlines/:id/mark-invoice-generated ─────────────────────────
 // Called by admin after downloading the PDF invoice — marks invoiceGenerated = true
@@ -1912,7 +2093,14 @@ exports.activateWirePayment = async (req, res) => {
         _applyHolderUpgrade,
       } = require('./paymentController');
 
-      const invoiceNum = await generateInvoiceNumber();
+      // Reuse the admin-generated wire invoice if one exists, so approval reveals THAT
+      // invoice (clearing wirePending) instead of creating a second one with a new number.
+      const Invoice = require('../models/Invoice');
+      const invPurpose = purpose === 'holder-upgrade' ? 'holder-upgrade' : 'renewal';
+      const existingWireInv = await Invoice.findOne({
+        registrationId: doc._id, purpose: invPurpose, adminGenerated: true,
+      }).sort({ createdAt: -1 });
+      const invoiceNum = existingWireInv?.invoiceNumber || await generateInvoiceNumber();
       const amount     = Number(details.amount != null ? details.amount : (doc.amountPaid || 0));
       const synthetic  = {
         // Fresh ObjectId: a synthetic doc with _id undefined would make the
@@ -1989,6 +2177,11 @@ exports.activateWirePayment = async (req, res) => {
           existingInvoiceNumber: invoiceNum,
           purpose:               isUpgrade ? 'holder-upgrade' : 'renewal',
         });
+        // Approval confirmed — reveal the wire invoice to the airline.
+        await Invoice.updateMany(
+          { registrationId: doc._id, purpose: invPurpose, wirePending: true },
+          { $set: { wirePending: false } },
+        );
       } catch (e) {
         console.warn('[activateWirePayment] Detail-based invoice failed:', e.message);
       }

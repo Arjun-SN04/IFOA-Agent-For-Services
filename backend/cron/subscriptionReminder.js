@@ -4,12 +4,7 @@ const cron       = require('node-cron');
 const Airlines   = require('../models/Airlines');
 const Individual = require('../models/Individual');
 const Renewal    = require('../models/Renewal');
-const {
-  sendExpiryReminder,
-  sendIndividualRenewalConfirmation,
-  sendAirlineRenewalConfirmation,
-} = require('../services/emailService');
-const { allHolderGroupSlots } = require('../utils/holderGroups');
+const { sendExpiryReminder } = require('../services/emailService');
 
 const UNLIMITED = 'Unlimited Plan';
 
@@ -85,11 +80,16 @@ async function runReminders() {
  * and promotes them to the live subscription on the parent record.
  * Runs daily so the worst-case delay is ~24 hours after expiry.
  *
- * After activating each renewal, sends a renewal confirmation email
- * to the subscriber so they know their plan is now live.
+ * Activation goes through performQueuedRenewalActivation — the SAME helper used
+ * by the admin force-activate endpoint and the user auto-activate endpoint — so
+ * holder removals, pricePerCertificate tier recompute, holderCount range,
+ * Renewal doc status and the confirmation email behave identically no matter
+ * which path triggers the activation.
  */
 async function activateMaturedRenewals() {
   const now = new Date();
+  // Lazy require avoids a circular import (paymentController is loaded by routes).
+  const { performQueuedRenewalActivation } = require('../controller/paymentController');
 
   // Find all queued renewals whose activation window has arrived
   const due = await Renewal.find({
@@ -122,84 +122,8 @@ async function activateMaturedRenewals() {
         continue;
       }
 
-      // Compute expirationDate: use stored expiresAt if present, otherwise derive from plan.
-      // This covers old Renewal docs created before expiresAt was persisted.
-      let expiresAt = renewal.expiresAt;
-      if (!expiresAt && renewal.plan !== 'Unlimited Plan') {
-        const base = renewal.activationDate || now;
-        const d = new Date(base);
-        if (renewal.plan === '1 Year Subscription Plan') {
-          d.setFullYear(d.getFullYear() + 1);
-          expiresAt = d;
-        } else if (renewal.plan === 'Multiple Years Subscription Plan') {
-          d.setFullYear(d.getFullYear() + (renewal.multiYearCount || 3));
-          expiresAt = d;
-        }
-      }
-
-      const update = {
-        subscriptionPlan:       renewal.plan,
-        subscriptionDate:       renewal.activationDate || now,
-        invoiceNumber:          renewal.invoiceNumber || null,
-        invoiceStatus:          'Paid',
-        paymentStatus:          'paid',
-        isPaid:                 true,
-        status:                 'Active',
-        isFormCompleted:        true,
-        expiryReminder60SentAt: null,
-        expiryReminder30SentAt: null,
-        ...(expiresAt ? { expirationDate: expiresAt } : {}),
-        ...(renewal.multiYearCount ? { multiYearCount: renewal.multiYearCount } : {}),
-        // Individual: sync price field
-        ...(renewal.registrationModel === 'Individual' && renewal.price
-          ? { price: renewal.price }
-          : {}),
-        // Airlines: restore committed holder count + amountPaid + totalAmount.
-        // committedCount is the GRAND TOTAL — renewal.committedCount is the BASE count only,
-        // so add back ALL holder-upgrade group slots (committedCount = base + allGroupSlots).
-        ...(renewal.registrationModel !== 'Individual' ? (() => {
-          const grandTotal = renewal.committedCount ? Number(renewal.committedCount) + allHolderGroupSlots(doc.holderGroups) : null;
-          return {
-            ...(grandTotal != null
-              ? { committedCount: grandTotal, holderCountValue: String(grandTotal) }
-              : {}),
-            ...(renewal.price ? { amountPaid: renewal.price, totalAmount: renewal.price } : {}),
-          };
-        })() : {}),
-      };
-
-      // nextRenewal is a typed subdocument — $unset leaves an empty shell.
-      // Null each field explicitly so frontend checks (nextRenewal.paidAt) return falsy.
-      const updatedDoc = await Model.findByIdAndUpdate(renewal.registrationId, {
-        $set:   {
-          ...update,
-          'nextRenewal.paidAt':         null,
-          'nextRenewal.plan':           null,
-          'nextRenewal.activationDate': null,
-          'nextRenewal.expiresAt':      null,
-          'nextRenewal.invoiceNumber':  null,
-          'nextRenewal.price':          null,
-        },
-        $unset: { nextRenewalId: 1 },
-      }, { new: true });
-
-      await Renewal.findByIdAndUpdate(renewal._id, {
-        $set: { status: 'active', activatedAt: now, activatedByAdmin: false },
-      });
-
+      await performQueuedRenewalActivation(doc, Model, renewal.registrationModel, false);
       console.log(`[renewalCron] Activated renewal ${renewal._id} for ${renewal.registrationModel} ${renewal.registrationId}`);
-
-      // ── Send renewal activation email ────────────────────────────────────
-      // The updatedDoc still has lastRenewal populated from when payment was made,
-      // which the email template uses for plan/date details.
-      if (updatedDoc) {
-        const sendFn = renewal.registrationModel === 'Individual'
-          ? sendIndividualRenewalConfirmation
-          : sendAirlineRenewalConfirmation;
-        sendFn(updatedDoc).catch((e) =>
-          console.error(`[renewalCron] Email failed for renewal ${renewal._id}:`, e.message)
-        );
-      }
     } catch (e) {
       console.error(`[renewalCron] Failed to activate renewal ${renewal._id}:`, e.message);
     }

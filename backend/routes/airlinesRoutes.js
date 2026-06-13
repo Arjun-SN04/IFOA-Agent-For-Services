@@ -25,11 +25,11 @@ const {
   adminImportAirlinesFromExcel,
   markAirlinesInvoiceGenerated,
   requestAirlineInvoice,
-  renewAirlinesSubscription,
   activateWirePayment,
   declineWirePayment,
   activateGroupRenewalNow,
   deleteHolderGroup,
+  cancelPlan,
 } = require('../controller/airlinesController');
 const { adminHolderUpgrade, markHolderGroupPaid, adminRenew } = require('../controller/paymentController');
 
@@ -147,13 +147,11 @@ router.post('/:id/holder-group/:groupId/activate-renewal', authMiddleware, requi
 router.delete('/:id/holder-group/:groupId', authMiddleware, requireAdmin, deleteHolderGroup);
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
-// renew — ADMIN ONLY. This endpoint extends the plan WITHOUT collecting payment,
-// so it must never be reachable by record owners (that was a free-renewal loophole).
-// Paid self-service renewals go through the Stripe flow: POST /api/payments/create-intent
-// (purpose:'renewal') + /confirm, which applies the renewal only after payment succeeds.
-router.post('/:id/renew',                   authMiddleware, requireAdmin, renewAirlinesSubscription);
+router.post('/:id/cancel-plan',             authMiddleware, requireOwnership, cancelPlan);
 // Admin renews on the customer's behalf (no payment) + generates invoice.
 // Same queued/immediate flow as the Stripe path; admin sets plan/count/price/invoice.
+// (The legacy /:id/renew route was removed — it extended the plan without creating
+// Payment/Invoice/Renewal docs, leaving renewals invisible in payment history.)
 router.post('/:id/admin-renew',             authMiddleware, requireAdmin, adminRenew);
 
 // ── Holder management (owner or admin) ───────────────────────────────────────

@@ -28,11 +28,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow non-browser requests (Postman, server-to-server) only in development
-    if (!origin) {
-      if (process.env.NODE_ENV === 'production') return callback(new Error('CORS: missing origin'));
-      return callback(null, true);
-    }
+    // Requests with NO Origin header are server-to-server (Stripe webhooks,
+    // health checks, curl). CORS only protects browsers — browsers always send
+    // an Origin on cross-site requests — so blocking no-origin requests adds no
+    // security and breaks the Stripe webhook in production.
+    if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error(`CORS: origin ${origin} not allowed`));
   },
@@ -49,13 +49,16 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
-// General API limit — generous enough for normal use
+// General API limit — generous enough for normal use.
+// Stripe webhook is exempt: Stripe controls its own retry cadence and a burst of
+// retried events must never be throttled (dropped events = unconfirmed payments).
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please try again later.' },
+  skip: (req) => req.path === '/payments/webhook',
 });
 
 app.use('/api/auth', authLimiter);

@@ -129,9 +129,15 @@ async function createOrUpdateInvoice(opts) {
   const yearMultiplier = snapshot.subscriptionPlan === 'Multiple Years Subscription Plan' && multiYearCount > 1
     ? multiYearCount
     : 1;
-  const totalAmount = isAirline && pricePerCert > 0 && holderCount > 0
-    ? pricePerCert * holderCount * yearMultiplier
-    : amountDollars;
+  // Trust the snapshot total first — every payment path builds it from the amount
+  // actually charged (incl. admin price overrides). The ppc × count recompute is
+  // only a fallback for legacy snapshots that carry no total.
+  const snapshotTotal = Number(snapshot.totalPaid || snapshot.subtotal || 0);
+  const totalAmount = snapshotTotal > 0
+    ? snapshotTotal
+    : (isAirline && pricePerCert > 0 && holderCount > 0
+      ? pricePerCert * holderCount * yearMultiplier
+      : amountDollars);
 
   const planBase  = (snapshot.subscriptionPlan || '1 Year Plan')
     .replace(' Subscription Plan', '')

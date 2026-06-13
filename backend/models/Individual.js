@@ -30,7 +30,7 @@ const IndividualSchema = new mongoose.Schema({
   postalCode: { type: String },
   country: { type: String },
 
-  phone: { type: String, required: true },
+  phone: { type: String },
   email: { type: String, required: true, lowercase: true, trim: true },
 
   // Step 2 - Certificates

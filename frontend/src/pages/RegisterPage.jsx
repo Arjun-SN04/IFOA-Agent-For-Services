@@ -774,11 +774,9 @@ export default function RegisterPage() {
     } finally { setIndSubmitting(false) }
   }
 
-  const handleIndMarkPaid = async (regId) => {
-    try {
-      await axios.patch(`${BASE_URL}/individuals/${regId}/mark-paid`, {},
-        { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch { void 0 }
+  // Payment success callback — server already activated via /payments/confirm
+  // (webhook backup). mark-paid is admin-only; the old client call always 403'd.
+  const handleIndMarkPaid = async () => {
     setIndSubmitted(true)
   }
 
@@ -837,13 +835,9 @@ export default function RegisterPage() {
     } finally { setAirSubmitting(false) }
   }
 
-  const handleAirMarkPaid = async (id) => {
-    try {
-      const token = localStorage.getItem('ifoa_token') || ''
-      await fetch(`${BASE_URL}/airlines/${id}/mark-paid`, {
-        method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
-      })
-    } catch { void 0 }
+  // Payment success callback — server already activated via /payments/confirm
+  // (webhook backup). mark-paid is admin-only; the old client call always 403'd.
+  const handleAirMarkPaid = async () => {
     setAirSubmitted(true)
   }
 

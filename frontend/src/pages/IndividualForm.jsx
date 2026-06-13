@@ -408,11 +408,10 @@ export default function IndividualForm() {
     } finally { setSubmitting(false) }
   }
 
-  const handleMarkPaidAndFinish = async (registrationId) => {
-    try {
-      await axios.patch(`${BASE_URL}/individuals/${registrationId}/mark-paid`, {},
-        { headers: { Authorization: `Bearer ${localStorage.getItem('ifoa_token') || ''}` } })
-    } catch { void 0 }
+  // Payment success callback. The server already activated the subscription via
+  // /payments/confirm (Stripe webhook as backup) — mark-paid is admin-only, so the
+  // old client call here always 403'd. Just transition the UI.
+  const handleMarkPaidAndFinish = async () => {
     setExistingPaymentStatus('paid')
     setSubmitted(true)
   }

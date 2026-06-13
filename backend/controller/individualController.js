@@ -325,12 +325,43 @@ async function linkOrCreateIndividualUser(individual, payload) {
   return { user, loginCredentials: null };
 }
 
+// Fields the PUBLIC registration form may set. Payment/status/invoice fields are
+// server-controlled — accepting them from the client lets anyone register an
+// already-"paid" active subscription (mass assignment).
+const PUBLIC_INDIVIDUAL_FIELDS = [
+  'subscriptionPlan', 'multiYearCount',
+  'firstName', 'lastName', 'middleName', 'dateOfBirth',
+  'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
+  'phone', 'email', 'paymentEmail',
+  'primaryAirmanCertificate', 'primaryCertificate',
+  'faaCertificateNumber', 'iacraTrackingNumber',
+  'hasSecondaryCertificate', 'secondaryCertificate',
+  'secondaryFaaCertificateNumber', 'secondaryIacraTrackingNumber',
+  'agreedToTerms',
+];
+
 // ── Create ────────────────────────────────────────────────────────────────────
 exports.createIndividual = async (req, res) => {
   try {
-    const body = { ...req.body };
+    const body = {};
+    PUBLIC_INDIVIDUAL_FIELDS.forEach((f) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, f)) body[f] = req.body[f];
+    });
     // Normalize email to lowercase so all lookups match regardless of case
     if (body.email) body.email = body.email.toLowerCase().trim();
+    if (body.paymentEmail) body.paymentEmail = String(body.paymentEmail).toLowerCase().trim();
+
+    // Multi-year count only meaningful for the Multi-Year plan; clamp to >= 2.
+    if (body.subscriptionPlan === 'Multiple Years Subscription Plan') {
+      const y = Number(body.multiYearCount);
+      body.multiYearCount = Number.isFinite(y) && y >= 2 ? Math.round(y) : 2;
+    } else {
+      delete body.multiYearCount;
+    }
+
+    // Price is ALWAYS computed server-side from the plan — never client-supplied.
+    body.price = normalizePlanPrice(body.subscriptionPlan, body.multiYearCount, null);
+    body.totalServiceFees = body.price;
 
     if (body.email) {
       const existing = await Individual.findOne({ email: body.email });
@@ -533,7 +564,14 @@ exports.updateIndividual = async (req, res) => {
       'price', 'totalServiceFees',
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
+      // Subscription period is server/admin-controlled — a user who could set
+      // these directly would be able to extend their own coverage for free.
+      'subscriptionDate', 'expirationDate',
     ]);
+
+    // Plan fields a user may change ONLY before payment (PaymentModal pre-checkout
+    // adjustments). Once paid, plan changes go through the renewal/upgrade flows.
+    const paidLockedFields = new Set(['subscriptionPlan', 'multiYearCount']);
 
     const allowedFields = [
       // Admin-only (filtered below for non-admins)
@@ -541,8 +579,9 @@ exports.updateIndividual = async (req, res) => {
       'price', 'totalServiceFees',
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
+      'subscriptionDate', 'expirationDate',
       // User-editable fields
-      'subscriptionPlan', 'subscriptionDate', 'expirationDate', 'multiYearCount',
+      'subscriptionPlan', 'multiYearCount',
       'firstName', 'lastName', 'middleName', 'dateOfBirth',
       'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country',
       'phone', 'email',
@@ -553,9 +592,18 @@ exports.updateIndividual = async (req, res) => {
       'secondaryFaaCertificateNumber', 'secondaryIacraTrackingNumber',
     ];
 
+    // Non-admin editing a PAID record: plan/year changes are locked too.
+    let recordIsPaid = false;
+    if (!isAdmin) {
+      const cur = await Individual.findById(req.params.id).select('isPaid paymentStatus');
+      if (!cur) return res.status(404).json({ success: false, message: 'Not found' });
+      recordIsPaid = !!(cur.isPaid || cur.paymentStatus === 'paid');
+    }
+
     const payload = {};
     allowedFields.forEach((field) => {
       if (!isAdmin && adminOnlyFields.has(field)) return;
+      if (!isAdmin && recordIsPaid && paidLockedFields.has(field)) return;
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         payload[field] = req.body[field];
       }
@@ -656,10 +704,12 @@ exports.updateIndividual = async (req, res) => {
         const Invoice = require('../models/Invoice');
         const Payment = require('../models/Payment');
         const newNum  = payload.invoiceNumber;
-        const matchInvoice = oldInvoiceNumberForSync
-          ? { registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }
-          : { registrationId: req.params.id, paymentId: null };
-        const targetInvoice = await Invoice.findOne(matchInvoice).sort({ createdAt: 1 });
+        // ONLY rename the invoice that exactly carried the registration's OLD number.
+        // With no prior number, do NOT grab an arbitrary paymentId:null doc — it could be
+        // a renewal/holder-upgrade invoice and renaming it would override a different one.
+        const targetInvoice = oldInvoiceNumberForSync
+          ? await Invoice.findOne({ registrationId: req.params.id, invoiceNumber: oldInvoiceNumberForSync }).sort({ createdAt: 1 })
+          : null;
         if (targetInvoice) {
           targetInvoice.invoiceNumber = newNum;
           if (targetInvoice.draft) {
@@ -927,9 +977,15 @@ exports.markIndividualPaid = async (req, res) => {
       exp.setFullYear(exp.getFullYear() + 1);
       update.expirationDate = exp;
     } else if (individual.subscriptionPlan === 'Multiple Years Subscription Plan') {
-      const years = individual.multiYearCount || 3;
-      const exp   = new Date(now);
-      exp.setFullYear(exp.getFullYear() + years);
+      // Year count: derived from price ($55/yr, authoritative — legacy records carry
+      // a wrong DB-default multiYearCount of 3) > explicit field > documented minimum 2.
+      // Mirrors effectiveMultiYears() in paymentController.
+      const recordPrice = Number(individual.price || 0);
+      const years = (recordPrice >= 110 ? Math.round(recordPrice / 55) : 0)
+        || Number(individual.multiYearCount)
+        || 2;
+      const exp = new Date(now);
+      exp.setFullYear(exp.getFullYear() + Math.max(2, years));
       update.expirationDate = exp;
     }
     // Unlimited Plan — no expiry date set
@@ -1087,60 +1143,9 @@ exports.exportToExcel = async (req, res) => {
   }
 };
 
-// ── Renew Subscription ────────────────────────────────────────────────────────
-// Extends an existing subscription without re-filling the form.
-// Body may include { subscriptionPlan, multiYearCount } to change plan on renewal.
-// Unlimited plan subscriptions cannot be renewed (they never expire).
-exports.renewIndividual = async (req, res) => {
-  try {
-    const doc = await Individual.findById(req.params.id);
-    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
-
-    if (doc.subscriptionPlan === 'Unlimited Plan') {
-      return res.status(400).json({ success: false, message: 'Unlimited plan does not require renewal.' });
-    }
-
-    const newPlan = req.body.subscriptionPlan || doc.subscriptionPlan;
-    if (newPlan === 'Unlimited Plan') {
-      return res.status(400).json({ success: false, message: 'Switching to Unlimited plan requires a new subscription.' });
-    }
-
-    const newMultiYearCount = req.body.multiYearCount || doc.multiYearCount || 3;
-
-    // Extend from current expiry (or now if already expired)
-    const base = doc.expirationDate && new Date(doc.expirationDate) > new Date()
-      ? new Date(doc.expirationDate)
-      : new Date();
-
-    const newExpiry = computeExpiration(newPlan, base, newMultiYearCount);
-    if (!newExpiry) {
-      return res.status(400).json({ success: false, message: 'Cannot compute expiry for the selected plan.' });
-    }
-
-    const newPrice = normalizePlanPrice(newPlan, newMultiYearCount, null);
-
-    const updated = await Individual.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: {
-          subscriptionPlan: newPlan,
-          multiYearCount: newMultiYearCount,
-          expirationDate: newExpiry,
-          price: newPrice,
-          status: 'Active',
-          // Reset reminder flags so renewed users get reminders again
-          expiryReminder60SentAt: null,
-          expiryReminder30SentAt: null,
-        },
-      },
-      { new: true },
-    );
-
-    res.json({ success: true, data: updated });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+// (renewIndividual removed — admin renewals go through adminRenew in
+// paymentController, which creates the Payment/Invoice/Renewal docs and runs the
+// same queued/immediate activation logic as a paid Stripe renewal.)
 
 // ─── PATCH /api/individuals/:id/mark-invoice-generated ───────────────────────
 // Called by admin after downloading the PDF invoice — marks invoiceGenerated = true

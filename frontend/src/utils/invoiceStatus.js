@@ -42,6 +42,10 @@ const BADGES = {
  */
 export function getInvoiceStatus(doc, reg, opts = {}) {
   if (!doc) return null
+  // Custom one-off admin invoices have NO subscription lifecycle — they are standalone
+  // documents, so they must never inherit the registration's expired/superseded/active
+  // state (which is what made a fresh custom invoice show "Expired" under an expired base).
+  if (doc.purpose === 'custom') return null
   const now = Date.now()
 
   const isHolderUpgrade = !!opts.isHolderUpgrade

@@ -49,6 +49,7 @@ const HolderGroupSchema = new mongoose.Schema({
   // its expiry. Activates automatically on activationDate (= current expiry).
   nextRenewal: {
     plan:            { type: String, default: null },
+    multiYearCount:  { type: Number, default: null },
     count:           { type: Number, default: null },
     pricePerCert:    { type: Number, default: null },
     price:           { type: Number, default: null },
@@ -105,7 +106,7 @@ const AirlinesSchema = new mongoose.Schema({
   middleName:  { type: String, default: '' },
   dateOfBirth: { type: Date },
   email:       { type: String, required: true },
-  phone:       { type: String, required: true },
+  phone:       { type: String },
 
   // Point of Contact (optional — for extra contact person if different from above)
   pointOfContact:      { type: String },

@@ -326,15 +326,10 @@ export default function AirlinesForm() {
     }
   }
 
-  const handleMarkPaidAndFinish = async (id) => {
-    try {
-      const token = localStorage.getItem('ifoa_token') || ''
-      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-      await fetch(`${BASE_URL}/airlines/${id}/mark-paid`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-    } catch (_) {}
+  // Payment success callback. The server already activated the subscription via
+  // /payments/confirm (Stripe webhook as backup) — mark-paid is admin-only, so the
+  // old client call here always 403'd. Just transition the UI.
+  const handleMarkPaidAndFinish = async () => {
     setSubmitted(true)
   }
 
