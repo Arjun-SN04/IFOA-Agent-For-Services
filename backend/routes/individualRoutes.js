@@ -17,6 +17,8 @@ const {
   markInvoiceGenerated,
   adminCreateIndividualForm,
   adminImportIndividualsFromExcel,
+  cancelPlan,
+  uncancelPlan,
 } = require('../controller/individualController');
 const { adminRenew } = require('../controller/paymentController');
 
@@ -73,6 +75,9 @@ router.patch('/:id/renewal-details',        authMiddleware, requireAdmin, update
 // Payment/Invoice/Renewal docs, leaving renewals invisible in payment history.
 // adminRenew runs the exact same queued/immediate logic as a paid Stripe renewal.)
 router.post('/:id/admin-renew',             authMiddleware, requireAdmin, adminRenew);
+// Soft cancel (owner) + admin keep (un-cancel)
+router.post('/:id/cancel-plan',             authMiddleware, requireOwnership, cancelPlan);
+router.post('/:id/uncancel-plan',           authMiddleware, requireAdmin, uncancelPlan);
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get('/',    authMiddleware, requireAdmin,     getAllIndividuals);

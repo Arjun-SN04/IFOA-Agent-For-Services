@@ -679,6 +679,347 @@ async function applyHolderUpgrade(registrationId, registrationModel, paymentDoc,
   return updatedReg;
 }
 
+// ─── Plan conversion → Unlimited ─────────────────────────────────────────────
+
+/**
+ * Short, invoice-friendly label for the plan being converted FROM.
+ */
+function conversionOldPlanLabel(plan, years) {
+  if (plan === 'Unlimited Plan') return 'Unlimited';
+  if (plan === 'Multiple Years Subscription Plan') return `${Math.max(2, Number(years) || 2)} Year`;
+  return '1 Year';
+}
+
+/**
+ * computeConversionCharge
+ *
+ * Prices an in-place conversion of the BASE plan to Unlimited.
+ *  - Unlimited tier ppc is read at the SAME stacked position as a base renewal
+ *    (activeCoverageAnchor excludeBase + base holder count), so volume tiers match
+ *    everywhere else in the app.
+ *  - The airline is credited the unused portion of its current base term
+ *    (prorated by remaining days over the full period).
+ *
+ * Returns intent-time figures; the actual charge is the authoritative amount
+ * persisted on the Stripe PaymentIntent.
+ */
+function computeConversionCharge(doc, registrationModel, asOf = new Date(), targetPlan = 'Unlimited Plan', targetYears = null) {
+  const isAirline = registrationModel !== 'Individual';
+  const oldPlan   = doc.subscriptionPlan;
+  const oldYears  = oldPlan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(doc.multiYearCount || 2))
+    : 1;
+  // Years on the TARGET plan (only meaningful for Multiple Years).
+  const tYears = targetPlan === 'Multiple Years Subscription Plan' ? Math.max(2, Number(targetYears || 2)) : 1;
+
+  // unlimitedPpc / unlimitedTotal field names kept for backward compat — they hold the
+  // TARGET plan's per-cert rate and total (Unlimited, Multi-Year, etc).
+  let baseCount, unlimitedPpc, unlimitedTotal, currentBaseTotal;
+  if (isAirline) {
+    baseCount = Math.max(
+      1,
+      Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1)
+        - allHolderGroupSlots(doc.holderGroups),
+    );
+    unlimitedPpc   = tierPpcForPlan(targetPlan, Math.max(3, activeCoverageAnchor(doc, { excludeBase: true }, asOf) + baseCount));
+    unlimitedTotal = unlimitedPpc * baseCount * tYears;
+    const currentPpc = Number(doc.pricePerCertificate || doc.pricePerCert || 0);
+    currentBaseTotal = currentPpc * baseCount * oldYears;
+  } else {
+    baseCount      = 1;
+    unlimitedPpc   = targetPlan === 'Unlimited Plan' ? 299
+      : targetPlan === 'Multiple Years Subscription Plan' ? 55
+      : 69;
+    unlimitedTotal = targetPlan === 'Multiple Years Subscription Plan' ? 55 * tYears : unlimitedPpc;
+    currentBaseTotal = oldPlan === '1 Year Subscription Plan' ? 69
+      : oldPlan === 'Multiple Years Subscription Plan' ? 55 * oldYears
+      : Number(doc.price || 0);
+  }
+
+  // ── Prorated credit for the unused portion of the current base term ──────────
+  let credit = 0;
+  const currentExpiry = doc.expirationDate ? new Date(doc.expirationDate) : null;
+  if (currentExpiry && currentExpiry > asOf && currentBaseTotal > 0) {
+    const startDate     = doc.subscriptionDate ? new Date(doc.subscriptionDate) : null;
+    const totalPeriodMs = (startDate && currentExpiry > startDate)
+      ? (currentExpiry - startDate)
+      : (oldYears * 365 * 24 * 60 * 60 * 1000);
+    const remainingMs = Math.max(0, currentExpiry - asOf);
+    const fraction    = Math.min(1, remainingMs / totalPeriodMs);
+    credit = Math.round(currentBaseTotal * fraction * 100) / 100;
+  }
+
+  const charge = Math.max(0, Math.round((unlimitedTotal - credit) * 100) / 100);
+  return { isAirline, baseCount, unlimitedPpc, unlimitedTotal, currentBaseTotal, credit, charge, oldPlan, oldYears, targetPlan, targetYears: tYears };
+}
+
+/**
+ * Itemized invoice lines for a conversion: full Unlimited line + a negative
+ * prorated-credit line, summing to the net amount actually charged. The credit is
+ * derived from the actual charge so the lines always reconcile exactly.
+ */
+function buildConversionLineItems(meta, chargeDollars, registrationModel) {
+  const unlimitedTotal = Number(meta?.convertUnlimitedTotal || 0) || chargeDollars;
+  const baseCount      = Number(meta?.convertBaseCount || 0) || 1;
+  const unlimitedPpc   = Number(meta?.convertUnlimitedPpc || 0);
+  const oldLabel       = meta?.convertOldPlanLabel || 'previous plan';
+  const isAir          = registrationModel !== 'Individual';
+  const credit         = Math.max(0, Math.round((unlimitedTotal - chargeDollars) * 100) / 100);
+  // Target plan label for the line description (Unlimited / Multiple Years / 1 Year).
+  const targetPlan     = meta?.newSubscriptionPlan || 'Unlimited Plan';
+  const targetYears    = Number(meta?.renewalMultiYearCount || 0);
+  const planLabel = targetPlan === 'Unlimited Plan' ? 'Unlimited'
+    : targetPlan === 'Multiple Years Subscription Plan' ? `${targetYears || 2} Years`
+    : '1 Year';
+  const items = [{
+    description: `Agent For Service - ${planLabel}`,
+    quantity:    isAir ? baseCount : 1,
+    unitPrice:   isAir ? unlimitedPpc : unlimitedTotal,
+    totalPrice:  unlimitedTotal,
+  }];
+  if (credit > 0) {
+    items.push({
+      description: `Credit — unused ${oldLabel} subscription`,
+      quantity:    1,
+      unitPrice:   -credit,
+      totalPrice:  -credit,
+    });
+  }
+  return items;
+}
+
+/**
+ * preserveInvoiceAsHistory
+ *
+ * A conversion mints a NEW invoice and repoints the registration (or group) to it.
+ * If the PRE-conversion invoice exists only as the registration's `invoiceNumber`
+ * fallback (no standalone Invoice/Payment doc — common for admin-created or wire
+ * registrations), repointing would erase it from the invoice history. This snapshots
+ * that prior invoice into a real Invoice doc FIRST, so both stay visible afterwards.
+ *
+ * No-op when the number is already backed by an Invoice or paid Payment doc.
+ */
+async function preserveInvoiceAsHistory(doc, registrationModel, { invoiceNumber, snapshot, amountDollars, paidAt, draft }) {
+  const norm = normalizeInvoiceNumber(invoiceNumber);
+  if (!norm) return;
+  const Invoice = require('../models/Invoice');
+  const [existingInv, existingPay] = await Promise.all([
+    Invoice.findOne({ registrationId: doc._id, invoiceNumber: norm }).select('_id').lean(),
+    Payment.findOne({ registrationId: doc._id, invoiceNumber: norm, isPaid: true }).select('_id').lean(),
+  ]);
+  if (existingInv || existingPay) return;   // already real → nothing to preserve
+  try {
+    await createOrUpdateInvoice({
+      registrationId:        doc._id,
+      registrationModel,
+      snapshot,
+      amountDollars:         amountDollars || snapshot.totalPaid || 0,
+      paidAt:                paidAt || new Date(),
+      paymentMethod:         doc.paymentMethodType || '',
+      existingInvoiceNumber: norm,
+      purpose:               'payment',
+      ...(draft ? { draftOverrides: draft } : {}),
+    });
+  } catch (e) {
+    console.warn('[preserveInvoiceAsHistory] non-critical:', e.message);
+  }
+}
+
+/**
+ * applyConversionToUnlimited
+ *
+ * Flips the BASE subscription to Unlimited IN PLACE — no new holderGroup, no queue.
+ * Holder groups are left untouched (they keep their own plans/expiry). expirationDate
+ * is explicitly cleared (Unlimited never expires) and any queued renewal is dropped.
+ * Idempotent via the confirm/webhook isPaid guards (only one path builds + applies).
+ */
+async function applyConversionToUnlimited(registrationId, registrationModel, paymentDoc) {
+  const { doc, Model } = await findRegistration(registrationId, registrationModel);
+  if (!doc || !Model) return null;
+
+  const now       = paymentDoc.paidAt || new Date();
+  const isAirline = registrationModel !== 'Individual';
+  const snapshot  = paymentDoc.invoiceSnapshot || {};
+  const newPpc    = Number(snapshot.pricePerCert || 0);
+  const baseCount = Number(snapshot.holderCount || doc.committedCount || 0);
+
+  // Preserve the pre-conversion subscription invoice as standalone history before we
+  // repoint registration.invoiceNumber to the conversion invoice (so it isn't lost).
+  const oldBaseHolders = Math.max(1, Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1) - allHolderGroupSlots(doc.holderGroups));
+  const oldYears = doc.subscriptionPlan === 'Multiple Years Subscription Plan' ? Math.max(2, Number(doc.multiYearCount || 2)) : 1;
+  const oldAmount = isAirline
+    ? Number(doc.pricePerCertificate || doc.pricePerCert || 0) * oldBaseHolders * oldYears
+    : Number(doc.price || 0);
+  const oldSnap = buildInvoiceSnapshot(doc.toObject(), registrationModel, oldAmount, doc.subscriptionDate || now);
+  oldSnap.subtotal = oldSnap.totalPaid = oldAmount;
+  await preserveInvoiceAsHistory(doc, registrationModel, {
+    invoiceNumber: doc.invoiceNumber,
+    snapshot:      oldSnap,
+    amountDollars: oldAmount,
+    paidAt:        doc.subscriptionDate || now,
+    draft:         doc.invoiceDraft,
+  });
+
+  // Target plan for this upgrade (Unlimited by default; Multi-Year for individuals).
+  const targetPlan  = paymentDoc.newSubscriptionPlan || 'Unlimited Plan';
+  const targetYears = targetPlan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(paymentDoc.renewalMultiYearCount || doc.multiYearCount || 2)) : null;
+  // Upgrade keeps the original start; new expiry = start + term (null for Unlimited).
+  const newExpiry = computeExpiry(targetPlan, doc.subscriptionDate || now, targetYears);
+
+  // Drop any queued renewal — moot once upgraded.
+  if (doc.nextRenewalId) {
+    await Renewal.findByIdAndUpdate(doc.nextRenewalId, { $set: { status: 'superseded' } });
+  }
+
+  const update = {
+    subscriptionPlan:      targetPlan,
+    multiYearCount:        targetYears,
+    subscriptionDate:      doc.subscriptionDate || now,   // keep original start; conversion is an upgrade
+    status:                'Active',
+    isPaid:                true,
+    isFormCompleted:       true,
+    paymentStatus:         'paid',
+    stripePaymentIntentId: paymentDoc.stripePaymentIntentId,
+    paymentId:             paymentDoc._id,
+    invoiceNumber:         paymentDoc.invoiceNumber,       // ACTIVE badge reflects the conversion invoice
+    expiryReminder60SentAt: null,
+    expiryReminder30SentAt: null,
+    lastRenewal: {
+      plan:           targetPlan,
+      multiYearCount: targetYears,
+      committedCount: isAirline ? baseCount : null,
+      paidAt:         now,
+      activationDate: now,
+      expiresAt:      newExpiry || null,
+      price:          paymentDoc.amountDollars || 0,
+      invoiceNumber:  paymentDoc.invoiceNumber,
+    },
+  };
+  if (isAirline) {
+    if (newPpc > 0) {
+      update.pricePerCertificate = newPpc;
+      update.pricePerCert        = newPpc;
+    }
+    update.amountPaid             = Number(doc.amountPaid || 0) + Number(paymentDoc.amountDollars || 0);
+    update.wirePaymentRequested   = false;
+    update.wirePaymentRequestedAt = null;
+  } else {
+    update.price = targetPlan === 'Unlimited Plan' ? 299
+      : targetPlan === 'Multiple Years Subscription Plan' ? 55 * (targetYears || 2)
+      : 69;
+  }
+
+  return Model.findByIdAndUpdate(registrationId, {
+    $set: {
+      ...update,
+      // Unlimited → no expiry; Multi-Year → start + years.
+      expirationDate:               newExpiry || null,
+      'nextRenewal.paidAt':         null,
+      'nextRenewal.plan':           null,
+      'nextRenewal.activationDate': null,
+      'nextRenewal.expiresAt':      null,
+      'nextRenewal.invoiceNumber':  null,
+      'nextRenewal.price':          null,
+    },
+    $unset: { nextRenewalId: 1 },
+  }, { new: true });
+}
+
+/**
+ * computeGroupConversionCharge
+ *
+ * Prices converting ONE add-on holder group → Unlimited. Same shape/logic as the
+ * base conversion but scoped to the group: tier stacks on active coverage EXCLUDING
+ * this group (renewTierAnchor), credit prorates the GROUP's own term.
+ */
+function computeGroupConversionCharge(doc, group, asOf = new Date()) {
+  const count      = Math.max(1, Number(group.count || 1));
+  const groupYears = group.plan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(group.multiYearCount || 2)) : 1;
+  const anchor         = renewTierAnchor(doc, group, asOf);   // coverage minus this group
+  const unlimitedPpc   = tierPpcForPlan('Unlimited Plan', Math.max(3, anchor + count));
+  const unlimitedTotal = unlimitedPpc * count;
+  const currentTotal   = Number(group.pricePerCert || 0) * count * groupYears;
+
+  let credit = 0;
+  const exp = group.expirationDate ? new Date(group.expirationDate) : null;
+  if (exp && exp > asOf && currentTotal > 0) {
+    const start  = group.subscriptionDate ? new Date(group.subscriptionDate) : null;
+    const totalMs = (start && exp > start) ? (exp - start) : (groupYears * 365 * 24 * 60 * 60 * 1000);
+    const remMs   = Math.max(0, exp - asOf);
+    credit = Math.round(currentTotal * Math.min(1, remMs / totalMs) * 100) / 100;
+  }
+  const charge       = Math.max(0, Math.round((unlimitedTotal - credit) * 100) / 100);
+  const oldPlanLabel = group.plan === 'Multiple Years Subscription Plan' ? `${groupYears} Year` : '1 Year';
+  // baseCount alias kept so metadata/line-item builders treat base and group uniformly.
+  return { baseCount: count, count, unlimitedPpc, unlimitedTotal, currentTotal, credit, charge, oldPlanLabel };
+}
+
+/**
+ * applyGroupConversionToUnlimited
+ *
+ * Flips ONE add-on group → Unlimited in place. Only that subdoc changes: plan,
+ * expiry (cleared), ppc, amount; its queued renewal is dropped. Base plan and other
+ * groups untouched. committedCount is unchanged (slot count stays the same).
+ */
+async function applyGroupConversionToUnlimited(registrationId, registrationModel, paymentDoc, groupId) {
+  const { doc, Model } = await findRegistration(registrationId, registrationModel);
+  if (!doc || !Model) return null;
+  const group = doc.holderGroups?.id ? doc.holderGroups.id(groupId) : null;
+  if (!group) return doc;
+
+  const now = paymentDoc.paidAt || new Date();
+  const snap = paymentDoc.invoiceSnapshot || {};
+  const ppc  = Number(snap.pricePerCert || 0) || Number(group.pricePerCert || 0);
+
+  // Preserve the group's pre-conversion invoice as standalone history before we
+  // repoint group.invoiceNumber to the conversion invoice.
+  const grpYears = group.plan === 'Multiple Years Subscription Plan' ? Math.max(2, Number(group.multiYearCount || 2)) : 1;
+  const grpOldAmount = Number(group.pricePerCert || 0) * Number(group.count || 0) * grpYears;
+  const grpSnap = buildInvoiceSnapshot({
+    ...doc.toObject(),
+    subscriptionPlan:    group.plan,
+    multiYearCount:      group.multiYearCount,
+    committedCount:      group.count,
+    holderCountValue:    String(group.count),
+    pricePerCertificate: group.pricePerCert,
+    pricePerCert:        group.pricePerCert,
+  }, registrationModel, grpOldAmount, group.subscriptionDate || now);
+  grpSnap.subtotal = grpSnap.totalPaid = grpOldAmount;
+  await preserveInvoiceAsHistory(doc, registrationModel, {
+    invoiceNumber: group.invoiceNumber,
+    snapshot:      grpSnap,
+    amountDollars: grpOldAmount,
+    paidAt:        group.subscriptionDate || now,
+  });
+
+  group.plan           = 'Unlimited Plan';
+  group.multiYearCount = null;
+  group.expirationDate = null;                 // Unlimited never expires
+  group.pricePerCert   = ppc;
+  group.amount         = Number(paymentDoc.amountDollars || 0);
+  group.invoiceNumber  = paymentDoc.invoiceNumber || group.invoiceNumber;
+  group.paymentId      = paymentDoc._id;
+  group.paymentStatus  = 'paid';
+  // Drop any queued renewal on the group — moot once Unlimited.
+  group.nextRenewal = {
+    plan: null, multiYearCount: null, count: null, pricePerCert: null, price: null,
+    paidAt: null, activationDate: null, expiresAt: null, invoiceNumber: null, holdersToRemove: null,
+  };
+  group.lastRenewal = {
+    plan: 'Unlimited Plan', count: Number(group.count || 0), paidAt: now,
+    activationDate: now, expiresAt: null, price: Number(paymentDoc.amountDollars || 0),
+    invoiceNumber: paymentDoc.invoiceNumber || '',
+  };
+
+  if (registrationModel !== 'Individual') {
+    doc.amountPaid = Number(doc.amountPaid || 0) + Number(paymentDoc.amountDollars || 0);
+  }
+  await doc.save();
+  return doc;
+}
+
 // ─── POST /api/payments/create-intent ────────────────────────────────────────
 exports.createPaymentIntent = async (req, res) => {
   try {
@@ -705,7 +1046,7 @@ exports.createPaymentIntent = async (req, res) => {
     if (!VALID_MODELS.includes(registrationModel))
       return res.status(400).json({ success: false, message: 'Invalid registrationModel.' });
 
-    const VALID_PURPOSES = ['payment', 'renewal', 'holder-upgrade'];
+    const VALID_PURPOSES = ['payment', 'renewal', 'holder-upgrade', 'convert-unlimited'];
     if (!VALID_PURPOSES.includes(purpose))
       return res.status(400).json({ success: false, message: 'Invalid purpose.' });
 
@@ -727,12 +1068,23 @@ exports.createPaymentIntent = async (req, res) => {
         return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    // Renewals and holder-upgrades are allowed even when already paid; block only for first-time payments
-    if (purpose !== 'renewal' && purpose !== 'holder-upgrade' && (doc.isPaid || doc.paymentStatus === 'paid'))
+    // Renewals, holder-upgrades and conversions act on an already-paid subscription;
+    // block "already paid" only for first-time payments.
+    if (!['renewal', 'holder-upgrade', 'convert-unlimited'].includes(purpose) && (doc.isPaid || doc.paymentStatus === 'paid'))
       return res.status(400).json({
         success: false,
         message: 'This subscription is already paid.',
       });
+
+    // Guard: conversion only makes sense for an ACTIVE paid plan that is not already
+    // Unlimited. For a group conversion the group's own plan is checked in the pricing
+    // branch; the base-unlimited check applies only to base conversions.
+    if (purpose === 'convert-unlimited') {
+      if (!bodyHolderGroupId && doc.subscriptionPlan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This subscription is already on the Unlimited Plan.' });
+      if (!(doc.isPaid || doc.paymentStatus === 'paid' || doc.status === 'Active'))
+        return res.status(400).json({ success: false, message: 'Only an active, paid plan can be converted to Unlimited.' });
+    }
 
     // Guard: cannot renew an Unlimited Plan (it never expires).
     // For group renewals, check the GROUP's plan; otherwise the base plan.
@@ -763,9 +1115,38 @@ exports.createPaymentIntent = async (req, res) => {
     // computedYears: set inside each branch when plan is multi-year; used for
     // both amount calculation and Stripe metadata — avoids re-deriving twice.
     let computedYears = bodyRenewalYears ? Number(bodyRenewalYears) : null;
+    // conversion: set in the convert-unlimited branch so metadata can carry the
+    // tier breakdown (unlimited total, credit, base count) the snapshot/invoice need.
+    let conversion = null;
 
+    // ── Upgrade base plan / add-on group → target plan: tier price minus credit ─
+    // Target plan defaults to Unlimited; individuals may also upgrade to Multiple Years.
+    if (purpose === 'convert-unlimited') {
+      const nowTs = new Date();
+      if (bodyHolderGroupId) {
+        const group = doc.holderGroups?.id
+          ? doc.holderGroups.id(bodyHolderGroupId)
+          : (doc.holderGroups || []).find(g => String(g._id) === String(bodyHolderGroupId));
+        if (!group)
+          return res.status(404).json({ success: false, message: 'Holder group not found.' });
+        if (group.plan === 'Unlimited Plan')
+          return res.status(400).json({ success: false, message: 'This plan is already Unlimited.' });
+        // Expired plans must be renewed first — upgrade not allowed once lapsed.
+        if (group.expirationDate && new Date(group.expirationDate) < nowTs)
+          return res.status(400).json({ success: false, message: 'This plan has expired — renew it before upgrading.' });
+        conversion = computeGroupConversionCharge(doc, group);  // groups upgrade to Unlimited only
+      } else {
+        const targetPlan = newSubscriptionPlan || 'Unlimited Plan';
+        if (targetPlan === doc.subscriptionPlan && targetPlan !== 'Multiple Years Subscription Plan')
+          return res.status(400).json({ success: false, message: `Already on the ${targetPlan}.` });
+        if (doc.subscriptionPlan !== 'Unlimited Plan' && doc.expirationDate && new Date(doc.expirationDate) < nowTs)
+          return res.status(400).json({ success: false, message: 'This plan has expired — renew it before upgrading.' });
+        conversion = computeConversionCharge(doc, registrationModel, new Date(), targetPlan, bodyRenewalYears);
+        computedYears = conversion.targetPlan === 'Multiple Years Subscription Plan' ? conversion.targetYears : computedYears;
+      }
+      amountDollars = conversion.charge;
     // ── Holder upgrade: count-based charge for additional slots ─────────────────
-    if (purpose === 'holder-upgrade') {
+    } else if (purpose === 'holder-upgrade') {
       const additional = Number(bodyAdditionalCount || 0);
       if (!additional || additional < 1)
         return res.status(400).json({ success: false, message: 'additionalHolderCount must be at least 1 for airline accounts.' });
@@ -880,6 +1261,21 @@ exports.createPaymentIntent = async (req, res) => {
     };
     // Store new plan in metadata so webhook/confirm can apply plan change
     if (newSubscriptionPlan) metadata.newSubscriptionPlan = newSubscriptionPlan;
+    // Conversion → Unlimited: carry the tier breakdown so confirm/webhook can build
+    // the snapshot + itemized invoice (Unlimited line + prorated credit line).
+    if (purpose === 'convert-unlimited' && conversion) {
+      // Target plan: group upgrades are Unlimited; base honors the chosen target.
+      metadata.newSubscriptionPlan   = bodyHolderGroupId ? 'Unlimited Plan' : (conversion.targetPlan || 'Unlimited Plan');
+      metadata.convertUnlimitedPpc   = String(conversion.unlimitedPpc);
+      metadata.convertUnlimitedTotal = String(conversion.unlimitedTotal);
+      metadata.convertBaseCount      = String(conversion.baseCount);
+      // Group conversion carries its own label; base derives one from plan+years.
+      metadata.convertOldPlanLabel   = conversion.oldPlanLabel
+        || conversionOldPlanLabel(conversion.oldPlan, conversion.oldYears);
+      if (conversion.targetPlan === 'Multiple Years Subscription Plan')
+        metadata.renewalMultiYearCount = String(conversion.targetYears);
+      if (bodyHolderGroupId) metadata.holderGroupId = String(bodyHolderGroupId);
+    }
     // Group renewal target — confirm/webhook applies the renewal to this group.
     if (purpose === 'renewal' && bodyHolderGroupId) metadata.holderGroupId = String(bodyHolderGroupId);
     // Group renewal merge — fold the group back into the base plan (same plan type only).
@@ -1017,12 +1413,13 @@ exports.confirmPayment = async (req, res) => {
     const piPurpose = pi.metadata?.purpose || 'payment';
     const isPurposeRenewal = piPurpose === 'renewal';
     const isPurposeHolderUpgrade = piPurpose === 'holder-upgrade';
+    const isPurposeConversion = piPurpose === 'convert-unlimited';
 
-    // Renewals always get a fresh invoice number.
-    // Non-renewal flows may reuse an existing invoice number only if it is not
+    // Renewals and conversions always get a fresh invoice number.
+    // Other flows may reuse an existing invoice number only if it is not
     // already used elsewhere in DB.
     let invoiceNum;
-    if (isPurposeRenewal) {
+    if (isPurposeRenewal || isPurposeConversion) {
       invoiceNum = await generateInvoiceNumber();
     } else {
       const preferredInvoice = normalizeInvoiceNumber(doc.invoiceNumber);
@@ -1123,6 +1520,31 @@ exports.confirmPayment = async (req, res) => {
         pricePerCert:        batchPpc,
       };
       invoiceSnapshot = buildInvoiceSnapshot(upgradeDocObj, registrationModel, amountDollars, now);
+    } else if (isPurposeConversion) {
+      // Upgrade snapshot: target plan (Unlimited or Multi-Year) for the base holder
+      // count at the target tier ppc. buildInvoiceSnapshot recomputes the airline
+      // total as ppc × count, so override subtotal/total to the NET amount charged
+      // (target total − prorated credit). Period start = now (the upgrade invoice date).
+      const convTargetPlan = pi.metadata?.newSubscriptionPlan || 'Unlimited Plan';
+      const convYears      = convTargetPlan === 'Multiple Years Subscription Plan'
+        ? Math.max(2, Number(pi.metadata?.renewalMultiYearCount || 2)) : null;
+      const convBaseCount = Number(pi.metadata?.convertBaseCount || 0) || 1;
+      const convPpc       = Number(pi.metadata?.convertUnlimitedPpc || 0);
+      const convDocObj = {
+        ...doc.toObject(),
+        subscriptionPlan:    convTargetPlan,
+        multiYearCount:      convYears,
+        committedCount:      convBaseCount,
+        holderCountValue:    convBaseCount,
+        pricePerCertificate: convPpc,
+        pricePerCert:        convPpc,
+        price:              registrationModel === 'Individual'
+          ? (convTargetPlan === 'Unlimited Plan' ? 299 : convTargetPlan === 'Multiple Years Subscription Plan' ? 55 * (convYears || 2) : 69)
+          : undefined,
+      };
+      invoiceSnapshot = buildInvoiceSnapshot(convDocObj, registrationModel, amountDollars, now);
+      invoiceSnapshot.subtotal  = amountDollars;
+      invoiceSnapshot.totalPaid = amountDollars;
     } else {
       invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
     }
@@ -1153,7 +1575,7 @@ exports.confirmPayment = async (req, res) => {
       userAgent:           userAgent || req.headers['user-agent'] || '',
       confirmedVia:        'frontend',
       // Renewal metadata — persisted on Payment doc for use by applyRenewalToRegistration
-      purpose:                isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : 'payment',
+      purpose:                isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : isPurposeConversion ? 'convert-unlimited' : 'payment',
       newSubscriptionPlan:    pi.metadata?.newSubscriptionPlan || null,
       renewalMultiYearCount,
       renewalExactCount,
@@ -1205,6 +1627,10 @@ exports.confirmPayment = async (req, res) => {
         mergeTarget: pi.metadata?.mergeTarget || '',
       }) || doc;
 
+    } else if (isPurposeConversion) {
+      updatedReg = pi.metadata?.holderGroupId
+        ? await applyGroupConversionToUnlimited(registrationId, registrationModel, paymentDoc, pi.metadata.holderGroupId)
+        : await applyConversionToUnlimited(registrationId, registrationModel, paymentDoc);
     } else {
       updatedReg = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
     }
@@ -1234,7 +1660,8 @@ exports.confirmPayment = async (req, res) => {
         paidAt:         paymentDoc.paidAt,
         paymentMethod:  paymentDoc.paymentMethodType || 'card',
         existingInvoiceNumber: paymentDoc.invoiceNumber,
-        purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : 'payment',
+        purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgrade ? 'holder-upgrade' : isPurposeConversion ? 'convert-unlimited' : 'payment',
+        lineItems:      isPurposeConversion ? buildConversionLineItems(pi.metadata, paymentDoc.amountDollars, registrationModel) : undefined,
       });
 
       // For renewals: if createOrUpdateInvoice generated a different invoice number
@@ -1280,7 +1707,7 @@ exports.confirmPayment = async (req, res) => {
           req.user?.email,
         ).catch((e) => console.warn('[confirmPayment] Email failed:', e.message));
       } else {
-        const sendFn = isPurposeRenewal
+        const sendFn = (isPurposeRenewal || isPurposeConversion)
           ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
           : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
         sendFn(updatedReg, req.user?.email).catch((e) =>
@@ -1475,11 +1902,12 @@ exports.stripeWebhook = async (req, res) => {
       const webhookPurpose = pi.metadata?.purpose || 'payment';
       const isPurposeRenewal = webhookPurpose === 'renewal';
       const isPurposeHolderUpgradeWebhook = webhookPurpose === 'holder-upgrade';
+      const isPurposeConversionWebhook = webhookPurpose === 'convert-unlimited';
 
-      // Renewals always get a fresh invoice number.
+      // Renewals and conversions always get a fresh invoice number.
       // Reuse existing numbers only when they are already tied to this same record.
       let invoiceNum;
-      if (isPurposeRenewal) {
+      if (isPurposeRenewal || isPurposeConversionWebhook) {
         invoiceNum = existing?.invoiceNumber || await generateInvoiceNumber();
       } else {
         const preferredInvoice = normalizeInvoiceNumber(existing?.invoiceNumber || doc.invoiceNumber);
@@ -1572,6 +2000,29 @@ exports.stripeWebhook = async (req, res) => {
           pricePerCert:        batchPpc,
         };
         invoiceSnapshot = buildInvoiceSnapshot(upgradeDocObj, registrationModel, amountDollars, now);
+      } else if (isPurposeConversionWebhook) {
+        // Upgrade: mirror confirmPayment — snapshot reflects the TARGET plan at its tier
+        // ppc; override total to the NET charge.
+        const convTargetPlan = pi.metadata?.newSubscriptionPlan || 'Unlimited Plan';
+        const convYears      = convTargetPlan === 'Multiple Years Subscription Plan'
+          ? Math.max(2, Number(pi.metadata?.renewalMultiYearCount || 2)) : null;
+        const convBaseCount = Number(pi.metadata?.convertBaseCount || 0) || 1;
+        const convPpc       = Number(pi.metadata?.convertUnlimitedPpc || 0);
+        const convDocObj = {
+          ...doc.toObject(),
+          subscriptionPlan:    convTargetPlan,
+          multiYearCount:      convYears,
+          committedCount:      convBaseCount,
+          holderCountValue:    convBaseCount,
+          pricePerCertificate: convPpc,
+          pricePerCert:        convPpc,
+          price:              registrationModel === 'Individual'
+            ? (convTargetPlan === 'Unlimited Plan' ? 299 : convTargetPlan === 'Multiple Years Subscription Plan' ? 55 * (convYears || 2) : 69)
+            : undefined,
+        };
+        invoiceSnapshot = buildInvoiceSnapshot(convDocObj, registrationModel, amountDollars, now);
+        invoiceSnapshot.subtotal  = amountDollars;
+        invoiceSnapshot.totalPaid = amountDollars;
       } else {
         invoiceSnapshot = buildInvoiceSnapshot(doc, registrationModel, amountDollars, now);
       }
@@ -1596,7 +2047,7 @@ exports.stripeWebhook = async (req, res) => {
         invoiceDraft:   null,
         description:    pi.description || '',
         confirmedVia:   'webhook',
-        purpose:              isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : 'payment',
+        purpose:              isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : isPurposeConversionWebhook ? 'convert-unlimited' : 'payment',
         newSubscriptionPlan:  newSubscriptionPlan || null,
         renewalMultiYearCount: webhookRenewalYears,
         renewalExactCount:     webhookRenewalCount,
@@ -1628,6 +2079,10 @@ exports.stripeWebhook = async (req, res) => {
           mergeTarget: pi.metadata?.mergeTarget || '',
         }) || doc;
 
+      } else if (isPurposeConversionWebhook) {
+        updatedRegWebhook = pi.metadata?.holderGroupId
+          ? await applyGroupConversionToUnlimited(registrationId, registrationModel, paymentDoc, pi.metadata.holderGroupId)
+          : await applyConversionToUnlimited(registrationId, registrationModel, paymentDoc);
       } else {
         updatedRegWebhook = await applyPaymentToRegistration(registrationId, registrationModel, paymentDoc);
       }
@@ -1654,7 +2109,8 @@ exports.stripeWebhook = async (req, res) => {
           paidAt:         paymentDoc.paidAt,
           paymentMethod:  paymentDoc.paymentMethodType || 'card',
           existingInvoiceNumber: paymentDoc.invoiceNumber,
-          purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : 'payment',
+          purpose:        isPurposeRenewal ? 'renewal' : isPurposeHolderUpgradeWebhook ? 'holder-upgrade' : isPurposeConversionWebhook ? 'convert-unlimited' : 'payment',
+          lineItems:      isPurposeConversionWebhook ? buildConversionLineItems(pi.metadata, paymentDoc.amountDollars, registrationModel) : undefined,
         });
 
         // For renewals: sync canonical invoice number back if it differs from payment doc.
@@ -1689,7 +2145,7 @@ exports.stripeWebhook = async (req, res) => {
             amountDollars,
           ).catch((e) => console.warn('[stripeWebhook] Email failed:', e.message));
         } else {
-          const sendFn = isPurposeRenewal
+          const sendFn = (isPurposeRenewal || isPurposeConversionWebhook)
             ? (registrationModel === 'Individual' ? sendIndividualRenewalConfirmation : sendAirlineRenewalConfirmation)
             : (registrationModel === 'Individual' ? sendIndividualPaymentConfirmation : sendAirlinePaymentConfirmation);
           sendFn(updatedRegWebhook).catch((e) =>
@@ -1738,7 +2194,7 @@ exports.stripeWebhook = async (req, res) => {
               status:        'failed',
               isPaid:        false,
               confirmedVia:  'webhook',
-              purpose:       pi.metadata?.purpose && ['payment', 'renewal', 'holder-upgrade'].includes(pi.metadata.purpose)
+              purpose:       pi.metadata?.purpose && ['payment', 'renewal', 'holder-upgrade', 'convert-unlimited'].includes(pi.metadata.purpose)
                 ? pi.metadata.purpose : 'payment',
               amountCents:   pi.amount,
               amountDollars: pi.amount / 100,
@@ -1754,7 +2210,10 @@ exports.stripeWebhook = async (req, res) => {
                 holderCount: 0, pricePerCert: 0,
                 subtotal: 0, tax: 0, totalPaid: 0,
               },
-              invoiceNumber: await generateInvoiceNumber(),
+              // Failed attempt: use a placeholder number, never a real sequence one.
+              // A failed payment must leave NO real invoice (no number burned, nothing
+              // that could surface as a generated invoice).
+              invoiceNumber: `FAILED-${pi.id}`,
               invoiceDraft:  null,
             });
           }
@@ -2328,6 +2787,254 @@ exports.adminRenew = async (req, res) => {
 };
 
 
+// ─── GET /api/payments/admin/conversion-quote ─────────────────────────────────
+// Admin-only: returns the net charge + breakdown for converting the base plan (or a
+// holder group) → Unlimited, WITHOUT mutating anything. Drives the "net amount to be
+// paid" confirmation the admin sees before generating the invoice.
+exports.adminConversionQuote = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'Admin only.' });
+
+    const registrationId    = req.query.registrationId || req.body?.registrationId;
+    const registrationModel = req.query.registrationModel || req.body?.registrationModel || 'Airlines';
+    const holderGroupId     = req.query.holderGroupId || req.body?.holderGroupId || null;
+    const targetPlan        = req.query.targetPlan || req.body?.targetPlan || 'Unlimited Plan';
+    const targetYears       = req.query.targetMultiYearCount || req.body?.targetMultiYearCount || null;
+
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    if (!doc) return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    let quote;
+    if (holderGroupId) {
+      const group = doc.holderGroups?.id ? doc.holderGroups.id(holderGroupId) : null;
+      if (!group) return res.status(404).json({ success: false, message: 'Holder group not found.' });
+      if (group.plan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This plan is already Unlimited.' });
+      quote = computeGroupConversionCharge(doc, group);
+    } else {
+      if (doc.subscriptionPlan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This subscription is already on the Unlimited Plan.' });
+      quote = computeConversionCharge(doc, registrationModel, new Date(), targetPlan, targetYears);
+    }
+
+    return res.json({
+      success: true,
+      quote: {
+        holderGroupId,
+        targetPlan:     quote.targetPlan || 'Unlimited Plan',
+        targetYears:    quote.targetYears || null,
+        baseCount:      quote.baseCount,
+        unlimitedPpc:   quote.unlimitedPpc,
+        unlimitedTotal: quote.unlimitedTotal,
+        credit:         quote.credit,
+        charge:         quote.charge,
+        oldPlanLabel:   quote.oldPlanLabel || conversionOldPlanLabel(quote.oldPlan, quote.oldYears),
+      },
+    });
+  } catch (err) {
+    console.error('[adminConversionQuote]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ─── POST /api/payments/admin/convert-unlimited ───────────────────────────────
+// Admin-only: convert the base plan (or a holder group) → Unlimited and generate the
+// invoice in one step. The admin may supply an edited invoiceDraft (all fields) and a
+// custom invoiceNumber. Idempotent on the invoice number (no overlapping duplicate).
+exports.adminConvertToUnlimited = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ success: false, message: 'Admin only.' });
+
+    const registrationId    = req.params.id || req.body.registrationId;
+    const registrationModel = req.body.registrationModel
+      || (req.baseUrl.includes('individuals') ? 'Individual' : 'Airlines');
+    const { holderGroupId, invoiceNumber, invoiceDraft, targetMultiYearCount } = req.body;
+    const targetPlan = req.body.targetPlan || 'Unlimited Plan';
+
+    const VALID_MODELS = ['Individual', 'Airlines', 'AirlinesSubscription'];
+    if (!registrationId || !VALID_MODELS.includes(registrationModel))
+      return res.status(400).json({ success: false, message: 'Valid registrationId and registrationModel are required.' });
+
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    if (!doc) return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    const now = new Date();
+
+    // ── Compute the authoritative charge (base or group) ──────────────────────
+    let conv, group = null;
+    if (holderGroupId) {
+      group = doc.holderGroups?.id ? doc.holderGroups.id(holderGroupId) : null;
+      if (!group) return res.status(404).json({ success: false, message: 'Holder group not found.' });
+      if (group.plan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This plan is already Unlimited.' });
+      conv = computeGroupConversionCharge(doc, group, now);   // groups → Unlimited only
+    } else {
+      if (doc.subscriptionPlan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This subscription is already on the Unlimited Plan.' });
+      conv = computeConversionCharge(doc, registrationModel, now, targetPlan, targetMultiYearCount);
+    }
+    const charge      = conv.charge;
+    const finalTarget = holderGroupId ? 'Unlimited Plan' : (conv.targetPlan || 'Unlimited Plan');
+    const finalYears  = finalTarget === 'Multiple Years Subscription Plan' ? (conv.targetYears || 2) : null;
+    const targetExpiry = computeExpiry(finalTarget, doc.subscriptionDate || now, finalYears);
+
+    // ── Invoice number: admin-supplied (must be unique) or freshly generated ──
+    let invoiceNum = normalizeInvoiceNumber(invoiceNumber);
+    if (invoiceNum) {
+      if (await isInvoiceNumberTaken(invoiceNum))
+        return res.status(400).json({ success: false, message: 'Invoice number already exists. Please use a different value.' });
+    } else {
+      invoiceNum = await generateInvoiceNumber();
+    }
+
+    // ── Snapshot for the converted (Unlimited) plan; total pinned to net charge ─
+    const isAirline = registrationModel !== 'Individual';
+    const snapshot = {
+      name: isAirline
+        ? (doc.airlineName || [doc.firstName, doc.lastName].filter(Boolean).join(' '))
+        : [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+      email:            doc.email || '',
+      phone:            doc.phone || '',
+      address:          [doc.addressLine1, doc.city, doc.state, doc.postalCode, doc.country].filter(Boolean).join(', '),
+      isAirline,
+      airlineName:      doc.airlineName || '',
+      subscriptionPlan: finalTarget,
+      multiYearCount:   finalYears,
+      subscriptionDate: doc.subscriptionDate || now,
+      expirationDate:   targetExpiry || null,
+      holderCount:      conv.baseCount,
+      pricePerCert:     conv.unlimitedPpc,
+      subtotal:         charge,
+      tax:              0,
+      totalPaid:        charge,
+    };
+
+    // ── Synthetic (manual) Payment doc — drives the same conversion application ─
+    const paymentDoc = await Payment.create({
+      stripePaymentIntentId: `MANUAL-CONVERT-${invoiceNum}`,
+      status:           'succeeded',
+      isPaid:           true,
+      paidAt:           now,
+      amountCents:      Math.round(charge * 100),
+      amountDollars:    charge,
+      currency:         'usd',
+      registrationId,
+      registrationModel,
+      invoiceNumber:    invoiceNum,
+      invoiceSnapshot:  snapshot,
+      purpose:          'convert-unlimited',
+      confirmedVia:     'manual',
+      paymentMethodType:'manual',
+      newSubscriptionPlan:   finalTarget,
+      renewalMultiYearCount: finalYears,
+    });
+
+    // ── Apply the conversion — identical path to the paid/wire flow ────────────
+    const updatedReg = holderGroupId
+      ? await applyGroupConversionToUnlimited(registrationId, registrationModel, paymentDoc, holderGroupId)
+      : await applyConversionToUnlimited(registrationId, registrationModel, paymentDoc);
+
+    // ── Canonical Invoice doc (itemized: Unlimited line + credit line) ────────
+    // draftOverrides carries the admin's edited fields so the PDF matches exactly.
+    try {
+      const meta = {
+        convertUnlimitedTotal: String(conv.unlimitedTotal),
+        convertBaseCount:      String(conv.baseCount),
+        convertUnlimitedPpc:   String(conv.unlimitedPpc),
+        convertOldPlanLabel:   conv.oldPlanLabel || conversionOldPlanLabel(conv.oldPlan, conv.oldYears),
+        newSubscriptionPlan:   finalTarget,
+        ...(finalYears ? { renewalMultiYearCount: String(finalYears) } : {}),
+      };
+      await createOrUpdateInvoice({
+        registrationId,
+        registrationModel,
+        paymentId:             paymentDoc._id,
+        snapshot,
+        amountDollars:         charge,
+        paidAt:                now,
+        paymentMethod:         invoiceDraft?.paymentMethod || 'manual',
+        existingInvoiceNumber: invoiceNum,
+        purpose:               'convert-unlimited',
+        lineItems:             buildConversionLineItems(meta, charge, registrationModel),
+        draftOverrides:        invoiceDraft || null,
+        adminGenerated:        true,
+      });
+    } catch (invErr) {
+      console.warn('[adminConvertToUnlimited] Invoice creation failed:', invErr.message);
+    }
+
+    return res.json({ success: true, data: updatedReg, invoiceNumber: invoiceNum, amount: charge });
+  } catch (err) {
+    console.error('[adminConvertToUnlimited]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ─── GET /api/payments/credits/:id ────────────────────────────────────────────
+// Owner OR admin: per-plan unused-time credit (what each active plan is currently
+// worth toward an upgrade). Credit = the unconsumed portion of the plan's current
+// term, prorated by days — independent of which plan you upgrade to. Drives the
+// "Credits" button on the subscription header (user) and the admin portal view.
+exports.getPlanCredits = async (req, res) => {
+  try {
+    const registrationId    = req.params.id || req.query.registrationId;
+    const registrationModel = req.query.model || req.query.registrationModel
+      || (req.baseUrl.includes('individuals') ? 'Individual' : 'Airlines');
+
+    const { doc } = await findRegistration(registrationId, registrationModel);
+    if (!doc) return res.status(404).json({ success: false, message: 'Registration not found.' });
+
+    // Ownership: admin passes; owner matches by id/subscriptionIds or email.
+    if (req.user.role !== 'admin') {
+      const ids = [
+        ...(req.user.subscriptionIds || []).map(String),
+        req.user.registrationId ? String(req.user.registrationId) : null,
+      ].filter(Boolean);
+      const userEmail = (req.user.email || '').toLowerCase();
+      const docEmails = [doc.email, doc.pointOfContactEmail, doc.paymentEmail].filter(Boolean).map(e => String(e).toLowerCase());
+      if (!ids.includes(String(registrationId)) && !(userEmail && docEmails.includes(userEmail)))
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    const now = new Date();
+    const credits = [];
+
+    // Base plan — only when it can still earn credit (not already Unlimited).
+    if (doc.subscriptionPlan !== 'Unlimited Plan') {
+      const c = computeConversionCharge(doc, registrationModel, now);  // credit is target-independent
+      credits.push({
+        ref: 'base', label: 'Base Plan', plan: doc.subscriptionPlan,
+        credit: c.credit, currentTotal: c.currentBaseTotal,
+        expiresAt: doc.expirationDate || null,
+        eligible: c.credit > 0,
+      });
+    }
+
+    // Add-on groups (airline only).
+    (doc.holderGroups || []).forEach((g) => {
+      if (g.plan === 'Unlimited Plan') return;
+      const gc = computeGroupConversionCharge(doc, g, now);
+      credits.push({
+        ref: String(g._id), label: 'Add-on Plan', plan: g.plan,
+        credit: gc.credit, currentTotal: gc.currentTotal,
+        expiresAt: g.expirationDate || null,
+        eligible: gc.credit > 0,
+      });
+    });
+
+    const totalCredit = Math.round(credits.reduce((s, c) => s + Number(c.credit || 0), 0) * 100) / 100;
+    return res.json({ success: true, credits, totalCredit });
+  } catch (err) {
+    console.error('[getPlanCredits]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
 // ─── POST /api/payments/admin/refresh-invoice ─────────────────────────────────
 // Admin-only: force-refresh the canonical Invoice doc for a registration by
 // re-running updateOriginalInvoiceAfterHolderUpgrade with the current DB state.
@@ -2550,3 +3257,8 @@ exports.getAllPayments = async (req, res) => {
 exports._applyRenewalToRegistration = applyRenewalToRegistration;
 exports._applyGroupRenewal          = applyGroupRenewal;
 exports._applyHolderUpgrade         = applyHolderUpgrade;
+exports._applyConversionToUnlimited = applyConversionToUnlimited;
+exports._computeConversionCharge    = computeConversionCharge;
+exports._buildConversionLineItems   = buildConversionLineItems;
+exports._computeGroupConversionCharge = computeGroupConversionCharge;
+exports._applyGroupConversionToUnlimited = applyGroupConversionToUnlimited;

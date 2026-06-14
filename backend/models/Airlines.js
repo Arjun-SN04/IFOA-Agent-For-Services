@@ -40,6 +40,10 @@ const HolderGroupSchema = new mongoose.Schema({
   // admin marks them paid (which generates the invoice).
   paymentStatus:    { type: String, enum: ['paid', 'pending'], default: 'paid' },
   addedByAdmin:     { type: Boolean, default: false },
+  // Soft-cancel: the airline requested cancellation of THIS add-on plan. It stays in
+  // the DB (flagged) until an admin keeps (un-cancels), edits, or hard-deletes it.
+  cancelled:        { type: Boolean, default: false },
+  cancelledAt:      { type: Date,    default: null },
   subscriptionDate: { type: Date,   default: Date.now },
   expirationDate:   { type: Date,   default: null },    // null for Unlimited
   paymentId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', default: null },
@@ -79,6 +83,11 @@ const AirlinesSchema = new mongoose.Schema({
     enum: ['Active', 'Inactive', 'Pending'],
     default: 'Pending',
   },
+
+  // Soft-cancel of the BASE plan — airline requested cancellation; awaits admin
+  // decision (keep / edit / hard-delete). Plan data is retained until then.
+  planCancelled:   { type: Boolean, default: false },
+  planCancelledAt: { type: Date,    default: null },
 
   // Plan
   subscriptionPlan: {

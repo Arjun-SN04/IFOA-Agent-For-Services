@@ -3,6 +3,10 @@ const mongoose = require('mongoose');
 const IndividualSchema = new mongoose.Schema({
   // Status & Subscription Information
   status: { type: String, enum: ['Active', 'Inactive', 'Pending'], default: 'Pending' },
+  // Soft-cancel: individual requested cancellation; awaits admin decision (keep / edit
+  // / hard-delete). Plan data is retained until the admin acts.
+  planCancelled:   { type: Boolean, default: false },
+  planCancelledAt: { type: Date,    default: null },
   subscriptionPlan: {
     type: String,
     enum: [

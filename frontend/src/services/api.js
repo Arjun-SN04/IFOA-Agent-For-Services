@@ -48,6 +48,9 @@ export const getAirlinesSubscriptionById    = (id)       => API.get(`/airlines/$
 export const getAirlinesSubscriptionByEmail = (email)    => API.get('/airlines/by-email', { params: { email } })
 export const updateAirlinesSubscription     = (id, data) => API.put(`/airlines/${id}`, data)
 export const deleteAirlinesSubscription     = (id)       => API.delete(`/airlines/${id}`)
+// Admin: keep (un-cancel) a soft-cancelled plan
+export const uncancelAirlinePlan            = (id, planRef) => API.post(`/airlines/${id}/uncancel-plan`, { planRef })
+export const uncancelIndividualPlan         = (id)       => API.post(`/individuals/${id}/uncancel-plan`, { planRef: 'base' })
 export const bulkDeleteAirlines             = (ids)      => API.delete('/airlines/bulk', { data: { ids } })
 export const setIndividualRenewalInvoice   = (id, invoiceNumber) => API.patch(`/individuals/${id}/renewal-invoice`, { invoiceNumber })
 export const setAirlinesRenewalInvoice     = (id, invoiceNumber) => API.patch(`/airlines/${id}/renewal-invoice`, { invoiceNumber })
@@ -73,6 +76,21 @@ export const cancelAirlinePlan              = (id, planRef, holderTarget, moveHo
 // Admin renews a subscription (no payment) + generates invoice. registrationModel: 'Airlines' | 'Individual'.
 export const adminRenewAirline              = (id, data) => API.post(`/airlines/${id}/admin-renew`, { ...data, registrationModel: 'Airlines' })
 export const adminRenewIndividual           = (id, data) => API.post(`/individuals/${id}/admin-renew`, { ...data, registrationModel: 'Individual' })
+
+// ── Admin: convert base/group → Unlimited (quote + apply-with-invoice) ─────────
+export const adminConversionQuote = (registrationId, registrationModel, holderGroupId, targetPlan, targetMultiYearCount) =>
+  API.get('/payments/admin/conversion-quote', { params: {
+    registrationId, registrationModel,
+    holderGroupId: holderGroupId || undefined,
+    targetPlan: targetPlan || undefined,
+    targetMultiYearCount: targetMultiYearCount || undefined,
+  } })
+export const adminConvertToUnlimited = (registrationId, registrationModel, payload) =>
+  API.post('/payments/admin/convert-unlimited', { registrationId, registrationModel, ...payload })
+
+// ── Per-plan unused-time credits (owner or admin) ─────────────────────────────
+export const getPlanCredits = (registrationId, model) =>
+  API.get(`/payments/credits/${registrationId}`, { params: { model: model || undefined } })
 
 // ── Payments (Stripe) ────────────────────────────────────────────────────────
 export const createPaymentIntent = (registrationId, registrationModel) =>

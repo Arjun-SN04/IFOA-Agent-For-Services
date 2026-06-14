@@ -228,7 +228,10 @@ router.post('/admin-create', auth, adminOnly, async (req, res) => {
     // renewal, holder-upgrade and custom invoices are additive — they must NOT reuse
     // the current-plan Invoice doc. Only match by exact invoice number; never fall back
     // to the generic adminGenerated doc, and never delete sibling Invoice docs.
-    const isAdditive = purpose === 'renewal' || purpose === 'holder-upgrade' || purpose === 'custom';
+    // Additive invoices get their OWN doc and must never reuse/rename/delete the
+    // existing subscription invoice. Conversions (→ Unlimited) are additive: the prior
+    // plan's invoice must persist alongside the new conversion invoice.
+    const isAdditive = purpose === 'renewal' || purpose === 'holder-upgrade' || purpose === 'custom' || purpose === 'convert-unlimited';
 
     // Find any existing admin-generated Invoice doc for this registration.
     // Prefer exact match on invoiceNumber; fall back to any adminGenerated doc

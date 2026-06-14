@@ -83,6 +83,10 @@ async function createOrUpdateInvoice(opts) {
     adminGenerated  = false,
     existingInvoiceNumber = null,
     purpose         = 'payment',
+    // Explicit line items (e.g. a conversion's Unlimited line + prorated credit line).
+    // When provided they replace the auto-computed single line for BOTH the canonical
+    // Invoice.lineItems and the PDF-ready draft, so the two never diverge.
+    lineItems       = null,
   } = opts;
 
   // ── 1. Locate existing Invoice — strategy depends on how the payment was made ─
@@ -155,12 +159,14 @@ async function createOrUpdateInvoice(opts) {
   // invoice arithmetic reconciles: quantity × unitPrice === totalPrice. Previously
   // unitPrice was the single-year per-cert rate, so qty × unit was off by `years`.
   const airlineUnitPrice = (pricePerCert || amountDollars) * yearMultiplier;
-  const lineItems = [{
-    description: lineDescription,
-    quantity:    isAirline ? holderCount || 1 : 1,
-    unitPrice:   isAirline ? airlineUnitPrice : amountDollars,
-    totalPrice:  totalAmount,
-  }];
+  const computedLineItems = Array.isArray(lineItems) && lineItems.length
+    ? lineItems
+    : [{
+        description: lineDescription,
+        quantity:    isAirline ? holderCount || 1 : 1,
+        unitPrice:   isAirline ? airlineUnitPrice : amountDollars,
+        totalPrice:  totalAmount,
+      }];
 
   const issueDate  = paidAt || existing?.issueDate || new Date();
   const payableBy  = payableByDate(issueDate);
@@ -190,7 +196,7 @@ async function createOrUpdateInvoice(opts) {
     subscriptionDate:  snapshot.subscriptionDate  || issueDate,
     expirationDate:    snapshot.expirationDate    || null,
     isAirline,
-    lineItems,
+    lineItems:   computedLineItems,
     subtotal:    totalAmount,
     tax:         0,
     totalAmount,

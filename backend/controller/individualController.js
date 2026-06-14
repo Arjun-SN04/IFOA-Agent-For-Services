@@ -766,6 +766,35 @@ exports.deleteIndividual = async (req, res) => {
   }
 };
 
+// ── Soft cancel (individual requests cancellation) ───────────────────────────────
+// Flags the plan cancelled; data is retained until an admin keeps / edits / deletes it.
+exports.cancelPlan = async (req, res) => {
+  try {
+    const doc = await Individual.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+    doc.planCancelled = true;
+    doc.planCancelledAt = new Date();
+    await doc.save();
+    return res.json({ success: true, message: 'Cancellation requested — an admin will review it.', data: doc });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: keep (un-cancel) a soft-cancelled individual plan ──────────────────────
+exports.uncancelPlan = async (req, res) => {
+  try {
+    const doc = await Individual.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+    doc.planCancelled = false;
+    doc.planCancelledAt = null;
+    await doc.save();
+    return res.json({ success: true, message: 'Plan kept.', data: doc });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── Bulk Delete ────────────────────────────────────────────────────────────────
 exports.bulkDeleteIndividuals = async (req, res) => {
   try {

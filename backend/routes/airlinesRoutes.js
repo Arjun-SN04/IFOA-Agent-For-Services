@@ -30,6 +30,7 @@ const {
   activateGroupRenewalNow,
   deleteHolderGroup,
   cancelPlan,
+  uncancelPlan,
 } = require('../controller/airlinesController');
 const { adminHolderUpgrade, markHolderGroupPaid, adminRenew } = require('../controller/paymentController');
 
@@ -63,13 +64,28 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// Ownership check: admin passes; non-admins must own the record
-function requireOwnership(req, res, next) {
+// Ownership check: admin passes; non-admins must own the record.
+// Mirrors the payment-controller ownership rule: match by registrationId /
+// subscriptionIds OR by email (a user can own a record by email even when their
+// token's registrationId/subscriptionIds were not linked yet — otherwise the card
+// flow, which has the email fallback, works while the wire flow 403s).
+async function requireOwnership(req, res, next) {
   if (req.user?.role === 'admin') return next();
   const id        = req.params.id;
   const userSubIds = (req.user?.subscriptionIds || []).map(String);
   const userRegId  = req.user?.registrationId ? String(req.user.registrationId) : null;
   if (userRegId === id || userSubIds.includes(id)) return next();
+
+  // Email fallback — load the record and compare to the authenticated user's email.
+  const userEmail = (req.user?.email || '').toLowerCase();
+  if (userEmail) {
+    try {
+      const doc = await Airlines.findById(id).select('email pointOfContactEmail paymentEmail');
+      const docEmails = [doc?.email, doc?.pointOfContactEmail, doc?.paymentEmail]
+        .filter(Boolean).map(e => String(e).toLowerCase());
+      if (doc && docEmails.includes(userEmail)) return next();
+    } catch { /* fall through to 403 */ }
+  }
   return res.status(403).json({ success: false, message: 'Access denied.' });
 }
 
@@ -148,6 +164,8 @@ router.delete('/:id/holder-group/:groupId', authMiddleware, requireAdmin, delete
 // add-holders — owner or admin
 router.patch('/:id/add-holders',            authMiddleware, requireOwnership, addHoldersToSubscription);
 router.post('/:id/cancel-plan',             authMiddleware, requireOwnership, cancelPlan);
+// Admin: keep (un-cancel) a soft-cancelled plan.
+router.post('/:id/uncancel-plan',           authMiddleware, requireAdmin, uncancelPlan);
 // Admin renews on the customer's behalf (no payment) + generates invoice.
 // Same queued/immediate flow as the Stripe path; admin sets plan/count/price/invoice.
 // (The legacy /:id/renew route was removed — it extended the plan without creating

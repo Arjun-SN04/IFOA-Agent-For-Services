@@ -13,6 +13,9 @@ const {
   autoActivateRenewal,
   refreshInvoice,
   sendRenewalReminders,
+  adminConversionQuote,
+  adminConvertToUnlimited,
+  getPlanCredits,
 } = require('../controller/paymentController');
 
 const auth = require('../middleware/auth');
@@ -48,6 +51,15 @@ router.post('/admin/activate-renewal', auth, adminOnly, activateQueuedRenewal);
 
 // ── Admin: cancel/remove a queued nextRenewal on a registration ──────────────
 router.post('/admin/cancel-renewal', auth, adminOnly, cancelQueuedRenewal);
+
+// ── Admin: quote the net charge for converting base/group → Unlimited ─────────
+router.get('/admin/conversion-quote', auth, adminOnly, adminConversionQuote);
+
+// ── Admin: convert base/group → Unlimited and generate the invoice ────────────
+router.post('/admin/convert-unlimited', auth, adminOnly, adminConvertToUnlimited);
+
+// ── Owner/admin: per-plan unused-time credits (Credits button) ────────────────
+router.get('/credits/:id', auth, getPlanCredits);
 
 // ── User: auto-activate a queued renewal whose activation date has passed ────
 // Safe for non-admins — ownership + activationDate-past guard enforced in controller.

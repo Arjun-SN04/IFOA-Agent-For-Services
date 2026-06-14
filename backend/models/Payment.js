@@ -87,12 +87,13 @@ const PaymentSchema = new mongoose.Schema({
   },
 
   // ── Payment purpose ─────────────────────────────────────────────────────────
-  // 'payment'        — initial subscription payment
-  // 'renewal'        — renewal of an existing subscription
-  // 'holder-upgrade' — airline adds more certificate holder slots
+  // 'payment'          — initial subscription payment
+  // 'renewal'          — renewal of an existing subscription
+  // 'holder-upgrade'   — airline adds more certificate holder slots
+  // 'convert-unlimited'— in-place conversion of the base plan to Unlimited
   purpose: {
     type: String,
-    enum: ['payment', 'renewal', 'holder-upgrade'],
+    enum: ['payment', 'renewal', 'holder-upgrade', 'convert-unlimited'],
     default: 'payment',
     index: true,
   },

@@ -1005,7 +1005,59 @@ exports.deleteHolderGroup = async (req, res) => {
 //     suitable surviving plan is PROMOTED to the new base (active first; perpetual
 //     Unlimited preferred; otherwise the largest/most-recent). This also covers the
 //     "only one plan remains → it becomes the base regardless of its type" case.
+// SOFT CANCEL: airline requests cancellation of a plan. The plan is FLAGGED, not
+// removed — it stays in the DB until an admin keeps (un-cancels), edits, or hard-
+// deletes it. Holders + invoices are untouched.
 exports.cancelPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { planRef } = req.body || {};
+    if (!planRef) return res.status(400).json({ success: false, message: 'planRef is required.' });
+
+    const doc = await Airlines.findById(id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+
+    if (planRef === 'base') {
+      doc.planCancelled   = true;
+      doc.planCancelledAt = new Date();
+    } else {
+      const grp = (doc.holderGroups || []).find(g => String(g._id) === String(planRef));
+      if (!grp) return res.status(404).json({ success: false, message: 'Plan not found.' });
+      grp.cancelled   = true;
+      grp.cancelledAt = new Date();
+    }
+    await doc.save();
+    return res.json({ success: true, message: 'Cancellation requested — an admin will review it.', data: doc });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Admin: KEEP a soft-cancelled plan (clear the cancellation flag, plan stays active).
+exports.uncancelPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { planRef } = req.body || {};
+    const doc = await Airlines.findById(id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Airline not found.' });
+    if (planRef === 'base') {
+      doc.planCancelled = false;
+      doc.planCancelledAt = null;
+    } else {
+      const grp = (doc.holderGroups || []).find(g => String(g._id) === String(planRef));
+      if (!grp) return res.status(404).json({ success: false, message: 'Plan not found.' });
+      grp.cancelled = false;
+      grp.cancelledAt = null;
+    }
+    await doc.save();
+    return res.json({ success: true, message: 'Plan kept.', data: doc });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// (legacy hard-cancel — retained for reference, not routed)
+const _legacyHardCancelPlan = async (req, res) => {
   try {
     const { id } = req.params;
     const { planRef, holderTarget } = req.body || {};
@@ -1501,7 +1553,7 @@ exports.requestAirlineInvoice = async (req, res) => {
     // Whitelisted snapshot of the requested change — replayed on admin approval
     // through the same apply* helpers as a successful card payment.
     const d = req.body.details || {};
-    const wireRequestDetails = (purpose === 'renewal' || purpose === 'holder-upgrade') ? {
+    let wireRequestDetails = (purpose === 'renewal' || purpose === 'holder-upgrade') ? {
       purpose,
       plan:                  d.plan || req.body.renewalPlan || null,
       multiYearCount:        d.multiYearCount ? Number(d.multiYearCount) : null,
@@ -1512,6 +1564,48 @@ exports.requestAirlineInvoice = async (req, res) => {
       additionalHolderCount: d.additionalHolderCount ? Number(d.additionalHolderCount) : (req.body.additionalHolderCount ? Number(req.body.additionalHolderCount) : null),
       amount:                d.amount != null ? Number(d.amount) : null,
     } : null;
+
+    // ── Convert base plan → Unlimited (wire) ──────────────────────────────────
+    // Price is computed server-side (never trust the client amount). The full tier
+    // breakdown is stored so admin approval bills exactly what the airline was
+    // quoted (proration is fixed at request time, not re-derived later).
+    if (purpose === 'convert-unlimited') {
+      const convDoc = await Airlines.findById(id);
+      if (!convDoc)
+        return res.status(404).json({ success: false, message: 'Airline subscription not found.' });
+      if (convDoc.subscriptionPlan === 'Unlimited Plan')
+        return res.status(400).json({ success: false, message: 'This subscription is already on the Unlimited Plan.' });
+      if (!(convDoc.isPaid || convDoc.paymentStatus === 'paid' || convDoc.status === 'Active'))
+        return res.status(400).json({ success: false, message: 'Only an active, paid plan can be converted to Unlimited.' });
+
+      const { _computeConversionCharge, _computeGroupConversionCharge } = require('./paymentController');
+      const groupId = d.holderGroupId || req.body.holderGroupId || null;
+      let conv, oldPlanLabel;
+      if (groupId) {
+        const grp = convDoc.holderGroups?.id ? convDoc.holderGroups.id(groupId) : null;
+        if (!grp)
+          return res.status(404).json({ success: false, message: 'Holder group not found.' });
+        if (grp.plan === 'Unlimited Plan')
+          return res.status(400).json({ success: false, message: 'This plan is already Unlimited.' });
+        conv = _computeGroupConversionCharge(convDoc, grp, now);
+        oldPlanLabel = conv.oldPlanLabel;
+      } else {
+        conv = _computeConversionCharge(convDoc, 'Airlines', now);
+        const oldYears = convDoc.subscriptionPlan === 'Multiple Years Subscription Plan'
+          ? Math.max(2, Number(convDoc.multiYearCount || 2)) : 1;
+        oldPlanLabel = convDoc.subscriptionPlan === 'Multiple Years Subscription Plan' ? `${oldYears} Year` : '1 Year';
+      }
+      wireRequestDetails = {
+        purpose,
+        plan:           'Unlimited Plan',
+        holderGroupId:  groupId,
+        amount:         conv.charge,
+        unlimitedTotal: conv.unlimitedTotal,
+        unlimitedPpc:   conv.unlimitedPpc,
+        baseCount:      conv.baseCount,
+        oldPlanLabel,
+      };
+    }
 
     const update = {
       wirePaymentRequested: true,
@@ -2086,16 +2180,106 @@ exports.activateWirePayment = async (req, res) => {
     // group renewals, merge targets). Falls back to the legacy path when the
     // request predates wireRequestDetails or was admin-edited via legacy fields.
     const details = doc.wireRequestDetails;
-    if (details && (purpose === 'renewal' || purpose === 'holder-upgrade')) {
+    if (details && (purpose === 'renewal' || purpose === 'holder-upgrade' || purpose === 'convert-unlimited')) {
       const {
         _applyRenewalToRegistration,
         _applyGroupRenewal,
         _applyHolderUpgrade,
+        _applyConversionToUnlimited,
+        _applyGroupConversionToUnlimited,
+        _buildConversionLineItems,
       } = require('./paymentController');
+
+      const Invoice = require('../models/Invoice');
+
+      // ── Conversion → Unlimited (wire approval) ──────────────────────────────
+      // Bills the amount the airline was quoted at request time (stored in details),
+      // applies the in-place conversion, and writes the itemized invoice (Unlimited
+      // line + prorated credit line). Mirrors the card confirm path.
+      if (purpose === 'convert-unlimited') {
+        const existingConvInv = await Invoice.findOne({
+          registrationId: doc._id, purpose: 'convert-unlimited', adminGenerated: true,
+        }).sort({ createdAt: -1 });
+        const convInvoiceNum = existingConvInv?.invoiceNumber || await generateInvoiceNumber();
+        const charge       = Number(details.amount || 0);
+        const baseCount    = Number(details.baseCount || 0) || 1;
+        const unlimitedPpc = Number(details.unlimitedPpc || 0);
+
+        const syntheticConv = {
+          _id:                   new (require('mongoose').Types.ObjectId)(),
+          stripePaymentIntentId: null,
+          amountDollars:         charge,
+          invoiceNumber:         convInvoiceNum,
+          paidAt:                doc.wirePaymentRequestedAt || now,
+          invoiceSnapshot: {
+            isAirline:        true,
+            subscriptionPlan: 'Unlimited Plan',
+            holderCount:      baseCount,
+            pricePerCert:     unlimitedPpc,
+            subtotal:         charge,
+            totalPaid:        charge,
+            expirationDate:   null,
+          },
+        };
+
+        const applied = details.holderGroupId
+          ? await _applyGroupConversionToUnlimited(doc._id, 'Airlines', syntheticConv, details.holderGroupId)
+          : await _applyConversionToUnlimited(doc._id, 'Airlines', syntheticConv);
+        if (!applied)
+          return res.status(400).json({ success: false, message: 'Could not apply the conversion.' });
+
+        const updated = await Airlines.findByIdAndUpdate(req.params.id, {
+          $set: {
+            wirePaymentRequested: false, wirePaymentRequestedAt: null,
+            wireRequestPurpose: null, wireRequestRenewalPlan: null,
+            wireRequestAdditionalCount: null, wireRequestDetails: null,
+            paymentStatus: 'paid', invoiceStatus: 'Paid',
+          },
+        }, { new: true });
+
+        try {
+          const meta = {
+            convertUnlimitedTotal: String(details.unlimitedTotal || charge),
+            convertBaseCount:      String(baseCount),
+            convertUnlimitedPpc:   String(unlimitedPpc),
+            convertOldPlanLabel:   details.oldPlanLabel || 'previous plan',
+          };
+          await createOrUpdateInvoice({
+            registrationId:    doc._id,
+            registrationModel: 'Airlines',
+            snapshot: {
+              name:             [doc.firstName, doc.lastName].filter(Boolean).join(' '),
+              email:            doc.email || '',
+              isAirline:        true,
+              airlineName:      doc.airlineName || '',
+              subscriptionPlan: 'Unlimited Plan',
+              expirationDate:   null,
+              holderCount:      baseCount,
+              pricePerCert:     unlimitedPpc,
+              subtotal:         charge,
+              tax:              0,
+              totalPaid:        charge,
+            },
+            amountDollars:         charge,
+            paidAt:                now,
+            paymentMethod:         'wire',
+            existingInvoiceNumber: convInvoiceNum,
+            purpose:               'convert-unlimited',
+            lineItems:             _buildConversionLineItems(meta, charge, 'Airlines'),
+          });
+          await Invoice.updateMany(
+            { registrationId: doc._id, purpose: 'convert-unlimited', wirePending: true },
+            { $set: { wirePending: false } },
+          );
+        } catch (e) {
+          console.warn('[activateWirePayment] Conversion invoice failed:', e.message);
+        }
+
+        return res.json({ success: true, activated: true, data: updated });
+      }
 
       // Reuse the admin-generated wire invoice if one exists, so approval reveals THAT
       // invoice (clearing wirePending) instead of creating a second one with a new number.
-      const Invoice = require('../models/Invoice');
       const invPurpose = purpose === 'holder-upgrade' ? 'holder-upgrade' : 'renewal';
       const existingWireInv = await Invoice.findOne({
         registrationId: doc._id, purpose: invPurpose, adminGenerated: true,

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import ifoaLogo from '../assets/IFOA_USA_white.png'
+import { useAuth } from '../context/AuthContext'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -224,7 +225,7 @@ function HelpView({ onAsk }) {
 }
 
 // ── Chat view ─────────────────────────────────────────────────────────────────
-function ChatView({ messages, setMessages, loading, setLoading, initialQuestion }) {
+function ChatView({ messages, setMessages, loading, setLoading, initialQuestion, systemContext }) {
   const [input, setInput] = useState(initialQuestion || '')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
@@ -265,7 +266,7 @@ function ChatView({ messages, setMessages, loading, setLoading, initialQuestion 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: history.map(m => ({ role: m.role, content: m.content })),
-          systemContext: PLAN_INFO,
+          systemContext: systemContext || PLAN_INFO,
         }),
       })
 
@@ -426,15 +427,23 @@ export default function ChatBot() {
   const [articleContent, setArticleContent] = useState(null)
 
   const { pathname } = useLocation()
+  const { user } = useAuth()
   const [heroVisible, setHeroVisible] = useState(true)
   const isRegisterPage = pathname === '/register'
+
+  // Show on the individual/airline dashboard (bottom-left). Still hidden on auth +
+  // admin pages. accountType lets the bot tailor renewal/upgrade/credit answers.
+  const isDashboard = pathname.startsWith('/dashboard')
+  const accountType = user?.role === 'airline' ? 'airline' : user?.role === 'individual' ? 'individual' : null
+  const systemContext = PLAN_INFO + (accountType ? `\n\nLOGGED-IN ACCOUNT TYPE: ${accountType}.\n` + (accountType === 'individual'
+    ? 'This is an INDIVIDUAL account: one single plan, no certificate holders, no add-ons, no volume tiers. They can upgrade a 1-Year plan to Multiple Years or Unlimited (unused-time credit applies). Tailor answers accordingly.'
+    : 'This is an AIRLINE account: a base plan plus optional add-on (holder upgrade) plans, volume-tier per-certificate pricing, card or wire payment. They can upgrade the base or any add-on to Unlimited (unused-time credit applies). Tailor answers accordingly.') : '')
 
   const isAuthPage =
     pathname === '/login' ||
     pathname === '/signup' ||
     pathname === '/seed-admin-login' ||
     pathname === '/seed-admin-signup' ||
-    pathname.startsWith('/dashboard') ||
     pathname.startsWith('/admin')
 
   useEffect(() => {
@@ -479,7 +488,8 @@ export default function ChatBot() {
     setWidthIndex(i => (i + 1) % WIDTH_SIZES.length)
   }
 
-  if (isAuthPage || heroVisible) return null
+  // On the dashboard there is no hero section — show immediately. Elsewhere, gate on hero.
+  if (isAuthPage || (heroVisible && !isDashboard)) return null
 
   const chatHeight = typeof window !== 'undefined' && window.innerHeight < 640
     ? 'calc(100vh - 90px)'
@@ -517,7 +527,7 @@ export default function ChatBot() {
   ]
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999]">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[40]">
       {/* FAB */}
       <AnimatePresence mode="wait">
         {!open && (
@@ -640,6 +650,7 @@ export default function ChatBot() {
                   loading={loading}
                   setLoading={setLoading}
                   initialQuestion={initialQuestion}
+                  systemContext={systemContext}
                 />
               )}
               {view === 'article' && articleContent && (

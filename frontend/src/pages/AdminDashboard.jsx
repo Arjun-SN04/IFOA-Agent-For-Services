@@ -46,9 +46,96 @@ import {
   deleteHolderGroup,
   adminRenewAirline,
   adminRenewIndividual,
+  adminConversionQuote,
+  adminConvertToUnlimited,
+  getPlanCredits,
+  uncancelAirlinePlan,
+  uncancelIndividualPlan,
   createAdminAirlineForm,
   createAdminIndividualForm,
 } from '../services/api'
+
+// Admin portal: cancellation requests from the airline/individual. Admin decides —
+// Keep (un-cancel), Edit (use the Edit button), or Delete (permanent DB removal).
+function AdminCancellationBanner({ record, type, onRecordUpdated, onDeleteRegistration }) {
+  const [busy, setBusy] = React.useState('')
+  const isAirline = type === 'airline'
+  const items = []
+  if (record.planCancelled) items.push({ ref: 'base', label: isAirline ? 'Base Plan' : 'Plan', plan: record.subscriptionPlan })
+  if (isAirline) (record.holderGroups || []).forEach(g => { if (g.cancelled) items.push({ ref: String(g._id), label: 'Add-on Plan', plan: g.plan, groupId: String(g._id) }) })
+  if (!items.length) return null
+  const planLbl = (p) => p === 'Unlimited Plan' ? 'Unlimited' : p === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year'
+  const keep = async (it) => {
+    setBusy(it.ref + ':keep')
+    try {
+      const res = isAirline ? await uncancelAirlinePlan(record._id, it.ref) : await uncancelIndividualPlan(record._id)
+      onRecordUpdated?.(res.data?.data)
+    } catch (e) { window.alert(e?.response?.data?.message || 'Could not keep the plan.') } finally { setBusy('') }
+  }
+  const del = async (it) => {
+    if (!window.confirm('Permanently delete this plan from the database? This cannot be undone.')) return
+    setBusy(it.ref + ':del')
+    try {
+      if (it.groupId) { const res = await deleteHolderGroup(record._id, it.groupId); onRecordUpdated?.(res.data?.data) }
+      else { onDeleteRegistration?.() }   // base / individual = the whole registration
+    } catch (e) { window.alert(e?.response?.data?.message || 'Could not delete the plan.') } finally { setBusy('') }
+  }
+  return (
+    <div className="mb-3 rounded-xl border-2 border-red-200 bg-red-50/60 p-3">
+      <p className="text-[10px] font-black uppercase tracking-widest text-red-700 mb-2">Cancellation requested — your decision</p>
+      <div className="space-y-2">
+        {items.map(it => (
+          <div key={it.ref} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-red-100 px-3 py-2">
+            <span className="text-[12px] font-bold text-slate-800">{it.label} · {planLbl(it.plan)}</span>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => keep(it)} disabled={!!busy} className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">{busy === it.ref + ':keep' ? '…' : 'Keep'}</button>
+              <button onClick={() => del(it)} disabled={!!busy} className="rounded-lg bg-red-600 hover:bg-red-700 px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-50">{busy === it.ref + ':del' ? '…' : 'Delete'}</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[9px] text-slate-500">Keep = un-cancel (plan stays). Delete = remove permanently from the database. To modify instead, use Edit.</p>
+    </div>
+  )
+}
+
+// Admin portal: per-plan unused-time credit (value toward an upgrade). Fetched
+// from the shared credits endpoint; shows nothing when no plan has credit.
+function AdminPlanCredits({ record, type }) {
+  const [credits, setCredits] = React.useState(null)
+  // Re-fetch whenever the plan/term changes (not just the id) so the credit reflects
+  // the admin's saved subscription-date / expiration / price edits.
+  const groupSig = (record.holderGroups || []).map(g => `${g._id}:${g.expirationDate}:${g.pricePerCert}:${g.count}`).join('|')
+  React.useEffect(() => {
+    let alive = true
+    getPlanCredits(record._id, type === 'airline' ? 'Airlines' : 'Individual')
+      .then(r => { if (alive) setCredits(r.data?.credits || []) })
+      .catch(() => { if (alive) setCredits([]) })
+    return () => { alive = false }
+  }, [record._id, type, record.subscriptionDate, record.expirationDate, record.subscriptionPlan, record.price, record.pricePerCertificate, record.multiYearCount, record.committedCount, groupSig])
+  if (!credits || credits.length === 0) return null
+  const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const planLbl = (p) => p === 'Unlimited Plan' ? 'Unlimited' : p === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year'
+  const total = credits.reduce((s, c) => s + Number(c.credit || 0), 0)
+  const upgradeTargets = type === 'airline' ? 'Unlimited' : 'Multi-Year or Unlimited'
+  return (
+    <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Plan Credits · unused-time</p>
+        <p className="text-[11px] font-black text-emerald-700">{money(total)}</p>
+      </div>
+      <div className="space-y-1">
+        {credits.map(c => (
+          <div key={c.ref} className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-600">{c.label} · {planLbl(c.plan)}</span>
+            <span className={`font-bold ${c.credit > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{money(c.credit)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-[9px] text-slate-400">Applied automatically toward an upgrade to {upgradeTargets}.</p>
+    </div>
+  )
+}
 
 // Convert a raw backend/Mongoose error into a short, user-friendly message.
 function friendlySaveError(e) {
@@ -1382,6 +1469,7 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onDeletePl
                       <button onClick={() => onDeletePlan?.(record)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition">Delete Plan</button>
                     </div>
                   </div>
+                  <AdminCancellationBanner record={record} type="individual" onRecordUpdated={onRecordUpdated} onDeleteRegistration={() => onDeletePlan?.(record)} />
                   <div className="rounded-xl border-2 border-blue-300 bg-blue-50/60 px-4 py-2.5 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
@@ -1395,6 +1483,7 @@ function IndividualViewModal({ record, onClose, onEdit, onManagePlan, onDeletePl
                       </p>
                     </div>
                   </div>
+                  <AdminPlanCredits record={record} type="individual" />
                 </div>
               )
             })()}
@@ -1491,6 +1580,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
 
   const isRenewalRequest = record.wireRequestPurpose === 'renewal'
   const isHolderUpgradeRequest = record.wireRequestPurpose === 'holder-upgrade'
+  const isConversionRequest = record.wireRequestPurpose === 'convert-unlimited'
 
   // For renewal: pre-fill dates with the NEW plan's expected period, not the current plan's dates.
   // Activation date = current expiration (new plan starts when current ends).
@@ -1527,7 +1617,8 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
 
   const purposeLabel = isRenewalRequest ? 'Renewal'
     : isHolderUpgradeRequest ? 'Holder Upgrade'
-      : 'Initial'
+      : isConversionRequest ? `Convert to Unlimited${record.wireRequestDetails?.holderGroupId ? ' (Add-on)' : ''}`
+        : 'Initial'
 
   // Once admin generates THIS wire request's invoice, its invoiceStatus flips from
   // 'Wire Requested' to 'Generated' — only then swap the button to "Edit Invoice".
@@ -1562,7 +1653,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
       //   renewal + activationDate > now   → queue as nextRenewal (active plan)
       //   holder-upgrade                   → bump committedCount + pricePerCertificate + create invoice
       const markedPaid = form.paymentStatus === 'paid'
-      const isPurposeActive = form.wireRequestPurpose === 'renewal' || form.wireRequestPurpose === 'holder-upgrade'
+      const isPurposeActive = form.wireRequestPurpose === 'renewal' || form.wireRequestPurpose === 'holder-upgrade' || form.wireRequestPurpose === 'convert-unlimited'
       if (markedPaid && isPurposeActive) {
         const activateRes = await activateWirePayment(record._id)
         setEditing(false)
@@ -1697,6 +1788,22 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
                     ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: null }),
                     _wireInvoicePurpose: 'holder-upgrade',
                   }
+                } else if (record.wireRequestPurpose === 'convert-unlimited') {
+                  // Seed the Unlimited + prorated-credit lines from what the airline committed.
+                  const wd = record.wireRequestDetails || {}
+                  const charge = requestedAmount != null ? requestedAmount : Number(wd.amount || 0)
+                  const uTotal = Number(wd.unlimitedTotal) || charge
+                  const credit = Math.max(0, Math.round((uTotal - charge) * 100) / 100)
+                  const lineItems = [
+                    { description: 'Agent For Service - Unlimited', quantity: Number(wd.baseCount) || 1, unitPrice: Number(wd.unlimitedPpc) || charge, totalPrice: uTotal },
+                    ...(credit > 0 ? [{ description: `Credit — unused ${wd.oldPlanLabel || 'previous plan'} subscription`, quantity: 1, unitPrice: -credit, totalPrice: -credit }] : []),
+                  ]
+                  invoiceRecord = {
+                    ...record,
+                    subscriptionPlan: 'Unlimited Plan',
+                    _wireInvoicePurpose: 'convert-unlimited',
+                    ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: { lineItems } }),
+                  }
                 }
                 if (wireInvoiceGenerated && onEditInvoice) onEditInvoice(invoiceRecord)
                 else onGenerateInvoice(invoiceRecord)
@@ -1822,6 +1929,9 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
           {record.wireRequestPurpose === 'holder-upgrade' && record.wireRequestAdditionalCount && (
             <ViewField label="Additional Holders" value={`+${record.wireRequestAdditionalCount}`} />
           )}
+          {isConversionRequest && (
+            <ViewField label="Conversion" value={`${record.wireRequestDetails?.holderGroupId ? 'Add-on plan' : 'Base plan'} → Unlimited`} />
+          )}
           {/* Full request snapshot — exactly what the airline asked for at checkout. */}
           {record.wireRequestDetails?.multiYearCount && (
             <ViewField label="Years" value={`${record.wireRequestDetails.multiYearCount} years`} />
@@ -1830,7 +1940,7 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
             <ViewField label="Requested Holder Count" value={String(record.wireRequestDetails.exactCount)} />
           )}
           {record.wireRequestDetails?.holderGroupId && (
-            <ViewField label="Scope" value="Holder group renewal" />
+            <ViewField label="Scope" value={isConversionRequest ? 'Holder group conversion' : 'Holder group renewal'} />
           )}
           {record.wireRequestDetails?.mergeTarget && (
             <ViewField label="Merge Into" value={record.wireRequestDetails.mergeTarget === 'base' ? 'Base plan' : 'Existing plan'} />
@@ -2311,7 +2421,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
 }
 
 // ─── Airline View Modal ────────────────────────────────────────────────────────
-function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated, onGenerateInvoice, onEditInvoice }) {
+function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated, onGenerateInvoice, onEditInvoice, onDeleteRegistration }) {
   const [showInvoices, setShowInvoices] = useState(false)
   const [showHolderCount, setShowHolderCount] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState(null)
@@ -2468,6 +2578,8 @@ function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdat
                     <SectionHead label="Subscription Plans" />
                     <button onClick={() => setShowHolderCount(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-blue-700 hover:border-blue-700 transition-all duration-150 shadow-sm shadow-blue-500/10">Manage Plans</button>
                   </div>
+                  <AdminCancellationBanner record={record} type="airline" onRecordUpdated={onRecordUpdated} onDeleteRegistration={onDeleteRegistration} />
+                  <AdminPlanCredits record={record} type="airline" />
                   <div className="space-y-2">
                     {/* BASE PLAN — main subscription driving holder capacity */}
                     {(() => {
@@ -3327,15 +3439,31 @@ function AdminRenewModal({ record, model, group = null, onClose, onSaved }) {
 }
 
 // ─── Individual Edit Modal ─────────────────────────────────────────────────────
-function IndividualEditModal({ record, onClose, onSave, saving }) {
+function IndividualEditModal({ record, onClose, onSave, onRequestConvert, saving }) {
   const [form, setForm] = useState({ ...record })
   const [err, setErr] = useState('')
   const [phoneCountry, setPhoneCountry] = useState(() => ADMIN_COUNTRY_TO_ISO2[record.country || ''] || 'us')
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
+  // Upgrade detection: plan ranked 1 Year < Multi-Year < Unlimited. Switching UP (or
+  // adding years on Multi-Year) is a billable upgrade → route through the credit flow.
+  const planRank = (p) => p === 'Unlimited Plan' ? 3 : p === 'Multiple Years Subscription Plan' ? 2 : 1
+  const targetYears = form.subscriptionPlan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(form.multiYearCount) || 2) : null
+  const isUpgrade =
+    record.subscriptionPlan !== 'Unlimited Plan' && (
+      planRank(form.subscriptionPlan) > planRank(record.subscriptionPlan) ||
+      (form.subscriptionPlan === 'Multiple Years Subscription Plan' &&
+       record.subscriptionPlan === 'Multiple Years Subscription Plan' &&
+       targetYears > (Number(record.multiYearCount) || 2))
+    )
   const handleSave = async () => {
     try {
       setErr('')
+      if (isUpgrade && onRequestConvert) {
+        onRequestConvert(record._id, { targetPlan: form.subscriptionPlan, targetYears })
+        return
+      }
       const saved = await onSave(record._id, form)
       onClose(saved)
     } catch (e) {
@@ -3376,6 +3504,9 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Status"><select className={selectCls} value={form.status || 'Pending'} onChange={e => set('status', e.target.value)}><option>Pending</option><option>Active</option><option>Inactive</option></select></Field>
                 <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                {form.subscriptionPlan === 'Multiple Years Subscription Plan' && (
+                  <Field label="Years (Multi-Year)"><input className={inputCls} type="number" min="2" value={form.multiYearCount ?? ''} onChange={e => set('multiYearCount', parseInt(e.target.value, 10) || '')} /></Field>
+                )}
                 <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0, 10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
                 <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0, 10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
                 <Field label="Price (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={form.price ?? ''} onChange={e => set('price', parseFloat(e.target.value))} /></Field>
@@ -3465,10 +3596,13 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
             </div>
           </div>
           <div className="flex-shrink-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            {isUpgrade && (
+              <p className="mr-auto self-center text-[11px] font-semibold text-blue-600">Plan upgrade: you'll confirm the amount &amp; edit the invoice next.</p>
+            )}
             <button onClick={() => onClose()} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 bg-blue-600 hover:bg-blue-700">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? 'Saving…' : isUpgrade ? 'Upgrade Plan →' : 'Save Changes'}
             </button>
           </div>
         </motion.div>
@@ -3478,7 +3612,7 @@ function IndividualEditModal({ record, onClose, onSave, saving }) {
 }
 
 // ─── Airline Edit Modal ────────────────────────────────────────────────────────
-function AirlineEditModal({ record, onClose, onSave, saving }) {
+function AirlineEditModal({ record, onClose, onSave, onRequestConvert, saving }) {
   // The BASE PLAN section edits the base plan's OWN holder count only. The grand total
   // (committedCount = base + every add-on group's slots) is derived from it + the groups,
   // shown separately, and re-synced on save so the client always sees the correct overall.
@@ -3548,8 +3682,30 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
       }),
     }))
   const showInvoiceWarning = form.isPaid === true && !form.invoiceNumber
+  // Admin switched the BASE plan (or an add-on group) to Unlimited → this is a billable
+  // conversion, not a raw correction. Intercept Save and route through the SAME
+  // conversion flow (net-amount confirm → editable invoice → apply + generate invoice).
+  const convertingBaseToUnlimited =
+    record.subscriptionPlan !== 'Unlimited Plan' && form.subscriptionPlan === 'Unlimited Plan'
+  // Detect an add-on group whose plan was just flipped non-Unlimited → Unlimited.
+  const origGroups = record.holderGroups || []
+  const pendingGroupConvert = (form.holderGroups || []).find(g => {
+    if (g.plan !== 'Unlimited Plan' || !g._id) return false
+    const orig = origGroups.find(o => String(o._id) === String(g._id))
+    return orig && orig.plan !== 'Unlimited Plan'
+  }) || null
+  const convertingToUnlimited = convertingBaseToUnlimited || !!pendingGroupConvert
   const handleSave = async () => {
     setErr('')
+    // Base conversion takes priority; otherwise the first group flipped to Unlimited.
+    if (onRequestConvert && convertingBaseToUnlimited) {
+      onRequestConvert(record._id, { holderGroupId: null })
+      return
+    }
+    if (onRequestConvert && pendingGroupConvert) {
+      onRequestConvert(record._id, { holderGroupId: String(pendingGroupConvert._id) })
+      return
+    }
     // Drop fully-blank holder rows; normalise empty optional fields so they cast cleanly.
     const rawHolders = form.certificateHolders || []
     const nonEmpty = rawHolders.filter(h =>
@@ -3717,7 +3873,7 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
             </div>
             {groupOpts.length > 0 && (
               <div><SectionHead label={`Holder Upgrade Plans (${groupOpts.length})`} />
-                <p className="text-[10px] text-slate-500 mb-3 -mt-1">Each upgrade batch is its own plan. Edits here are raw corrections — they do not generate invoices.</p>
+                <p className="text-[10px] text-slate-500 mb-3 -mt-1">Each upgrade batch is its own plan. Edits here are raw corrections — except switching a plan to <span className="font-bold">Unlimited</span>, which bills the conversion and generates an invoice on Save.</p>
                 <div className="space-y-4">
                   {groupOpts.map((g, gi) => (
                     <div key={String(g._id || gi)} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -3868,10 +4024,13 @@ function AirlineEditModal({ record, onClose, onSave, saving }) {
             )}
           </div>
           <div className="flex-shrink-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            {convertingToUnlimited && (
+              <p className="mr-auto self-center text-[11px] font-semibold text-blue-600">{pendingGroupConvert && !convertingBaseToUnlimited ? 'Add-on plan' : 'Plan'} → Unlimited: you'll confirm the amount &amp; edit the invoice next.</p>
+            )}
             <button onClick={() => onClose()} disabled={saving} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 bg-blue-600 hover:bg-blue-700">
               {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-20" /><path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2Z" /></svg>}
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? 'Saving…' : convertingToUnlimited ? 'Convert to Unlimited →' : 'Save Changes'}
             </button>
           </div>
         </motion.div>
@@ -4336,14 +4495,14 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
         <>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-          <div className="fixed inset-0 z-[111] flex items-start justify-center p-4 pt-20 overflow-y-auto">
+          <div className="fixed inset-0 z-[111] flex items-start justify-center p-4 pt-20">
             <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.18 }}
-              className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+              className="w-full max-w-2xl max-h-[calc(100vh-6rem)] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
               onClick={e => e.stopPropagation()}>
 
               {/* Header */}
-              <div className="border-b border-slate-100 bg-white px-6 py-5 flex items-center justify-between">
+              <div className="flex-shrink-0 border-b border-slate-100 bg-white px-6 py-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#0000ff' }}>
                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -4379,7 +4538,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
               {/* ── Step 1: Payment method selection ── */}
               {step === 'select' && (
-                <div className="px-6 py-8">
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-8">
                   <p className="text-sm font-bold text-slate-700 mb-6">Select the payment method to generate the invoice accordingly:</p>
                   <div className="grid sm:grid-cols-2 gap-4 mb-8">
                     {[
@@ -4416,7 +4575,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
               {/* ── Step 2: Edit Invoice ── */}
               {step === 'edit' && (
-                <div className="px-6 py-5 space-y-5 max-h-[72vh] overflow-y-auto">
+                <div className="flex-1 min-h-0 px-6 py-5 space-y-5 overflow-y-auto">
                   {saveError && (
                     <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                       <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -4549,7 +4708,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
 
               {/* ── Footer actions ── */}
               {step === 'edit' && (
-                <div className="border-t border-slate-100 bg-white px-6 py-4 flex justify-between items-center">
+                <div className="flex-shrink-0 border-t border-slate-100 bg-white px-6 py-4 flex justify-between items-center">
                   <button onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
                     Cancel
                   </button>
@@ -5573,9 +5732,76 @@ export default function AdminDashboard() {
     return new Set(ids)
   })
 
+  // Admin requested a base/group → Unlimited conversion from the Edit modal.
+  // Price it, confirm the net amount, then open the invoice editor (seeded with the
+  // Unlimited + credit line items) in conversion mode. The actual apply happens when
+  // the admin saves the invoice (see the convert branch in handleSaveInvoice).
+  const handleRequestConvert = async (id, { holderGroupId = null, targetPlan = 'Unlimited Plan', targetYears = null, type = 'airline' } = {}) => {
+    const model = type === 'airline' ? 'Airlines' : 'Individual'
+    const planShortLbl = (p, y) => p === 'Unlimited Plan' ? 'Unlimited'
+      : p === 'Multiple Years Subscription Plan' ? `${y || 2} Years` : '1 Year'
+    try {
+      const qres = await adminConversionQuote(id, model, holderGroupId, targetPlan, targetYears)
+      const q = qres.data?.quote
+      if (!q) { showToast('Could not price the upgrade.', 'error'); return }
+      const tLabel = planShortLbl(q.targetPlan || targetPlan, q.targetYears || targetYears)
+      const ok = window.confirm(
+        `Upgrade to ${tLabel}\n\n` +
+        `${tLabel}: $${Number(q.unlimitedTotal).toFixed(2)}\n` +
+        `Credit (unused ${q.oldPlanLabel}): -$${Number(q.credit).toFixed(2)}\n` +
+        `Net to bill: $${Number(q.charge).toFixed(2)}\n\n` +
+        `Continue to the invoice editor?`
+      )
+      if (!ok) return
+      const rec = (type === 'airline' ? airlines : individuals).find(a => a._id === id) || editRec || { _id: id }
+      let invoiceNumber = ''
+      try { const g = await generateInvoiceNumber(); invoiceNumber = g.data?.invoiceNumber || '' } catch { /* admin can fill */ }
+      const credit = Number(q.credit || 0)
+      const lineItems = [
+        { description: `Agent For Service - ${tLabel}`, quantity: q.baseCount, unitPrice: q.unlimitedPpc, totalPrice: q.unlimitedTotal },
+        ...(credit > 0 ? [{ description: `Credit — unused ${q.oldPlanLabel} subscription`, quantity: 1, unitPrice: -credit, totalPrice: -credit }] : []),
+      ]
+      const seeded = {
+        ...rec,
+        subscriptionPlan: q.targetPlan || targetPlan,
+        invoiceNumber,
+        invoiceDraft: { ...(rec.invoiceDraft || {}), invoiceNumber, lineItems },
+      }
+      setEditRec(null)
+      setEditType(null)
+      setInvoiceModal({ record: seeded, type, initialStep: 'edit', autoPreview: false, previewOnly: false, convert: { holderGroupId, charge: q.charge, targetPlan: q.targetPlan || targetPlan, targetYears: q.targetYears || targetYears } })
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Could not start the upgrade.', 'error')
+    }
+  }
+
   const handleSaveInvoice = async (id, type, payload) => {
     try {
       const model = type === 'airline' ? 'Airlines' : 'Individual'
+
+      // ── Conversion → Unlimited: apply the plan change + generate the invoice in
+      // one admin-authenticated call (idempotent on the invoice number). ──────────
+      if (invoiceModal?.convert) {
+        const cv = invoiceModal.convert
+        const res = await adminConvertToUnlimited(id, model, {
+          holderGroupId:        cv.holderGroupId || null,
+          targetPlan:           cv.targetPlan || 'Unlimited Plan',
+          targetMultiYearCount: cv.targetYears || undefined,
+          invoiceNumber:        payload.invoiceNumber,
+          invoiceDraft:         payload.invoiceDraft,
+        })
+        const saved = res.data?.data
+        if (saved) {
+          if (type === 'airline') setAirlines(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+          else setIndividuals(p => p.map(x => x._id === id ? { ...x, ...saved } : x))
+        }
+        // Clear the convert flag so a second save edits the draft normally (and the
+        // backend would anyway reject a re-convert of an already-upgraded plan).
+        setInvoiceModal(prev => prev ? { ...prev, convert: null } : prev)
+        showToast('Plan upgraded — invoice generated')
+        return
+      }
+
       const wirePurpose = payload.wireInvoicePurpose  // 'renewal' | 'holder-upgrade' | null
 
       if (wirePurpose) {
@@ -5893,7 +6119,7 @@ export default function AdminDashboard() {
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
-            className={`fixed top-6 right-6 z-[100] flex items-start gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white max-w-sm w-[calc(100vw-3rem)] sm:w-auto ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}
+            className={`fixed top-6 right-6 z-[200] flex items-start gap-3 rounded-xl px-5 py-3.5 shadow-2xl text-sm font-semibold text-white max-w-sm w-[calc(100vw-3rem)] sm:w-auto ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}
           >
             {toast.type === 'error' && (
               <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
@@ -5937,6 +6163,7 @@ export default function AdminDashboard() {
           }}
           onGenerateInvoice={r => openInvoiceGenerate(r, 'airline')}
           onEditInvoice={r => openInvoiceEdit(r, 'airline')}
+          onDeleteRegistration={() => { closeView(); handleDelete(viewRec._id, 'airline') }}
         />
       )}
       {basePlanRec && (
@@ -5964,6 +6191,7 @@ export default function AdminDashboard() {
             setViewType('individual')
           }}
           onSave={(id, data) => handleSave(id, data, 'individual')}
+          onRequestConvert={(id, opts) => handleRequestConvert(id, { ...opts, type: 'individual' })}
         />
       )}
       {editRec && editType === 'airline' && (
@@ -5980,6 +6208,7 @@ export default function AdminDashboard() {
             setViewType('airline')
           }}
           onSave={(id, data) => handleSave(id, data, 'airline')}
+          onRequestConvert={(id, opts) => handleRequestConvert(id, { ...opts, type: 'airline' })}
         />
       )}
 

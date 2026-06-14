@@ -65,6 +65,46 @@ const FAQS = [
     q: 'What is the difference between “queued” and “immediate” renewal?',
     a: 'If the plan is still active, renewing QUEUES the new term — it activates automatically the day the current term expires, so you never lose coverage and never double-pay. If the plan is already expired, the renewal activates immediately from today.',
   },
+  {
+    for: 'both',
+    q: 'Can I upgrade an existing plan to Unlimited?',
+    a: 'Yes. Any active, non-Unlimited plan can be converted to Unlimited in place — no need to buy a separate plan. Use the “Convert to Unlimited” button on the plan (base plan or an add-on plan). The plan switches to Unlimited immediately, never expires again, and keeps all its holders and slots. Your other plans are untouched.',
+  },
+  {
+    for: 'both',
+    q: 'How is the price for upgrading to Unlimited calculated?',
+    a: 'You pay the Unlimited tier price for that plan’s holders, MINUS a credit for the time you have not yet used on the current term. Airlines: Unlimited per-cert rate × holders (at your volume tier). Individuals: the flat $299 Unlimited price. The unused-time credit is then subtracted, so you only pay the difference.',
+  },
+  {
+    for: 'both',
+    q: 'How does the unused-time credit work?',
+    a: 'The credit is the part of your current term you have not consumed yet, prorated by days. Credit = what you paid for the current term × (days remaining ÷ full term length). Example: a 1-Year plan billed $240 with about half the year left gives roughly a $120 credit toward the Unlimited price. A plan near expiry credits little; one just started credits almost the full amount.',
+  },
+  {
+    for: 'both',
+    q: 'What does the upgrade invoice look like?',
+    a: 'It shows two lines: the full Unlimited price, then a negative “Credit — unused …” line, netting to exactly what you are charged. Your previous invoice is preserved — the upgrade adds a NEW invoice to your history and never overwrites the old one.',
+  },
+  {
+    for: 'airline',
+    q: 'Can I pay for the Unlimited upgrade by wire transfer?',
+    a: 'Yes. When you convert, choose Card (activates instantly) or Wire Transfer (requests an invoice for admin review). With wire, the upgrade shows as a “Convert to Unlimited — Pending” card until the admin approves it; nothing changes on your plan until approval.',
+  },
+  {
+    for: 'both',
+    q: 'What happens to my plan if a payment fails?',
+    a: 'Nothing changes. A failed or cancelled payment never activates a plan, never converts it, and never generates an invoice — your subscription stays exactly as it was. Only a confirmed, successful payment updates your plan and creates an invoice.',
+  },
+  {
+    for: 'both',
+    q: 'Can I upgrade a plan that has already expired?',
+    a: 'No. Once a plan expires you must renew it first, then upgrade. The Upgrade / Convert button is hidden on expired plans — use Renew to bring the plan back, after which the upgrade option returns.',
+  },
+  {
+    for: 'individual',
+    q: 'What can I upgrade my individual plan to?',
+    a: 'A 1-Year plan can be upgraded to Multiple Years or Unlimited; a Multiple Years plan can be upgraded to Unlimited (or more years). You pick the target and, for Multiple Years, the number of years. The unused-time credit from your current plan is applied to the price.',
+  },
 ]
 
 function YourAccountBadge() {
@@ -206,7 +246,7 @@ function HolderFlowPlayground() {
       {/* Base + Upgrade — each with its own count AND plan type */}
       <div className="flex flex-wrap gap-3">
         <UnitControl title="Base plan" color="bg-blue-300" count={base} setCount={setBase} min={1} plan={basePlan} setPlan={setBasePlan} />
-        <UnitControl title="Upgrade plan (0 = none)" color="bg-emerald-300" count={upgrade} setCount={setUpgrade} min={0} plan={upPlan} setPlan={setUpPlan} />
+        <UnitControl title="Expand holders (0 = none)" color="bg-emerald-300" count={upgrade} setCount={setUpgrade} min={0} plan={upPlan} setPlan={setUpPlan} />
       </div>
 
       {/* Presets */}
@@ -334,6 +374,21 @@ export default function FaqPage() {
               <FlowStep n="4" title="Queued or immediate" desc="If still active, the renewal QUEUES and activates automatically at expiry (no gap, no double charge). If already expired, it activates immediately. Unlimited never expires — nothing to renew." />
             </div>
           </Section>
+
+          <Section title="Upgrading a plan (with credit)">
+            <p>On an <strong>active</strong> 1-Year or Multiple-Years plan you can upgrade it at any time — no need to wait for renewal or buy a separate plan. <strong>Individuals</strong> can upgrade to Multiple Years or Unlimited; <strong>airlines</strong> upgrade to Unlimited (the base plan or any add-on plan).</p>
+            <div className="mt-1">
+              <FlowStep n="1" title="Click “Convert to Unlimited” / “Upgrade”" desc="The button sits on the plan you want to upgrade. Individuals pick the target (Multi-Year or Unlimited). A summary shows the new price, your unused-time credit, and the net amount." />
+              <FlowStep n="2" title="You only pay the difference" desc="Charge = new-plan price − credit for the time left on your current term. A plan with lots of time left earns a bigger credit; one near expiry earns little." />
+              <FlowStep n="3" title="Pay by card or wire" desc="Card activates instantly. Airlines may also request a wire invoice — the upgrade stays “Pending” until an admin approves it." />
+              <FlowStep n="4" title="Plan upgrades in place" desc="It keeps every holder and slot. A new invoice is added to your history — your old invoice is preserved, never overwritten." />
+            </div>
+            <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-[13px] text-slate-600">
+              <p className="font-bold text-slate-800 mb-1">Credit example</p>
+              <p>A 1-Year plan billed <strong>$240</strong> with about half the year left → credit ≈ <strong>$120</strong>. If Unlimited for those holders is <strong>$1,060</strong>, you pay <strong>$1,060 − $120 = $940</strong>. The invoice shows both lines so the math is transparent.</p>
+            </div>
+            <p className="mt-3 text-[13px] text-slate-500"><strong className="text-slate-700">Expired plans can’t be upgraded</strong> — the upgrade button is hidden once a plan lapses; renew it first, then upgrade. A failed or cancelled payment changes nothing — the plan upgrades and the invoice is created only after a successful payment.</p>
+          </Section>
         </>
       )}
 
@@ -383,6 +438,21 @@ export default function FaqPage() {
               <FlowStep n="3" title="Adjust holders (optional)" desc="Raise or lower the holder count. If you lower it, pick which holders to keep — the rest are dropped from the renewed term." />
               <FlowStep n="4" title="Queued or immediate" desc="If the plan is still active, the renewal QUEUES and activates automatically at expiry (no gap, no double charge). If already expired, it activates immediately from today." />
             </div>
+          </Section>
+
+          <Section title="Upgrading a plan to Unlimited (with credit)">
+            <p>Any <strong>active</strong> plan — your <strong>base</strong> or any <strong>add-on</strong> — can be converted to <strong>Unlimited</strong> in place, at any time. Click <strong>“Convert to Unlimited”</strong> (or “To Unlimited” on an add-on row). Expired plans must be renewed first — the button is hidden once a plan lapses.</p>
+            <div className="mt-1">
+              <FlowStep n="1" title="Tier-priced for your holders" desc="You pay the Unlimited per-cert rate × that plan’s holders, at your volume tier — the same tiers used everywhere else." />
+              <FlowStep n="2" title="Minus an unused-time credit" desc="The time left on the plan’s current term is credited back, prorated by days. Net charge = Unlimited price − credit." />
+              <FlowStep n="3" title="Card or wire" desc="Card activates instantly; wire requests an invoice the admin approves. The pending request shows as “Convert to Unlimited — Pending” until approved." />
+              <FlowStep n="4" title="In place, history kept" desc="The plan becomes Unlimited (no expiry) and keeps its holders/slots. The upgrade adds a new invoice — your earlier invoice is preserved, never overwritten." />
+            </div>
+            <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-[13px] text-slate-600">
+              <p className="font-bold text-slate-800 mb-1">Example (4 holders, 1-Year @ $60)</p>
+              <p>Unlimited tier = $265/cert × 4 = <strong>$1,060</strong>. Half the year left on a $240 term → credit ≈ <strong>$120</strong>. You pay <strong>$940</strong>. The invoice itemises the Unlimited line and the credit line.</p>
+            </div>
+            <p className="mt-3 text-[13px] text-slate-500">A failed or cancelled payment converts nothing and generates no invoice — your plans stay as they were.</p>
           </Section>
         </>
       )}

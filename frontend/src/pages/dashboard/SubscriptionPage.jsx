@@ -1305,7 +1305,7 @@ function PlanCard({
 }
 
 // One compact, nested row for a holder-upgrade plan attached to the base plan.
-function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight = false, onCancelPlan }) {
+function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, onConvertGroupUnlimited, highlight = false, onCancelPlan }) {
   const isUnlimited = g.plan === 'Unlimited Plan'
   const filled = (s.certificateHolders || []).filter(h => String(h.holderGroupId || '') === String(g._id)).length
   const gDays = g.expirationDate ? Math.ceil((new Date(g.expirationDate) - new Date()) / 86400000) : null
@@ -1331,6 +1331,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight 
             <span className="text-[13px] font-bold text-slate-900">
               {isUnlimited ? 'Lifetime' : 'Upgrade'}
             </span>
+            {g.cancelled && <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 border border-red-200 text-[9px] font-bold text-red-700 uppercase tracking-wide">Cancellation requested</span>}
             {gQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
             {!gQueued && exp && <span className={`text-[9px] font-bold uppercase tracking-wide ${exp.kind === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>{exp.label}</span>}
           </div>
@@ -1358,7 +1359,17 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight 
               Renew
             </button>
           )}
-          {onCancelPlan && (
+          {/* Convert this add-on group → Unlimited (in place). Active, non-Unlimited, not expired, not queued. */}
+          {onConvertGroupUnlimited && active && !isUnlimited && !gQueued && !gExpired && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onConvertGroupUnlimited(g) }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" /></svg>
+              To Unlimited
+            </button>
+          )}
+          {onCancelPlan && !g.cancelled && (
             <button
               onClick={(e) => { e.stopPropagation(); onCancelPlan(String(g._id)) }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition"
@@ -1380,7 +1391,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, highlight 
 
 // The base/main plan rendered as a uniform card — same visual language as
 // AttachedPlanRow so every plan in the expanded view reads consistently.
-function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highlight = false, onCancelPlan, wirePending = false }) {
+function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, onConvertUnlimited, highlight = false, onCancelPlan, wirePending = false }) {
   const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
   const basePpc = Number(s.pricePerCertificate || s.pricePerCert || 0)
   const baseUnlimited = s.subscriptionPlan === 'Unlimited Plan'
@@ -1401,6 +1412,9 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-bold text-slate-900">Base Plan</span>
+            {s.planCancelled && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 border border-red-200 text-[9px] font-bold text-red-700 uppercase tracking-wide">Cancellation requested</span>
+            )}
             {wirePending && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 border border-blue-200 text-[9px] font-bold text-blue-700 uppercase tracking-wide">
                 <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse inline-block" />
@@ -1435,6 +1449,18 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
               Renew
             </button>
           )}
+          {/* Convert base plan → Unlimited (in place). Available while the base is
+              active, not already Unlimited, not expired, not mid-queued-renewal.
+              Expired plans must be renewed first (upgrade hidden). */}
+          {onConvertUnlimited && active && !baseUnlimited && !baseQueued && !baseExpired && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onConvertUnlimited() }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" /></svg>
+              Convert to Unlimited
+            </button>
+          )}
           {onAddHolders && (
             <button
               onClick={(e) => { e.stopPropagation(); onAddHolders() }}
@@ -1443,7 +1469,7 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, highligh
               Manage
             </button>
           )}
-          {onCancelPlan && (
+          {onCancelPlan && !s.planCancelled && (
             <button
               onClick={(e) => { e.stopPropagation(); onCancelPlan('base') }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 transition"
@@ -1470,19 +1496,22 @@ function WirePendingRow({ s }) {
   const wd = s.wireRequestDetails || {}
   const purpose = s.wireRequestPurpose || 'renewal'
   const isHolderUpgrade = purpose === 'holder-upgrade'
+  const isConversion = purpose === 'convert-unlimited'
+  const isGroupConversion = isConversion && !!wd.holderGroupId
   const plan = wd.plan || s.wireRequestRenewalPlan || s.subscriptionPlan || '—'
   const addCount = wd.additionalHolderCount ?? s.wireRequestAdditionalCount ?? null
   const amt = wd.amount ? Number(wd.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null
   const submittedAt = s.wirePaymentRequestedAt ? new Date(s.wirePaymentRequestedAt) : null
   const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
   const invNum = String(wd.invoiceNumber || s.wireRequestInvoiceNumber || '').replace(/^invoice\s+/i, '')
+  const title = isHolderUpgrade ? 'Holder Upgrade' : isConversion ? 'Convert to Unlimited' : 'Renewal'
   return (
     <div className="rounded-xl border border-blue-200 bg-blue-50/40 px-3.5 py-3 transition">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-bold text-slate-900">
-              {isHolderUpgrade ? 'Holder Upgrade' : 'Renewal'}
+              {title}
             </span>
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 border border-blue-200 text-[9px] font-bold text-blue-700 uppercase tracking-wide">
               <span className="w-1 h-1 rounded-full bg-blue-500 animate-pulse inline-block" />
@@ -1492,7 +1521,9 @@ function WirePendingRow({ s }) {
           <p className="mt-1 text-[11px] text-slate-500">
             {isHolderUpgrade
               ? <>+<span className="font-semibold text-slate-700">{addCount != null ? addCount : '?'} holder{addCount !== 1 ? 's' : ''}</span> requested</>
-              : <>Plan <span className="font-semibold text-slate-700">{plan}</span></>
+              : isConversion
+                ? <><span className="font-semibold text-slate-700">{isGroupConversion ? 'Add-on plan' : 'Base plan'}</span> → <span className="font-semibold text-blue-700">Unlimited</span></>
+                : <>Plan <span className="font-semibold text-slate-700">{plan}</span></>
             }
             {amt && <><span className="text-slate-300"> · </span><span className="font-semibold text-slate-700">{amt}</span></>}
           </p>
@@ -1510,7 +1541,7 @@ function WirePendingRow({ s }) {
 // Consolidated "current active subscription" — preview header summarises the active
 // plan (and how many plans total); expanding reveals every plan (base + attached)
 // as uniform detail cards.
-function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup, onCancelPlan }) {
+function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
   const [expanded, setExpanded] = useState(false)
   const [highlightRenew, setHighlightRenew] = useState(false)
 
@@ -1519,7 +1550,8 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
   // (show its pending status INSIDE the base plan). renewal/holder-upgrade requests are
   // for a NEW additive plan → shown as their own pending row.
   const wirePurpose = s.wirePaymentRequested ? (s.wireRequestPurpose || 'initial') : null
-  const wireIsAdditive = wirePurpose === 'renewal' || wirePurpose === 'holder-upgrade'
+  // Renewal / holder-upgrade / conversion render as their own pending plan card.
+  const wireIsAdditive = wirePurpose === 'renewal' || wirePurpose === 'holder-upgrade' || wirePurpose === 'convert-unlimited'
   const baseWirePending = wirePurpose === 'initial'
   const baseCommitted = Math.max(0, Number(s.committedCount || s.holderCountValue || 0) - allGroupSlots(groups))
   const baseFilled = (s.certificateHolders || []).filter(h => !h.holderGroupId).length
@@ -1588,7 +1620,17 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
               {planCount} plan{planCount !== 1 ? 's' : ''}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onShowCredits && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onShowCredits() }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-inset ring-white/25 px-2.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition"
+                title="Unused-time credit on each plan"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Credits
+              </button>
+            )}
             {hasRenewable && (
               <button
                 onClick={(e) => { e.stopPropagation(); triggerRenew() }}
@@ -1662,9 +1704,9 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">All plans ({planCount + (wireIsAdditive ? 1 : 0)})</span>
               </div>
               <div className="px-3 sm:px-4 pb-3.5 space-y-2">
-                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} wirePending={baseWirePending} />
+                <BasePlanRow s={s} active={active} baseCommitted={baseCommitted} onAddHolders={onAddHolders} onRenew={onRenew} onConvertUnlimited={onConvertUnlimited} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} wirePending={baseWirePending} />
                 {groups.map((g, gi) => (
-                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} />
+                  <AttachedPlanRow key={String(g._id || gi)} s={s} g={g} active={active} onManageGroup={(a, b) => { onManageGroup(a, b) }} onRenewGroup={onRenewGroup} onConvertGroupUnlimited={onConvertGroupUnlimited} highlight={highlightRenew} onCancelPlan={planCount > 1 ? onCancelPlan : null} />
                 ))}
                 {wireIsAdditive && <WirePendingRow s={s} />}
               </div>
@@ -2234,7 +2276,70 @@ function UpgradeHoldersModal({ sub, token, onClose, onSaved }) {
 /*  CancelPlanModal — airline permanently deletes one of its plans               */
 /*  Flow: (optional) move holders to an active plan → confirm → confirm again    */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function CancelPlanModal({ sub, planRef, token, onClose, onDone }) {
+function CancelPlanModal({ sub, planRef, role, token, onClose, onDone }) {
+  const isAirline = role === 'airline'
+  const isBase = planRef === 'base'
+  const grp = isBase ? null : (sub.holderGroups || []).find(g => String(g._id) === String(planRef))
+  const planLabel = isBase
+    ? `Base Plan — ${planShortLabel(sub.subscriptionPlan, sub.multiYearCount)}`
+    : `${grp?.plan === 'Unlimited Plan' ? 'Lifetime' : 'Upgrade'} — ${planShortLabel(grp?.plan, grp?.multiYearCount)}`
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = '' }
+  }, [])
+  const doCancel = async () => {
+    setBusy(true); setErr('')
+    try {
+      const url = isAirline ? `/airlines/${sub._id}/cancel-plan` : `/individuals/${sub._id}/cancel-plan`
+      const res = await API.post(url, { planRef }, { headers: { Authorization: `Bearer ${token}` } })
+      onDone(res.data?.data)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Could not request cancellation.')
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
+      <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4">
+        <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+          className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-red-50 text-red-600">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Cancel Plan</p>
+              <p className="text-sm font-extrabold text-slate-900 truncate">{planLabel}</p>
+            </div>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            {err && <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">{err}</div>}
+            <p className="text-xs text-slate-600">
+              This sends a <strong className="text-slate-900">cancellation request</strong> to the admin. Your plan stays
+              active and nothing is deleted until the admin reviews it — they may keep, edit, or remove it.
+            </p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[11px] text-slate-600">
+              Requesting cancellation of: <strong className="text-slate-800">{planLabel}</strong>
+            </div>
+          </div>
+          <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button onClick={onClose} disabled={busy} className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-[12px] font-bold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50">Keep plan</button>
+            <button onClick={doCancel} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-700 px-3.5 py-2 text-[12px] font-bold text-white transition disabled:opacity-60">
+              {busy ? 'Requesting…' : 'Request cancellation'}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </>
+  )
+}
+
+// (legacy hard-cancel modal with holder-move — retained, not rendered)
+function _LegacyCancelPlanModal({ sub, planRef, token, onClose, onDone }) {
   const groups = sub.holderGroups || []
   const isBase = planRef === 'base'
   const grp = isBase ? null : groups.find(g => String(g._id) === String(planRef))
@@ -2446,6 +2551,307 @@ function CancelPlanModal({ sub, planRef, token, onClose, onDone }) {
         </motion.div>
       </div>
     </>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  CreditsModal — per-plan unused-time credit (value toward an upgrade)         */
+/* ─────────────────────────────────────────────────────────────────────────── */
+function CreditsModal({ sub, role, token, onClose }) {
+  const [loading, setLoading] = useState(true)
+  const [credits, setCredits] = useState([])
+  const [totalCredit, setTotalCredit] = useState(0)
+  const [err, setErr] = useState('')
+  const model = role === 'airline' ? 'Airlines' : 'Individual'
+  const upgradeTargets = role === 'airline' ? 'Unlimited' : 'Multi-Year or Unlimited'
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = '' }
+  }, [])
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const r = await axios.get(`${BASE_URL}/payments/credits/${sub._id}`, {
+          params: { model }, headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!alive) return
+        setCredits(r.data?.credits || [])
+        setTotalCredit(r.data?.totalCredit || 0)
+      } catch (e) {
+        if (alive) setErr(e?.response?.data?.message || 'Could not load credits.')
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+    // Refetch when the plan/term changes, not just the id.
+  }, [sub._id, sub.subscriptionDate, sub.expirationDate, sub.subscriptionPlan, sub.pricePerCertificate, sub.price]) // eslint-disable-line react-hooks/exhaustive-deps
+  const money = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+  const planLbl = (p) => p === 'Unlimited Plan' ? 'Unlimited' : p === 'Multiple Years Subscription Plan' ? 'Multi-Year' : '1 Year'
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 overflow-y-auto">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Plan Credits</p>
+            <p className="text-sm font-extrabold text-slate-900">Unused-time credit</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center">✕</button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-[11px] text-slate-500">
+            Each active plan earns credit for the time you have not used yet. This credit is applied automatically when you upgrade the plan to {upgradeTargets}.
+          </p>
+          {loading && <p className="text-sm text-slate-400 py-6 text-center">Loading…</p>}
+          {err && <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">{err}</div>}
+          {!loading && !err && credits.length === 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-6 text-center text-sm text-slate-500">
+              No credits available — plans are Unlimited or already expired.
+            </div>
+          )}
+          {!loading && !err && credits.map((c) => (
+            <div key={c.ref} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-slate-900">{c.label} <span className="text-slate-400 font-medium">· {planLbl(c.plan)}</span></p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">Expires {fmtD(c.expiresAt)} · paid {money(c.currentTotal)}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-sm font-extrabold ${c.credit > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{money(c.credit)}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">credit</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {!loading && !err && credits.length > 0 && (
+            <div className="flex justify-between items-center border-t border-slate-100 pt-2.5">
+              <span className="text-[12px] font-bold text-slate-700">Total credit</span>
+              <span className="text-base font-black text-emerald-600">{money(totalCredit)}</span>
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end">
+          <button onClick={onClose} className="rounded-lg bg-slate-900 hover:bg-slate-800 px-4 py-2 text-[12px] font-bold text-white transition">Close</button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  ConvertToUnlimitedModal                                                      */
+/*  In-place conversion of the BASE plan to Unlimited. No new plan/group; the    */
+/*  unused portion of the current term is credited. Backend (purpose=            */
+/*  'convert-unlimited') computes the authoritative charge — PaymentModal shows   */
+/*  the exact amount it returns.                                                  */
+/* ─────────────────────────────────────────────────────────────────────────── */
+function ConvertToUnlimitedModal({ sub, role, group = null, onClose, onSaved }) {
+  const isAirline = role === 'airline'
+  const isGroup = !!group
+  // Individuals may upgrade to Multiple Years OR Unlimited. Airlines (and any group) → Unlimited only.
+  const individualUpgrade = !isAirline && !isGroup
+  const [targetPlan, setTargetPlan] = useState('Unlimited Plan')
+  const [convYears, setConvYears] = useState(3)
+  const [showPayment, setShowPayment] = useState(false)
+  const [showMethodStep, setShowMethodStep] = useState(false)
+  const [wireSubmitting, setWireSubmitting] = useState(false)
+  const [wireSent, setWireSent] = useState(false)
+  const [wireErr, setWireErr] = useState('')
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
+  // Effective target: individuals pick; everyone else upgrades to Unlimited.
+  const effTarget = individualUpgrade ? targetPlan : 'Unlimited Plan'
+  const tYears = effTarget === 'Multiple Years Subscription Plan' ? Math.max(2, Number(convYears) || 2) : 1
+  useEffect(() => {
+    document.documentElement.style.overflow = 'hidden'
+    return () => { document.documentElement.style.overflow = '' }
+  }, [])
+
+  // baseCount = holders being converted (the group's slots, or the base plan's own slots).
+  const baseCount = isGroup
+    ? Math.max(1, Number(group.count || 1))
+    : Math.max(1, Number(sub.committedCount || sub.holderCountValue || sub.certificateHolders?.length || 1) - allGroupSlots(sub.holderGroups))
+  const currentPlanLabel = isGroup
+    ? planShortLabel(group.plan, group.multiYearCount)
+    : planShortLabel(sub.subscriptionPlan, sub.multiYearCount)
+  const unitExpiry = isGroup ? group.expirationDate : sub.expirationDate
+  const expiryLabel = unitExpiry ? fmt(unitExpiry) : '—'
+
+  // ── Estimated price (display only — backend is authoritative) ───────────────
+  // Mirrors compute(Group)ConversionCharge(): Unlimited tier ppc stacked on active
+  // coverage (excluding the unit being converted), minus a prorated credit for the
+  // unused portion of the unit's current term.
+  const now = new Date()
+  const exp = unitExpiry ? new Date(unitExpiry) : null
+  const start = (isGroup ? group.subscriptionDate : sub.subscriptionDate)
+    ? new Date(isGroup ? group.subscriptionDate : sub.subscriptionDate) : null
+  const oldYears = (isGroup ? group.plan : sub.subscriptionPlan) === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number((isGroup ? group.multiYearCount : sub.multiYearCount) || 2)) : 1
+  const anchor = isGroup
+    ? activeCoverageAnchor(sub, { excludeGroupId: group._id })
+    : activeCoverageAnchor(sub, { excludeBase: true })
+  const unlimitedPpc = isAirline
+    ? getRenewPpc('Unlimited Plan', Math.max(3, anchor + baseCount))
+    : (effTarget === 'Unlimited Plan' ? 299 : effTarget === 'Multiple Years Subscription Plan' ? 55 : 69)
+  const unlimitedTotal = isAirline
+    ? unlimitedPpc * baseCount
+    : (effTarget === 'Multiple Years Subscription Plan' ? 55 * tYears : unlimitedPpc)
+  const currentBaseTotal = isGroup
+    ? Number(group.pricePerCert || 0) * baseCount * oldYears
+    : isAirline
+      ? Number(sub.pricePerCertificate || sub.pricePerCert || 0) * baseCount * oldYears
+      : (sub.subscriptionPlan === '1 Year Subscription Plan' ? 69
+          : sub.subscriptionPlan === 'Multiple Years Subscription Plan' ? 55 * oldYears
+          : Number(sub.price || 0))
+  let credit = 0
+  if (exp && exp > now && currentBaseTotal > 0) {
+    const totalMs = (start && exp > start) ? (exp - start) : oldYears * 365 * 86400000
+    const remMs = Math.max(0, exp - now)
+    credit = Math.round(currentBaseTotal * Math.min(1, remMs / totalMs) * 100) / 100
+  }
+  const estCharge = Math.max(0, Math.round((unlimitedTotal - credit) * 100) / 100)
+  const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const unitLabel = isGroup ? 'add-on plan' : 'base plan'
+  const targetLabel = effTarget === 'Unlimited Plan' ? 'Unlimited'
+    : effTarget === 'Multiple Years Subscription Plan' ? `${tYears} Years`
+    : '1 Year'
+
+  const submitWireRequest = async () => {
+    setWireSubmitting(true); setWireErr('')
+    try {
+      await API.patch(`/airlines/${sub._id}/request-invoice`, {
+        purpose: 'convert-unlimited',
+        ...(isGroup ? { holderGroupId: String(group._id) } : {}),
+      })
+      setWireSent(true)
+    } catch (e) {
+      setWireErr(e?.response?.data?.message || 'Could not send the wire request. Please try again.')
+    } finally {
+      setWireSubmitting(false)
+    }
+  }
+
+  if (wireSent) {
+    return (
+      <WireRequestSentView onClose={() => {
+        window.dispatchEvent(new Event('ifoa-subscription-refresh'))
+        onClose()
+      }} />
+    )
+  }
+
+  if (showMethodStep) {
+    return (
+      <PaymentMethodStep
+        amountLabel={`~${money(estCharge)}`}
+        summary={`Convert to Unlimited${isAirline ? ` · ${baseCount} holder${baseCount !== 1 ? 's' : ''}` : ''}`}
+        submitting={wireSubmitting}
+        error={wireErr}
+        onBack={() => { setWireErr(''); setShowMethodStep(false) }}
+        onCard={() => { setShowMethodStep(false); setShowPayment(true) }}
+        onWire={submitWireRequest}
+      />
+    )
+  }
+
+  if (showPayment) {
+    return (
+      <PaymentModal
+        registrationId={sub._id}
+        registrationModel={isAirline ? 'Airlines' : 'Individual'}
+        amount={0}
+        subscriptionData={sub}
+        purpose="convert-unlimited"
+        newSubscriptionPlan={effTarget}
+        renewalMultiYearCount={effTarget === 'Multiple Years Subscription Plan' ? tYears : undefined}
+        holderGroupId={isGroup ? group._id : undefined}
+        onClose={() => { setShowPayment(false); onClose() }}
+        onSuccess={(inv, updatedReg) => { onSaved(updatedReg || sub) }}
+      />
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 overflow-y-auto">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <span className="inline-flex w-7 h-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" /></svg>
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Upgrade Plan</p>
+            <p className="text-sm font-extrabold text-slate-900 truncate">{individualUpgrade ? 'Upgrade your plan' : 'Switch to Unlimited'}</p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          <p className="text-xs text-slate-600">
+            Upgrade this <strong className="text-slate-900">{unitLabel}</strong> to <strong className="text-slate-900">{targetLabel}</strong>.
+            {isGroup ? ' Your base plan and other add-ons are unchanged.' : ' Your existing add-on plans are unchanged.'} The unused portion of the current
+            term is credited toward the price.
+          </p>
+
+          {/* Individual target picker — Multiple Years or Unlimited */}
+          {individualUpgrade && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {[['Multiple Years Subscription Plan', 'Multiple Years'], ['Unlimited Plan', 'Unlimited']].map(([val, lbl]) => (
+                  <button key={val} type="button" onClick={() => setTargetPlan(val)}
+                    className={`rounded-xl border-2 px-3 py-2 text-[12px] font-bold transition ${targetPlan === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              {targetPlan === 'Multiple Years Subscription Plan' && (
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="text-[12px] font-semibold text-slate-600">Years</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setConvYears(y => Math.max(2, Number(y) - 1))}
+                      className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-600 hover:bg-slate-100">−</button>
+                    <span className="w-8 text-center text-sm font-extrabold text-slate-900">{tYears}</span>
+                    <button type="button" onClick={() => setConvYears(y => Number(y) + 1)}
+                      className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-600 hover:bg-slate-100">+</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 space-y-1.5 text-[11px]">
+            <div className="flex justify-between"><span className="text-slate-500">Current {unitLabel}</span><span className="font-semibold text-slate-800">{currentPlanLabel}</span></div>
+            {isAirline && <div className="flex justify-between"><span className="text-slate-500">{isGroup ? 'Plan holders' : 'Base holders'}</span><span className="font-semibold text-slate-800">{baseCount}</span></div>}
+            <div className="flex justify-between"><span className="text-slate-500">Expires</span><span className="font-semibold text-slate-800">{expiryLabel}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">After upgrade</span><span className="font-semibold text-blue-700">{effTarget === 'Unlimited Plan' ? 'Unlimited — no expiry' : `${targetLabel}`}</span></div>
+          </div>
+          {/* Estimated price breakdown */}
+          <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-3.5 py-3 space-y-1.5 text-[11px]">
+            <div className="flex justify-between"><span className="text-slate-500">{targetLabel}{isAirline ? ` (${money(unlimitedPpc)} × ${baseCount})` : ''}</span><span className="font-semibold text-slate-800">{money(unlimitedTotal)}</span></div>
+            {credit > 0 && <div className="flex justify-between"><span className="text-slate-500">Credit — unused {currentPlanLabel}</span><span className="font-semibold text-emerald-600">−{money(credit)}</span></div>}
+            <div className="flex justify-between border-t border-blue-100 pt-1.5"><span className="font-bold text-slate-700">Estimated total</span><span className="font-extrabold text-blue-700">{money(estCharge)}</span></div>
+          </div>
+          <p className="text-[10px] text-slate-400">
+            Estimate only — the exact amount (recalculated at the moment of payment) is shown at checkout.
+          </p>
+        </div>
+
+        <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-[12px] font-bold text-slate-600 hover:bg-slate-50 transition">
+            Cancel
+          </button>
+          <button onClick={() => (isAirline ? setShowMethodStep(true) : setShowPayment(true))}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-[12px] font-bold text-white transition">
+            Continue
+          </button>
+        </div>
+      </motion.div>
+    </div>
   )
 }
 
@@ -3120,6 +3526,8 @@ export default function SubscriptionPage() {
   const [renewTarget, setRenewTarget] = useState(null)
   const [upgradeTarget, setUpgradeTarget] = useState(null)
   const [cancelTarget, setCancelTarget] = useState(null) // { sub, planRef }
+  const [convertTarget, setConvertTarget] = useState(null) // base plan → Unlimited
+  const [creditsTarget, setCreditsTarget] = useState(null) // show per-plan credits
 
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
@@ -3135,13 +3543,15 @@ export default function SubscriptionPage() {
       viewAllInvoices ||
       editTarget ||
       renewTarget ||
-      upgradeTarget
+      upgradeTarget ||
+      convertTarget ||
+      creditsTarget
     )
     if (!anyModalOpen) {
       document.body.style.overflow = ''
       document.documentElement.style.overflow = ''
     }
-  }, [showPayModal, showAddHolders, viewInvoice, viewAllInvoices, editTarget, renewTarget, upgradeTarget])
+  }, [showPayModal, showAddHolders, viewInvoice, viewAllInvoices, editTarget, renewTarget, upgradeTarget, convertTarget, creditsTarget])
 
   useEffect(() => {
     if (!user) { setLoading(false); return }
@@ -3360,6 +3770,9 @@ export default function SubscriptionPage() {
                 onRenew={() => setRenewTarget({ sub: s, group: null })}
                 onRenewGroup={(group) => setRenewTarget({ sub: s, group })}
                 onCancelPlan={(planRef) => setCancelTarget({ sub: s, planRef })}
+                onConvertUnlimited={() => setConvertTarget({ sub: s, group: null })}
+                onConvertGroupUnlimited={(group) => setConvertTarget({ sub: s, group })}
+                onShowCredits={() => setCreditsTarget(s)}
               />
             ))}
           </div>
@@ -3461,10 +3874,39 @@ export default function SubscriptionPage() {
         />
       )}
 
+      {creditsTarget && (
+        <CreditsModal
+          sub={creditsTarget}
+          role={user?.role}
+          token={token}
+          onClose={() => setCreditsTarget(null)}
+        />
+      )}
+
+      {convertTarget && (
+        <ConvertToUnlimitedModal
+          sub={convertTarget.sub || convertTarget}
+          group={convertTarget.group || null}
+          role={user?.role}
+          onClose={() => setConvertTarget(null)}
+          onSaved={(updated) => {
+            if (updated) {
+              setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
+              setSub((prev) => (prev?._id === updated._id ? updated : prev))
+              cacheSet(`subs_${user?.id || user?.email}`, [updated])
+            }
+            invalidate(`subs_${user?.id || user?.email}`)
+            setConvertTarget(null)
+            setRefreshKey((k) => k + 1)
+          }}
+        />
+      )}
+
       {cancelTarget && (
         <CancelPlanModal
           sub={cancelTarget.sub}
           planRef={cancelTarget.planRef}
+          role={user?.role}
           token={token}
           onClose={() => setCancelTarget(null)}
           onDone={(updated) => {
@@ -3530,7 +3972,14 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
         String(li.description || '').toLowerCase().includes('holder')
     )
 
+  const isConversion = (doc) =>
+    doc.purpose === 'convert-unlimited' ||
+    (doc.lineItems || doc.draft?.lineItems || []).some(
+      li => String(li.description || '').toLowerCase().includes('credit')
+    )
+
   const purposeLabel = (doc) => {
+    if (isConversion(doc)) return 'Upgrade to Unlimited'
     if (doc._source === 'renewal' || doc.plan) return 'Renewal'
     if (isHolderUpgrade(doc)) return 'Holder Upgrade'
     return 'Subscription'
@@ -3653,7 +4102,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup, onCancelPlan }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
   const navigate = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid = s.isPaid === true || s.paymentStatus === 'paid'
@@ -4128,6 +4577,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                       onRenew={s.wirePaymentRequested ? null : onRenew}
                       onRenewGroup={s.wirePaymentRequested ? null : onRenewGroup}
                       onCancelPlan={s.wirePaymentRequested ? null : onCancelPlan}
+                      onConvertUnlimited={s.wirePaymentRequested ? null : onConvertUnlimited}
+                      onConvertGroupUnlimited={s.wirePaymentRequested ? null : onConvertGroupUnlimited}
+                      onShowCredits={onShowCredits}
                     />
                   </div>
                 )
