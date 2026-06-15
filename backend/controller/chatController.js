@@ -51,8 +51,9 @@ RENEWAL:
 - Unlimited plans never expire — nothing to renew.
 
 UPGRADING A PLAN (with credit):
-- An ACTIVE plan can be upgraded any time. Individuals: 1-Year to Multi-Year or Unlimited; Multi-Year to Unlimited. Airlines: base plan or any add-on plan to Unlimited.
-- Use the "Convert to Unlimited" / "Upgrade" button on the plan. The unused portion of the current term is credited toward the price: charge = new-plan price minus credit. Credit = paid amount times (days left / full term).
+- An ACTIVE plan can be upgraded any time. Individuals: 1-Year to Multi-Year or Unlimited; Multi-Year to Unlimited (or more years). Airlines: base plan or any add-on plan to Unlimited.
+- Individuals: click "Upgrade Plan" on the subscription, pick the target (Multiple Years or Unlimited), and a live breakdown shows the new price, the unused-time credit, and the net amount. Airlines: use "Convert to Unlimited".
+- The unused portion of the current term is credited toward the price: charge = new-plan price minus credit. Credit = the price you paid times (days left / full term) — so a just-started plan credits almost the full price, one near expiry credits little. The invoice shows the new-plan line and a negative credit line.
 - EXPIRED plans cannot be upgraded — renew first, then upgrade. The upgrade button is hidden on expired plans.
 - Airlines may pay the upgrade by card (instant) or wire (admin approves; shown "Pending" until then).
 - A new invoice is added to history; the old invoice is preserved, never overwritten.

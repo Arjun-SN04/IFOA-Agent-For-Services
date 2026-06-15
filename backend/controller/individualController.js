@@ -214,8 +214,8 @@ function buildIndividualPayload(raw) {
   const email = String(pick(src, ['email', 'Email'])).toLowerCase().trim();
   const phone = String(pick(src, ['phone', 'Phone'])).trim();
 
-  if (!firstName || !lastName || !email || !phone) {
-    throw new Error('firstName, lastName, email, and phone are required.');
+  if (!firstName || !lastName || !email) {
+    throw new Error('firstName, lastName, and email are required.');
   }
 
   const paymentStatusRaw = String(pick(src, ['paymentStatus', 'Invoice', 'invoiceStatus'], 'pending')).toLowerCase();
@@ -388,6 +388,46 @@ exports.adminCreateIndividualForm = async (req, res) => {
     const payload = buildIndividualPayload(req.body || {});
     const individual = await Individual.create(payload);
     const linked = await linkOrCreateIndividualUser(individual, payload);
+
+    // Paid base plan → generate the canonical Invoice now (honoring an admin-edited
+    // draft/number from the base-plan modal) so the client immediately sees the invoice.
+    if (individual.isPaid) {
+      try {
+        const draft = req.body.invoiceDraft || null;
+        let invoiceNumber = normalizeInvoiceNumber(draft?.invoiceNumber || req.body.invoiceNumber || individual.invoiceNumber);
+        if (!invoiceNumber || await isInvoiceNumberTaken(invoiceNumber)) {
+          invoiceNumber = await generateInvoiceNumber();
+        }
+        if (draft) draft.invoiceNumber = invoiceNumber;  // pin draft number to the canonical one
+        await createOrUpdateInvoice({
+          registrationId:    individual._id,
+          registrationModel: 'Individual',
+          paymentId:         null,
+          ...(draft ? { draftOverrides: draft, lineItems: draft.lineItems } : {}),
+          snapshot: {
+            name:             `${individual.firstName || ''} ${individual.lastName || ''}`.trim(),
+            email:            individual.email || '',
+            subscriptionPlan: individual.subscriptionPlan || '',
+            subscriptionDate: individual.subscriptionDate || new Date(),
+            expirationDate:   individual.expirationDate || null,
+            holderCount:      1,
+            pricePerCert:     0,
+            subtotal:         individual.price || 0,
+            totalPaid:        individual.price || 0,
+          },
+          amountDollars:         individual.price || 0,
+          paidAt:                individual.subscriptionDate || new Date(),
+          paymentMethod:         draft?.paymentMethod || 'admin',
+          adminGenerated:        true,
+          existingInvoiceNumber: invoiceNumber,
+        });
+        individual.invoiceNumber = invoiceNumber;
+        individual.invoiceGenerated = true;
+        await individual.save();
+      } catch (invErr) {
+        console.warn('[adminCreateIndividualForm] Invoice creation failed:', invErr.message);
+      }
+    }
 
     res.status(201).json({
       success: true,

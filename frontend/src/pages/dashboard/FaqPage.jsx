@@ -67,23 +67,23 @@ const FAQS = [
   },
   {
     for: 'both',
-    q: 'Can I upgrade an existing plan to Unlimited?',
-    a: 'Yes. Any active, non-Unlimited plan can be converted to Unlimited in place — no need to buy a separate plan. Use the “Convert to Unlimited” button on the plan (base plan or an add-on plan). The plan switches to Unlimited immediately, never expires again, and keeps all its holders and slots. Your other plans are untouched.',
+    q: 'Can I upgrade an existing plan?',
+    a: 'Yes, any active plan — no need to buy a separate one. Individuals: open “Upgrade Plan” and pick Multiple Years or Unlimited. Airlines: use “Convert to Unlimited” on the base plan or any add-on. The plan switches in place immediately, keeps everything it had, and your other plans are untouched. Expired plans must be renewed first.',
   },
   {
     for: 'both',
-    q: 'How is the price for upgrading to Unlimited calculated?',
-    a: 'You pay the Unlimited tier price for that plan’s holders, MINUS a credit for the time you have not yet used on the current term. Airlines: Unlimited per-cert rate × holders (at your volume tier). Individuals: the flat $299 Unlimited price. The unused-time credit is then subtracted, so you only pay the difference.',
+    q: 'How is the upgrade price calculated?',
+    a: 'You pay the new plan’s price MINUS a credit for the time you have not yet used on the current term. Individuals: Unlimited is $299, Multiple Years is $55 × the number of years. Airlines: the Unlimited per-cert rate × holders, at your volume tier. The unused-time credit is then subtracted, so you only pay the difference.',
   },
   {
     for: 'both',
     q: 'How does the unused-time credit work?',
-    a: 'The credit is the part of your current term you have not consumed yet, prorated by days. Credit = what you paid for the current term × (days remaining ÷ full term length). Example: a 1-Year plan billed $240 with about half the year left gives roughly a $120 credit toward the Unlimited price. A plan near expiry credits little; one just started credits almost the full amount.',
+    a: 'The credit is the part of your current term you have not used yet, prorated by days. Credit = the price you paid for the current term × (days remaining ÷ full term length). Example (individual): a Multiple-Years plan billed $165 (3 years) with about two-thirds of the term left gives roughly a $110 credit toward the new plan. A plan near expiry credits little; a just-started plan credits almost the full price.',
   },
   {
     for: 'both',
     q: 'What does the upgrade invoice look like?',
-    a: 'It shows two lines: the full Unlimited price, then a negative “Credit — unused …” line, netting to exactly what you are charged. Your previous invoice is preserved — the upgrade adds a NEW invoice to your history and never overwrites the old one.',
+    a: 'It shows the new-plan price as one line, then a negative “Credit — unused …” line, netting to exactly what you are charged. Admins can add or edit lines before issuing it. Your previous invoice is preserved — the upgrade adds a NEW invoice to your history and never overwrites the old one.',
   },
   {
     for: 'airline',
@@ -144,12 +144,11 @@ function FlowStep({ n, title, desc }) {
   )
 }
 
-function FaqItem({ q, a }) {
-  const [open, setOpen] = useState(false)
+function FaqItem({ q, a, open, onToggle }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={onToggle}
         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 transition"
       >
         <span className="text-sm font-bold text-slate-800">{q}</span>
@@ -318,6 +317,7 @@ export default function FaqPage() {
   const { user } = useAuth()
   const isAirline = user?.role === 'airline'
   const [view, setView] = useState(isAirline ? 'airline' : 'individual')
+  const [openFaq, setOpenFaq] = useState(null)
 
   const visibleFaqs = FAQS.filter(f => f.for === 'both' || f.for === view)
 
@@ -338,7 +338,7 @@ export default function FaqPage() {
           <button
             key={val}
             type="button"
-            onClick={() => setView(val)}
+            onClick={() => { setView(val); setOpenFaq(null) }}
             className={`relative px-4 py-1.5 rounded-lg text-sm font-bold transition ${view === val ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
             {lbl}
@@ -376,18 +376,18 @@ export default function FaqPage() {
           </Section>
 
           <Section title="Upgrading a plan (with credit)">
-            <p>On an <strong>active</strong> 1-Year or Multiple-Years plan you can upgrade it at any time — no need to wait for renewal or buy a separate plan. <strong>Individuals</strong> can upgrade to Multiple Years or Unlimited; <strong>airlines</strong> upgrade to Unlimited (the base plan or any add-on plan).</p>
+            <p>On an <strong>active</strong> 1-Year or Multiple-Years plan you can upgrade at any time — no need to wait for renewal. Open <strong>“Upgrade Plan”</strong> on your subscription and pick the target: <strong>Multiple Years</strong> (choose the number of years) or <strong>Unlimited</strong>. Unused time on your current plan is credited toward the new one.</p>
             <div className="mt-1">
-              <FlowStep n="1" title="Click “Convert to Unlimited” / “Upgrade”" desc="The button sits on the plan you want to upgrade. Individuals pick the target (Multi-Year or Unlimited). A summary shows the new price, your unused-time credit, and the net amount." />
+              <FlowStep n="1" title="Click “Upgrade Plan”" desc="Pick Multiple Years or Unlimited. The modal shows your current price, the unused-time credit, the new-plan price, and the net amount — all live as you change the target." />
               <FlowStep n="2" title="You only pay the difference" desc="Charge = new-plan price − credit for the time left on your current term. A plan with lots of time left earns a bigger credit; one near expiry earns little." />
-              <FlowStep n="3" title="Pay by card or wire" desc="Card activates instantly. Airlines may also request a wire invoice — the upgrade stays “Pending” until an admin approves it." />
-              <FlowStep n="4" title="Plan upgrades in place" desc="It keeps every holder and slot. A new invoice is added to your history — your old invoice is preserved, never overwritten." />
+              <FlowStep n="3" title="Confirm the invoice" desc="The invoice is shown right there — generate the number and edit the line items if needed (the unused-time credit appears as its own line)." />
+              <FlowStep n="4" title="Plan upgrades in place" desc="It activates immediately and a new invoice is added to your history — your old invoice is preserved, never overwritten." />
             </div>
             <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-[13px] text-slate-600">
               <p className="font-bold text-slate-800 mb-1">Credit example</p>
-              <p>A 1-Year plan billed <strong>$240</strong> with about half the year left → credit ≈ <strong>$120</strong>. If Unlimited for those holders is <strong>$1,060</strong>, you pay <strong>$1,060 − $120 = $940</strong>. The invoice shows both lines so the math is transparent.</p>
+              <p>A Multiple-Years plan billed <strong>$165</strong> (3 years @ $55) with about <strong>two-thirds</strong> of the term left → credit ≈ <strong>$110</strong>. Upgrading to Unlimited (<strong>$299</strong>) you pay <strong>$299 − $110 = $189</strong>. The invoice shows both lines so the math is transparent.</p>
             </div>
-            <p className="mt-3 text-[13px] text-slate-500"><strong className="text-slate-700">Expired plans can’t be upgraded</strong> — the upgrade button is hidden once a plan lapses; renew it first, then upgrade. A failed or cancelled payment changes nothing — the plan upgrades and the invoice is created only after a successful payment.</p>
+            <p className="mt-3 text-[13px] text-slate-500"><strong className="text-slate-700">Credit is based on your plan’s price and dates</strong> — it’s the price you paid prorated by the time remaining (days left ÷ full term). A just-started plan credits almost the full price; one near expiry credits little. A failed or cancelled payment changes nothing — the plan upgrades and the invoice is created only after the upgrade is confirmed.</p>
           </Section>
         </>
       )}
@@ -463,7 +463,15 @@ export default function FaqPage() {
           Frequently asked questions <span className="text-slate-400 font-bold">· {view === 'airline' ? 'Airline' : 'Individual'}</span>
         </h2>
         <div className="space-y-2">
-          {visibleFaqs.map(f => <FaqItem key={f.q} q={f.q} a={f.a} />)}
+          {visibleFaqs.map(f => (
+            <FaqItem
+              key={f.q}
+              q={f.q}
+              a={f.a}
+              open={openFaq === f.q}
+              onToggle={() => setOpenFaq(prev => (prev === f.q ? null : f.q))}
+            />
+          ))}
         </div>
       </div>
 

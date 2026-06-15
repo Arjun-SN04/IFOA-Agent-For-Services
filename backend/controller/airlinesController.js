@@ -184,8 +184,8 @@ function buildAirlinePayload(raw) {
   const email = String(pick(src, ['email', 'Email', 'pointOfContactEmail'], '')).toLowerCase().trim();
   const phone = String(pick(src, ['phone', 'Phone', 'pointOfContactPhone'], '')).trim();
 
-  if (!airlineName || !firstName || !lastName || !email || !phone) {
-    throw new Error('airlineName, firstName, lastName, email, and phone are required.');
+  if (!airlineName || !firstName || !lastName || !email) {
+    throw new Error('airlineName, firstName, lastName, and email are required.');
   }
 
   const paymentStatusRaw = String(pick(src, ['paymentStatus', 'Invoice ', 'Invoice', 'invoiceStatus'], 'pending')).toLowerCase();
@@ -1918,11 +1918,20 @@ exports.adminCreateAirlineForm = async (req, res) => {
     // so the airline user immediately sees the Invoice button. Pending base plans
     // get their invoice when payment is later recorded.
     if (markPaid) try {
-      const invoiceNumber = await generateInvoiceNumber();
+      // Honor an admin-edited invoice draft/number from the base-plan modal; otherwise
+      // auto-generate. The draft (recipient, line items, payment method) flows straight
+      // into the canonical Invoice so what the admin edited is what the client sees.
+      const draft = body.invoiceDraft || null;
+      let invoiceNumber = normalizeInvoiceNumber(draft?.invoiceNumber || body.invoiceNumber);
+      if (!invoiceNumber || await isInvoiceNumberTaken(invoiceNumber)) {
+        invoiceNumber = await generateInvoiceNumber();
+      }
+      if (draft) draft.invoiceNumber = invoiceNumber;  // pin draft number to the canonical one
       await createOrUpdateInvoice({
         registrationId:    airline._id,
         registrationModel: 'Airlines',
         paymentId:         null,
+        ...(draft ? { draftOverrides: draft, lineItems: draft.lineItems } : {}),
         snapshot: {
           name:            airline.pointOfContact || '',
           email:           airline.pointOfContactEmail || airline.email || '',
@@ -1938,7 +1947,7 @@ exports.adminCreateAirlineForm = async (req, res) => {
         },
         amountDollars:       airline.amountPaid || airline.totalAmount || 0,
         paidAt:              airline.subscriptionDate || new Date(),
-        paymentMethod:       'admin',
+        paymentMethod:       draft?.paymentMethod || 'admin',
         adminGenerated:      true,
         existingInvoiceNumber: invoiceNumber,
       });

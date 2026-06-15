@@ -4,6 +4,7 @@ import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
+import { EditSubscriptionFormModal } from './SubscriptionPage'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const API = axios.create({ baseURL: BASE_URL })
@@ -162,6 +163,7 @@ export default function ProfilePage() {
   const { getOrFetch, invalidate } = useDataCache()
   const [sub, setSub]                       = useState(null)
   const [editOpen, setEditOpen]             = useState(false)
+  const [infoEditOpen, setInfoEditOpen]     = useState(false)
   const [logoModalOpen, setLogoModalOpen]   = useState(false)
   const [currentLogoUrl, setCurrentLogoUrl] = useState('')
 
@@ -170,15 +172,16 @@ export default function ProfilePage() {
   const isAirline = user?.role === 'airline'
 
   useEffect(() => {
-    if (!user || !isAirline) return
+    if (!user) return
     const headers = { Authorization: `Bearer ${token}` }
+    const base = isAirline ? 'airlines' : 'individuals'
     const cacheKey = `subs_${user.id || user.email}`
     invalidate(cacheKey)
 
     const load = async () => {
       try {
         const emailSubs = user.email
-          ? await API.get(`/airlines/by-email?email=${encodeURIComponent(user.email)}`, { headers })
+          ? await API.get(`/${base}/by-email?email=${encodeURIComponent(user.email)}`, { headers })
               .then(r => r.data.all || (r.data.data ? [r.data.data] : []))
               .catch(() => [])
           : []
@@ -188,7 +191,7 @@ export default function ProfilePage() {
           ...(user.registrationId ? [user.registrationId] : []),
         ].map(id => id?.toString()).filter(Boolean).filter(id => !seen.has(id))
         const idSubs = remainingIds.length
-          ? await Promise.allSettled(remainingIds.map(id => API.get(`/airlines/${id}`, { headers })))
+          ? await Promise.allSettled(remainingIds.map(id => API.get(`/${base}/${id}`, { headers })))
               .then(rs => rs.filter(r => r.status === 'fulfilled' && r.value?.data?.data).map(r => r.value.data.data))
           : []
         const merged = [...emailSubs, ...idSubs]
@@ -210,6 +213,14 @@ export default function ProfilePage() {
       {editOpen && (
         <EditProfileModal user={user} isAirline={isAirline} onClose={() => setEditOpen(false)}
           onSaveName={updateProfile} onSaveAirlineName={updateAirlineName} />
+      )}
+      {infoEditOpen && sub?._id && (
+        <EditSubscriptionFormModal
+          sub={sub}
+          role={user?.role}
+          onClose={() => setInfoEditOpen(false)}
+          onSaved={(updated) => { setSub(updated); setInfoEditOpen(false) }}
+        />
       )}
       {logoModalOpen && sub?._id && (
         <LogoUploadModal
@@ -259,6 +270,16 @@ export default function ProfilePage() {
                 </svg>
                 Edit Profile
               </button>
+              {sub?._id && (
+                <button onClick={() => setInfoEditOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all shadow-sm"
+                  style={{ background: 'linear-gradient(135deg, #1a1aff 0%, #0000ff 100%)' }}>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Edit Information
+                </button>
+              )}
               {isAirline && (
                 <button onClick={() => setLogoModalOpen(true)}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">

@@ -212,7 +212,7 @@ const AIRLINE_CERT_TYPES = [
 /* ─────────────────────────────────────────────────────────────────────────── */
 /*  EditSubscriptionFormModal                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
+export function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
   const navigate = useNavigate()
   const isAirline = role === 'airline'
   const isPaid = sub.isPaid === true || sub.paymentStatus === 'paid'
@@ -481,7 +481,7 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 bg-slate-50/70">
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           )}
@@ -565,8 +565,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
           {isAirline ? (
             <>
               {/* ── Company & Contact ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Company &amp; Contact</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 pb-2.5 border-b border-slate-100">Company &amp; Contact</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airline Name</label>
@@ -607,8 +607,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
               </div>
 
               {/* ── Address ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Address</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 pb-2.5 border-b border-slate-100">Address</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
@@ -648,8 +648,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
           ) : (
             <>
               {/* ── Personal Info ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Personal Information</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 pb-2.5 border-b border-slate-100">Personal Information</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">First Name <span className="text-red-400">*</span></label>
@@ -690,8 +690,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
               </div>
 
               {/* ── Address ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Address</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 pb-2.5 border-b border-slate-100">Address</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1 sm:col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Address Line 1</label>
@@ -724,8 +724,8 @@ function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
               </div>
 
               {/* ── Certificate ── */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Certificate Information</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-700 pb-2.5 border-b border-slate-100">Certificate Information</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Airman Certificate Status</label>
@@ -1721,7 +1721,7 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
 // Individual-side "Current Subscription" block — mirrors the airline
 // ActiveSubscriptionBlock but for a single person (no holders/groups). Shows the
 // active plan clearly and, when a renewal is queued, the upcoming plan below it.
-function IndividualSubscriptionBlock({ s, active }) {
+function IndividualSubscriptionBlock({ s, active, onUpgrade, onShowCredits, onRenew, onEditCert }) {
   const [expanded, setExpanded] = useState(false)
   const money2 = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const unlimited = s.subscriptionPlan === 'Unlimited Plan'
@@ -1730,6 +1730,12 @@ function IndividualSubscriptionBlock({ s, active }) {
   const expired = active && !unlimited && days !== null && days <= 0
   const nr = s.nextRenewal
   const queued = !!(nr?.paidAt && nr.activationDate && new Date(nr.activationDate) > new Date())
+  // Upgrade available while the plan is active, not already Unlimited, not expired,
+  // and no renewal already queued. ConvertToUnlimitedModal lets the individual move
+  // to Multi-Year or Unlimited, crediting the unused portion of the current term.
+  const canUpgrade = active && !unlimited && !expired && !queued
+  // Renew once within 60 days of expiry (or already expired), not Unlimited, none queued.
+  const canRenew = active && !unlimited && !queued && days !== null && days <= 60
   const planLabel = planShortLabel(s.subscriptionPlan, s.multiYearCount)
   const queuedLabel = queued ? planShortLabel(nr.plan, nr.multiYearCount) : ''
   const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
@@ -1758,14 +1764,36 @@ function IndividualSubscriptionBlock({ s, active }) {
             </div>
             <p className="mt-1 text-[11px] text-white/80">{money2(s.price)}{!unlimited && s.expirationDate ? ` · expires ${fmtD(s.expirationDate)}` : unlimited ? ' · No expiry' : ''}</p>
           </div>
-          <motion.svg
-            animate={{ rotate: expanded ? 180 : 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            className="w-4 h-4 text-white flex-shrink-0 mt-1"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </motion.svg>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {canRenew && onRenew && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRenew() }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-inset ring-white/25 px-2.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition"
+                title="Renew this plan"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Renew
+              </button>
+            )}
+            {onShowCredits && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onShowCredits() }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-inset ring-white/25 px-2.5 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm transition"
+                title="Unused-time credit applied toward an upgrade"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Credits
+              </button>
+            )}
+            <motion.svg
+              animate={{ rotate: expanded ? 180 : 0 }}
+              transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+              className="w-4 h-4 text-white"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </motion.svg>
+          </div>
         </div>
 
         {queued && (
@@ -1792,13 +1820,39 @@ function IndividualSubscriptionBlock({ s, active }) {
             className="overflow-hidden"
           >
             <div className="px-4 sm:px-5 py-4 space-y-3 border-t border-slate-100">
-              {/* Active plan card */}
-              <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-4 py-3">
+              {/* Active plan card — click to edit certificate details */}
+              <div
+                role={onEditCert ? 'button' : undefined}
+                tabIndex={onEditCert ? 0 : undefined}
+                onClick={onEditCert ? (e) => { e.stopPropagation(); onEditCert() } : undefined}
+                onKeyDown={onEditCert ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEditCert() } } : undefined}
+                className={`rounded-xl border-2 border-slate-200 bg-slate-50 px-4 py-3 ${onEditCert ? 'cursor-pointer hover:border-slate-300 hover:bg-slate-100/70 transition' : ''}`}
+                title={onEditCert ? 'Edit your certificate details' : undefined}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-white bg-indigo-600 rounded-full px-2 py-0.5">Active Plan</span>
-                  {headBadge && <span className="text-[9px] font-black uppercase tracking-wide text-slate-600">{queued ? 'Renewed' : expired ? 'Expired' : exp?.label}</span>}
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white bg-slate-900 rounded-full px-2 py-0.5">Active Plan</span>
+                  <div className="flex items-center gap-2">
+                    {headBadge && <span className="text-[9px] font-black uppercase tracking-wide text-slate-600">{queued ? 'Renewed' : expired ? 'Expired' : exp?.label}</span>}
+                    {onEditCert && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" /></svg>
+                        Edit
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-2 text-sm font-extrabold text-slate-900">{planLabel}</p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-extrabold text-slate-900">{planLabel}</p>
+                  {canUpgrade && onUpgrade && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onUpgrade() }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition flex-shrink-0"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 11l7-7 7 7M5 19l7-7 7 7" /></svg>
+                      Upgrade Plan
+                    </button>
+                  )}
+                </div>
                 <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-600">
                   <span>Price · <span className="font-bold text-slate-900">{money2(s.price)}</span></span>
                   <span>{unlimited ? 'Expiry · Never' : `Expires · ${fmtD(s.expirationDate)}`}</span>
@@ -2644,6 +2698,115 @@ function CreditsModal({ sub, role, token, onClose }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
+/*  CertificateEditModal — focused edit of the holder's certificate details      */
+/* ─────────────────────────────────────────────────────────────────────────── */
+function CertificateEditModal({ sub, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    primaryAirmanCertificate:      sub.primaryAirmanCertificate || '',
+    primaryCertificate:            sub.primaryCertificate || '',
+    faaCertificateNumber:          sub.faaCertificateNumber || '',
+    iacraTrackingNumber:           sub.iacraTrackingNumber || '',
+    hasSecondaryCertificate:       !!sub.hasSecondaryCertificate,
+    secondaryCertificate:          sub.secondaryCertificate || '',
+    secondaryFaaCertificateNumber: sub.secondaryFaaCertificateNumber || '',
+    secondaryIacraTrackingNumber:  sub.secondaryIacraTrackingNumber || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (f, v) => setForm(p => ({ ...p, [f]: v }))
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = '' } }, [])
+  const CERT_TYPES = ['Part 61 - Pilot', 'Part 61 - Flight or Ground Instructor', 'Part 65 - Aircraft Dispatcher', 'Part 107 - Remote Pilot']
+
+  const save = async () => {
+    setErr(''); setSaving(true)
+    try {
+      const payload = {
+        primaryAirmanCertificate: form.primaryAirmanCertificate,
+        primaryCertificate:       form.primaryCertificate,
+        faaCertificateNumber:     form.faaCertificateNumber,
+        iacraTrackingNumber:      form.iacraTrackingNumber,
+        hasSecondaryCertificate:  !!form.hasSecondaryCertificate,
+        secondaryCertificate:          form.hasSecondaryCertificate ? form.secondaryCertificate : '',
+        secondaryFaaCertificateNumber: form.hasSecondaryCertificate ? form.secondaryFaaCertificateNumber : '',
+        secondaryIacraTrackingNumber:  form.hasSecondaryCertificate ? form.secondaryIacraTrackingNumber : '',
+      }
+      const res = await API.put(`/individuals/${sub._id}`, payload)
+      onSaved(res.data.data)
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to update certificate details.')
+      setSaving(false)
+    }
+  }
+
+  const inp = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition'
+  const lbl = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1'
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[88px] sm:pt-[96px] pb-4 overflow-y-auto">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={saving ? undefined : onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        className="relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Certificate Information</p>
+            <p className="text-sm font-extrabold text-slate-900">Edit your certificate details</p>
+          </div>
+          <button onClick={onClose} disabled={saving} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center disabled:opacity-50">✕</button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Airman Certificate Status</label>
+              <select value={form.primaryAirmanCertificate} onChange={e => set('primaryAirmanCertificate', e.target.value)} className={inp}>
+                <option value="">— Select —</option><option value="NEW">NEW</option><option value="EXISTING">EXISTING</option>
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Primary Certificate Type</label>
+              <select value={form.primaryCertificate} onChange={e => set('primaryCertificate', e.target.value)} className={inp}>
+                <option value="">— Select —</option>{CERT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>FAA Certificate Number</label>
+              <input value={form.faaCertificateNumber} onChange={e => set('faaCertificateNumber', e.target.value)} placeholder="FAA Certificate #" className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>IACRA Tracking # (FTN)</label>
+              <input value={form.iacraTrackingNumber} onChange={e => set('iacraTrackingNumber', e.target.value)} className={inp} />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <input type="checkbox" checked={form.hasSecondaryCertificate} onChange={e => set('hasSecondaryCertificate', e.target.checked)} className="w-4 h-4 rounded accent-blue-600" />
+            <span className="text-sm font-semibold text-slate-700">Has secondary FAA certificate</span>
+          </label>
+          {form.hasSecondaryCertificate && (
+            <div className="grid grid-cols-1 gap-3 ml-1 pl-3 border-l-2 border-blue-200">
+              <div>
+                <label className={lbl}>Secondary Certificate Type</label>
+                <select value={form.secondaryCertificate} onChange={e => set('secondaryCertificate', e.target.value)} className={inp}>
+                  <option value="">— Select —</option>{CERT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={lbl}>Secondary FAA #</label><input value={form.secondaryFaaCertificateNumber} onChange={e => set('secondaryFaaCertificateNumber', e.target.value)} className={inp} /></div>
+                <div><label className={lbl}>Secondary IACRA FTN</label><input value={form.secondaryIacraTrackingNumber} onChange={e => set('secondaryIacraTrackingNumber', e.target.value)} className={inp} /></div>
+              </div>
+            </div>
+          )}
+          {err && <p className="text-sm font-semibold text-red-600">{err}</p>}
+        </div>
+        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+          <button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition disabled:opacity-50">Cancel</button>
+          <button onClick={save} disabled={saving} className="rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2 text-sm font-bold text-white transition disabled:opacity-50">{saving ? 'Saving…' : 'Save Details'}</button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 /*  ConvertToUnlimitedModal                                                      */
 /*  In-place conversion of the BASE plan to Unlimited. No new plan/group; the    */
 /*  unused portion of the current term is credited. Backend (purpose=            */
@@ -2656,7 +2819,13 @@ function ConvertToUnlimitedModal({ sub, role, group = null, onClose, onSaved }) 
   // Individuals may upgrade to Multiple Years OR Unlimited. Airlines (and any group) → Unlimited only.
   const individualUpgrade = !isAirline && !isGroup
   const [targetPlan, setTargetPlan] = useState('Unlimited Plan')
-  const [convYears, setConvYears] = useState(3)
+  // Default Multi-Year upgrade to one year beyond the current term (so it always
+  // extends, never downgrades). Current Multi-Year count → count + 1 (min 2).
+  const [convYears, setConvYears] = useState(() => {
+    const cur = sub.subscriptionPlan === 'Multiple Years Subscription Plan'
+      ? Number(sub.multiYearCount) || 1 : 1
+    return Math.max(2, cur + 1)
+  })
   const [showPayment, setShowPayment] = useState(false)
   const [showMethodStep, setShowMethodStep] = useState(false)
   const [wireSubmitting, setWireSubmitting] = useState(false)
@@ -2704,9 +2873,10 @@ function ConvertToUnlimitedModal({ sub, role, group = null, onClose, onSaved }) 
     ? Number(group.pricePerCert || 0) * baseCount * oldYears
     : isAirline
       ? Number(sub.pricePerCertificate || sub.pricePerCert || 0) * baseCount * oldYears
-      : (sub.subscriptionPlan === '1 Year Subscription Plan' ? 69
+      : (Number(sub.price) > 0 ? Number(sub.price)
+          : sub.subscriptionPlan === '1 Year Subscription Plan' ? 69
           : sub.subscriptionPlan === 'Multiple Years Subscription Plan' ? 55 * oldYears
-          : Number(sub.price || 0))
+          : 0)
   let credit = 0
   if (exp && exp > now && currentBaseTotal > 0) {
     const totalMs = (start && exp > start) ? (exp - start) : oldYears * 365 * 86400000
@@ -3528,6 +3698,7 @@ export default function SubscriptionPage() {
   const [cancelTarget, setCancelTarget] = useState(null) // { sub, planRef }
   const [convertTarget, setConvertTarget] = useState(null) // base plan → Unlimited
   const [creditsTarget, setCreditsTarget] = useState(null) // show per-plan credits
+  const [certTarget, setCertTarget] = useState(null) // focused certificate edit
 
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
@@ -3767,6 +3938,7 @@ export default function SubscriptionPage() {
                 onViewInvoice={(inv) => setViewInvoice(inv)}
                 onViewAllInvoices={(docs, reg) => setViewAllInvoices({ docs, reg })}
                 onEditForm={() => setEditTarget(s)}
+                onEditCert={() => setCertTarget(s)}
                 onRenew={() => setRenewTarget({ sub: s, group: null })}
                 onRenewGroup={(group) => setRenewTarget({ sub: s, group })}
                 onCancelPlan={(planRef) => setCancelTarget({ sub: s, planRef })}
@@ -3856,6 +4028,18 @@ export default function SubscriptionPage() {
             setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
             setSub((prev) => (prev?._id === updated._id ? updated : prev))
             setEditTarget(null)
+          }}
+        />
+      )}
+
+      {certTarget && (
+        <CertificateEditModal
+          sub={certTarget}
+          onClose={() => setCertTarget(null)}
+          onSaved={(updated) => {
+            setSubs((prev) => prev.map((x) => x._id === updated._id ? updated : x))
+            setSub((prev) => (prev?._id === updated._id ? updated : prev))
+            setCertTarget(null)
           }}
         />
       )}
@@ -4102,7 +4286,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
+function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onEditCert, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
   const navigate = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid = s.isPaid === true || s.paymentStatus === 'paid'
@@ -4287,6 +4471,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
     : (s.price || s.totalServiceFees)
 
   const handleInvoiceClick = async () => {
+    const activeInvoice = String(s.invoiceNumber || '').trim()
     const queuedInvoice = String(s.nextRenewal?.invoiceNumber || '').trim()
     const normalizeNum = (n) => String(n || '').replace(/^Invoice\s+/i, '').trim().toUpperCase()
 
@@ -4685,7 +4870,14 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                   <span className="h-4 w-1 rounded-full bg-slate-900" />
                   <p className="text-sm font-extrabold text-slate-900">Current Subscription</p>
                 </div>
-                <IndividualSubscriptionBlock s={s} active={active} />
+                <IndividualSubscriptionBlock
+                  s={s}
+                  active={active}
+                  onUpgrade={s.wirePaymentRequested ? undefined : onConvertUnlimited}
+                  onShowCredits={onShowCredits}
+                  onRenew={s.wirePaymentRequested ? undefined : onRenew}
+                  onEditCert={onEditCert}
+                />
               </div>
             </>
           )}

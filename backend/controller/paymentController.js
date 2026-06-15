@@ -376,6 +376,9 @@ async function applyRenewalToRegistration(registrationId, registrationModel, pay
     update.nextRenewal   = renewalSnapshot;
   } else {
     // IMMEDIATE — plan was expired; activate the renewal right away.
+    // Preserve the expiring plan's invoice as standalone history BEFORE we repoint
+    // registration.invoiceNumber to the renewal invoice (so it isn't lost).
+    await preserveCurrentPlanInvoice(doc, registrationModel, now);
     // subscriptionDate = base (= now for expired plans) so the date shown
     // to the user is when coverage actually resumed, not a future queued date.
     update.subscriptionPlan        = activePlan;
@@ -731,12 +734,18 @@ function computeConversionCharge(doc, registrationModel, asOf = new Date(), targ
       : targetPlan === 'Multiple Years Subscription Plan' ? 55
       : 69;
     unlimitedTotal = targetPlan === 'Multiple Years Subscription Plan' ? 55 * tYears : unlimitedPpc;
-    currentBaseTotal = oldPlan === '1 Year Subscription Plan' ? 69
-      : oldPlan === 'Multiple Years Subscription Plan' ? 55 * oldYears
-      : Number(doc.price || 0);
+    // Credit basis = the actual price the admin set on the plan (so editing Price feeds
+    // the credit), falling back to standard plan pricing for legacy records.
+    currentBaseTotal = Number(doc.price) > 0
+      ? Number(doc.price)
+      : oldPlan === '1 Year Subscription Plan' ? 69
+        : oldPlan === 'Multiple Years Subscription Plan' ? 55 * oldYears
+          : 0;
   }
 
   // ── Prorated credit for the unused portion of the current base term ──────────
+  // Unused-time fraction model (same for individuals and airlines): the paid amount
+  // prorated by remaining time over the actual term (subscriptionDate → expirationDate).
   let credit = 0;
   const currentExpiry = doc.expirationDate ? new Date(doc.expirationDate) : null;
   if (currentExpiry && currentExpiry > asOf && currentBaseTotal > 0) {
@@ -823,6 +832,39 @@ async function preserveInvoiceAsHistory(doc, registrationModel, { invoiceNumber,
   } catch (e) {
     console.warn('[preserveInvoiceAsHistory] non-critical:', e.message);
   }
+}
+
+/**
+ * preserveCurrentPlanInvoice
+ *
+ * Snapshots the registration's CURRENT (pre-change) plan invoice into a standalone
+ * Invoice doc before a renewal/activation repoints registration.invoiceNumber to the
+ * new invoice. Without this, a synthetic-only prior invoice (admin/wire-created, no
+ * standalone Invoice doc) is erased from history when the number is overwritten.
+ * No-op when the current invoice is already backed by a real Invoice/Payment doc.
+ */
+async function preserveCurrentPlanInvoice(doc, registrationModel, asOf = new Date()) {
+  if (!doc?.invoiceNumber) return;
+  const isAirline = registrationModel !== 'Individual';
+  const oldBaseHolders = Math.max(
+    1,
+    Number(doc.committedCount || doc.holderCountValue || doc.certificateHolders?.length || 1)
+      - allHolderGroupSlots(doc.holderGroups),
+  );
+  const oldYears = doc.subscriptionPlan === 'Multiple Years Subscription Plan'
+    ? Math.max(2, Number(doc.multiYearCount || 2)) : 1;
+  const oldAmount = isAirline
+    ? Number(doc.pricePerCertificate || doc.pricePerCert || 0) * oldBaseHolders * oldYears
+    : Number(doc.price || 0);
+  const oldSnap = buildInvoiceSnapshot(doc.toObject(), registrationModel, oldAmount, doc.subscriptionDate || asOf);
+  oldSnap.subtotal = oldSnap.totalPaid = oldAmount;
+  await preserveInvoiceAsHistory(doc, registrationModel, {
+    invoiceNumber: doc.invoiceNumber,
+    snapshot:      oldSnap,
+    amountDollars: oldAmount,
+    paidAt:        doc.subscriptionDate || asOf,
+    draft:         doc.invoiceDraft,
+  });
 }
 
 /**
@@ -2312,6 +2354,10 @@ async function performQueuedRenewalActivation(doc, Model, registrationModel, byA
   const nr  = doc.nextRenewal;
   const now = new Date();
 
+  // Preserve the outgoing plan's invoice as standalone history before invoiceNumber is
+  // repointed to the queued renewal's invoice (so the prior period isn't lost).
+  await preserveCurrentPlanInvoice(doc, registrationModel, now);
+
   // Mark the standalone Renewal doc as active
   if (doc.nextRenewalId) {
     await Renewal.findByIdAndUpdate(doc.nextRenewalId, {
@@ -2958,7 +3004,10 @@ exports.adminConvertToUnlimited = async (req, res) => {
         paymentMethod:         invoiceDraft?.paymentMethod || 'manual',
         existingInvoiceNumber: invoiceNum,
         purpose:               'convert-unlimited',
-        lineItems:             buildConversionLineItems(meta, charge, registrationModel),
+        // Admin-edited line items (from the inline upgrade editor) win; else auto-build.
+        lineItems:             invoiceDraft?.lineItems?.length
+          ? invoiceDraft.lineItems
+          : buildConversionLineItems(meta, charge, registrationModel),
         draftOverrides:        invoiceDraft || null,
         adminGenerated:        true,
       });
