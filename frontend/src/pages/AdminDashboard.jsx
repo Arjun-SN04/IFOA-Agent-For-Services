@@ -4778,8 +4778,11 @@ async function generateIFOAInvoicePDF(inv) {
 
   const FY = 48
   line(ML, FY + 18, ML + W, FY + 18, BORDER, 0.5)
-  const footerText = 'Bank:  Bank of America     Account owner:  IFOA USA Corp     SWIFT:  BOFAUS3N     Account:  8981 5632 1560'
-  const ftw = fontReg.widthOfTextAtSize(footerText, 7.5)
+  const footerText = 'Bank:  Banque Revolut Bank UAB     Account owner:  International Flight Operations Academy GmbH     BIC:  REVOLT21     Intermediary BIC:  CHASGB2L     Account:  LT04 3250 0415 2968 6697'
+  let fSize = 7.5
+  while (fontReg.widthOfTextAtSize(footerText, fSize) > W && fSize > 4) fSize -= 0.25
+  const ftw = fontReg.widthOfTextAtSize(footerText, fSize)
+  page.drawText(footerText, { x: (width - ftw) / 2, y: FY + 8, size: fSize, font: fontReg, color: MID })
   const footer2 = 'Email:  agent@theifoa.com     Mobile:  +1 508 838 5880     Website:  theifoa.com'
   const ft2w = fontReg.widthOfTextAtSize(footer2, 7)
   page.drawText(footer2, { x: (width - ft2w) / 2, y: FY - 3, size: 7, font: fontReg, color: MUTED })
@@ -5090,7 +5093,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                   <div className="grid sm:grid-cols-2 gap-4 mb-8">
                     {[
                       { val: 'card', label: 'Credit / Debit Card', sub: 'Stripe / instant payment', icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="5" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M2 10h20" /></svg> },
-                      ...(isAirline ? [{ val: 'wire', label: 'Wire Transfer', sub: 'Bank transfer — BOFAUS3N', icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> }] : []),
+                      ...(isAirline ? [{ val: 'wire', label: 'Wire Transfer', sub: 'Bank transfer — REVOLT21', icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> }] : []),
                     ].map(opt => (
                       <button key={opt.val} onClick={() => setPaymentMethodSel(opt.val)}
                         className={`rounded-2xl border-2 p-5 text-left transition-all ${paymentMethodSel === opt.val
@@ -5246,7 +5249,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
                     <div className="flex justify-between border-t border-slate-200 pt-2 mt-2"><span className="font-bold">Invoice Sum Tax-Exempt</span><span className="font-black text-red-600">${totalSum.toFixed(2)}</span></div>
                     {inv.paymentMethod === 'wire' && (
                       <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] text-slate-500">
-                        Footer will include: <span className="font-semibold text-slate-600">Bank of America · IFOA USA Corp · SWIFT: BOFAUS3N · Account: 8981 5632 1560</span>
+                        Footer will include: <span className="font-semibold text-slate-600">Banque Revolut Bank UAB · International Flight Operations Academy GmbH · BIC: REVOLT21 · Intermediary BIC: CHASGB2L · Account: LT04 3250 0415 2968 6697</span>
                       </div>
                     )}
                   </div>

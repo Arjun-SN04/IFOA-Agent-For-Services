@@ -1973,10 +1973,10 @@ function WireRequestSentView({ onClose }) {
           <p className="text-sm text-slate-500 mb-4 max-w-xs leading-relaxed">Our team will review your request. Once approved, your requested plan activates automatically.</p>
           <div className="w-full max-w-xs rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 mb-6 text-left space-y-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-3">Bank Details for Wire Transfer</p>
-            {[['Bank', 'Bank of America'], ['Account Owner', 'IFOA USA Corp'], ['SWIFT', 'BOFAUS3N'], ['Account #', '8981 5632 1560']].map(([k, v]) => (
-              <div key={k} className="flex justify-between text-sm">
-                <span className="text-slate-400 font-medium">{k}</span>
-                <span className="font-bold text-slate-800">{v}</span>
+            {[['Bank', 'Banque Revolut Bank UAB'], ['Account Owner', 'International Flight Operations Academy GmbH'], ['BIC', 'REVOLT21'], ['Intermediary BIC', 'CHASGB2L'], ['Account #', 'LT04 3250 0415 2968 6697']].map(([k, v]) => (
+              <div key={k} className="flex items-start justify-between gap-3 text-sm">
+                <span className="text-slate-400 font-medium whitespace-nowrap">{k}</span>
+                <span className="font-bold text-slate-800 text-right">{v}</span>
               </div>
             ))}
           </div>

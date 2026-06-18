@@ -44,10 +44,10 @@ function WireTransferSuccess({ onClose }) {
       <p className="text-sm text-gray-500 mb-2 max-w-xs leading-relaxed">Notification has been sent to admin. Our team will review your registration and generate a wire transfer invoice within 1 business day.</p>
       <div className="w-full max-w-xs rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 mb-7 text-left space-y-2">
         <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-3">Bank Details for Wire Transfer</p>
-        {[['Bank', 'Bank of America'],['Account Owner', 'IFOA USA Corp'],['SWIFT', 'BOFAUS3N'],['Account #', '8981 5632 1560']].map(([k,v]) => (
-          <div key={k} className="flex justify-between text-sm">
-            <span className="text-gray-400 font-medium">{k}</span>
-            <span className="font-bold text-gray-800">{v}</span>
+        {[['Bank', 'Banque Revolut Bank UAB'],['Account Owner', 'International Flight Operations Academy GmbH'],['BIC', 'REVOLT21'],['Intermediary BIC', 'CHASGB2L'],['Account #', 'LT04 3250 0415 2968 6697']].map(([k,v]) => (
+          <div key={k} className="flex items-start justify-between gap-3 text-sm">
+            <span className="text-gray-400 font-medium whitespace-nowrap">{k}</span>
+            <span className="font-bold text-gray-800 text-right">{v}</span>
           </div>
         ))}
       </div>
@@ -348,9 +348,9 @@ export default function AirlinesStep4Payment({ data, update, onBack, onSubmit, o
             <p className="text-xs text-gray-500 leading-relaxed">Request an invoice — admin will generate a wire-transfer invoice for your company within 1 business day.</p>
             {selectedPaymentMethod === 'wire' && (
               <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-700 space-y-1">
-                <p className="font-black uppercase tracking-widest text-[9px] text-slate-400 mb-1.5">Bank of America — Wire Details</p>
-                {[['Account Owner','IFOA USA Corp'],['SWIFT','BOFAUS3N'],['Account #','8981 5632 1560']].map(([k,v]) => (
-                  <div key={k} className="flex justify-between"><span className="text-slate-400">{k}</span><span className="font-bold text-slate-800">{v}</span></div>
+                <p className="font-black uppercase tracking-widest text-[9px] text-slate-400 mb-1.5">Banque Revolut Bank UAB — Wire Details</p>
+                {[['Account Owner','International Flight Operations Academy GmbH'],['BIC','REVOLT21'],['Intermediary BIC','CHASGB2L'],['Account #','LT04 3250 0415 2968 6697']].map(([k,v]) => (
+                  <div key={k} className="flex items-start justify-between gap-3"><span className="text-slate-400 whitespace-nowrap">{k}</span><span className="font-bold text-slate-800 text-right">{v}</span></div>
                 ))}
               </div>
             )}

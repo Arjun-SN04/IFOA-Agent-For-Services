@@ -216,9 +216,11 @@ export async function generateIFOAInvoicePDF(inv) {
   const FY = 48
   line(ML, FY + 18, ML + W, FY + 18, BORDER, 0.5)
 
-  const footerText = 'Bank:  Bank of America     Account owner:  IFOA USA Corp     SWIFT:  BOFAUS3N     Account:  8981 5632 1560'
-  const ftw = fontReg.widthOfTextAtSize(footerText, 7.5)
-  page.drawText(footerText, { x: (width - ftw) / 2, y: FY + 8, size: 7.5, font: fontReg, color: MID })
+  const footerText = 'Bank:  Banque Revolut Bank UAB     Account owner:  International Flight Operations Academy GmbH     BIC:  REVOLT21     Intermediary BIC:  CHASGB2L     Account:  LT04 3250 0415 2968 6697'
+  let fSize = 7.5
+  while (fontReg.widthOfTextAtSize(footerText, fSize) > W && fSize > 4) fSize -= 0.25
+  const ftw = fontReg.widthOfTextAtSize(footerText, fSize)
+  page.drawText(footerText, { x: (width - ftw) / 2, y: FY + 8, size: fSize, font: fontReg, color: MID })
 
   const footer2 = 'Email:  agent@theifoa.com     Mobile:  +1 508 838 5880     Website:  theifoa.com'
   const ft2w = fontReg.widthOfTextAtSize(footer2, 7)
