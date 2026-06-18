@@ -1787,11 +1787,20 @@ exports.saveInvoiceDraft = async (req, res) => {
       paymentDoc.invoiceNumber &&
       requestedInvoiceNumber !== paymentDoc.invoiceNumber;
 
+    // Exclude THIS payment AND its own registration mirror (registration.invoiceNumber
+    // / nextRenewal + the linked Invoice doc) from the uniqueness check — those carry
+    // the same number for the same logical invoice, so they must not count as a
+    // collision when (re)assigning it. Otherwise re-saving the same invoice fails with
+    // a false "already exists".
+    const ownExclusions = {
+      excludePaymentId:         paymentDoc._id,
+      excludeRegistrationId:    paymentDoc.registrationId || null,
+      excludeRegistrationModel: paymentDoc.registrationModel || null,
+    };
+
     // Admin may change invoice number, but it must remain globally unique.
     if (changingInvoiceNumber) {
-      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
-        excludePaymentId: paymentDoc._id,
-      });
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, ownExclusions);
       if (alreadyUsed) {
         return res.status(400).json({
           success: false,
@@ -1803,9 +1812,7 @@ exports.saveInvoiceDraft = async (req, res) => {
 
     // If this legacy payment has no invoice number yet, assign one only after DB uniqueness check.
     if (requestedInvoiceNumber && !paymentDoc.invoiceNumber) {
-      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, {
-        excludePaymentId: paymentDoc._id,
-      });
+      const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber, ownExclusions);
       if (alreadyUsed) {
         return res.status(400).json({
           success: false,

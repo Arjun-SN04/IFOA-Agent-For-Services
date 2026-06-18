@@ -480,4 +480,180 @@ router.delete('/by-registration/:regId/:invoiceNumber', auth, adminOnly, async (
   }
 });
 
+// ── GET /api/invoices/admin/all (admin) ──────────────────────────────────────
+// Returns EVERY invoice generated so far, aggregated across all sources and
+// de-duplicated by invoice number. The canonical Invoice doc wins; payment- and
+// renewal-derived invoices (legacy / wire / manual) that have no Invoice doc are
+// included so the admin truly sees everything.
+router.get('/admin/all', auth, adminOnly, async (req, res) => {
+  try {
+    const [invoices, payments, renewals] = await Promise.all([
+      Invoice.find({}).sort({ createdAt: -1 }).lean(),
+      Payment.find({ isPaid: true })
+        .select('_id invoiceNumber amountDollars paidAt createdAt registrationId registrationModel paymentMethodType purpose invoiceSnapshot')
+        .lean(),
+      Renewal.find({})
+        .select('_id invoiceNumber price createdAt paidAt registrationId registrationModel plan status')
+        .lean(),
+    ]);
+
+    const map = new Map();
+
+    for (const inv of invoices) {
+      const num = normalizeInvoiceNumber(inv.invoiceNumber);
+      if (!num || map.has(num)) continue;
+      map.set(num, {
+        invoiceNumber:     num,
+        invoiceId:         inv._id,
+        source:            'invoice',
+        registrationId:    inv.registrationId,
+        registrationModel: inv.registrationModel,
+        recipientName:     inv.recipientName || inv.draft?.recipientName || '',
+        recipientCompany:  inv.recipientCompany || inv.draft?.recipientCompany || '',
+        totalAmount:       inv.totalAmount || 0,
+        status:            inv.status || '',
+        purpose:           inv.purpose || 'payment',
+        wirePending:       !!inv.wirePending,
+        adminGenerated:    !!inv.adminGenerated,
+        createdAt:         inv.createdAt,
+        issueDate:         inv.issueDate,
+        paidAt:            inv.paidAt,
+        draft:             inv.draft || null,
+      });
+    }
+
+    for (const p of payments) {
+      const num = normalizeInvoiceNumber(p.invoiceNumber);
+      if (!num || map.has(num)) continue;
+      const snap = p.invoiceSnapshot || {};
+      map.set(num, {
+        invoiceNumber:     num,
+        invoiceId:         null,
+        source:            'payment',
+        registrationId:    p.registrationId,
+        registrationModel: p.registrationModel || '',
+        recipientName:     snap.name || '',
+        recipientCompany:  snap.airlineName || '',
+        totalAmount:       p.amountDollars || 0,
+        status:            'paid',
+        purpose:           p.purpose || 'payment',
+        wirePending:       false,
+        adminGenerated:    false,
+        createdAt:         p.createdAt,
+        issueDate:         p.paidAt || p.createdAt,
+        paidAt:            p.paidAt,
+        draft:             null,
+      });
+    }
+
+    for (const r of renewals) {
+      const num = normalizeInvoiceNumber(r.invoiceNumber);
+      if (!num || map.has(num)) continue;
+      map.set(num, {
+        invoiceNumber:     num,
+        invoiceId:         null,
+        source:            'renewal',
+        registrationId:    r.registrationId,
+        registrationModel: r.registrationModel || '',
+        recipientName:     '',
+        recipientCompany:  '',
+        totalAmount:       r.price || 0,
+        status:            r.status || '',
+        purpose:           'renewal',
+        wirePending:       false,
+        adminGenerated:    false,
+        createdAt:         r.createdAt,
+        issueDate:         r.paidAt || r.createdAt,
+        paidAt:            r.paidAt,
+        draft:             null,
+      });
+    }
+
+    const data = [...map.values()].sort(
+      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+    );
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── DELETE /api/invoices/admin/by-number/:invoiceNumber (admin) ───────────────
+// Hard-deletes an invoice EVERYWHERE and FREES its number so it can be reused.
+//
+//  - Removes the canonical Invoice doc(s).
+//  - Deletes the Payment doc(s) carrying this number outright (full delete).
+//  - Deletes the Renewal doc(s) carrying this number outright.
+//  - Clears the number from every registration field (invoiceNumber + nextRenewal).
+//  - Pulls it from every registration's hiddenInvoiceNumbers list.
+//
+// After this the number is no longer "taken" anywhere, so generateInvoiceNumber()
+// /peekNextInvoiceNumber() will hand it back out (lowest-free-first).
+// Shared full-delete: removes every record carrying `invoiceNumber` and frees it.
+async function hardDeleteInvoiceNumber(invoiceNumber) {
+  const num = normalizeInvoiceNumber(invoiceNumber);
+  if (!num) return;
+
+  await Invoice.deleteMany({ invoiceNumber: num });
+  await Payment.deleteMany({ invoiceNumber: num });
+  await Renewal.deleteMany({ invoiceNumber: num });
+
+  // The registration carries a MIRROR of its active invoice (invoiceNumber +
+  // invoiceDraft + invoiceGenerated). The Invoice collection is the source of
+  // truth, so when its doc is deleted the mirror must be invalidated too —
+  // otherwise the admin table still shows "Invoice"/"edit" and the PDF rebuilds
+  // the old number from the stale draft. Match on either the top-level number or
+  // the number baked into the draft.
+  const mirrorMatch = { $or: [{ invoiceNumber: num }, { 'invoiceDraft.invoiceNumber': num }] };
+  const clearMirror = { $set: { invoiceNumber: '', invoiceDraft: null, invoiceGenerated: false } };
+
+  await Promise.all([
+    Individual.updateMany(mirrorMatch, clearMirror),
+    Individual.updateMany({ 'nextRenewal.invoiceNumber': num }, { $set: { 'nextRenewal.invoiceNumber': '' } }),
+    Airlines.updateMany(mirrorMatch, clearMirror),
+    Airlines.updateMany({ 'nextRenewal.invoiceNumber': num }, { $set: { 'nextRenewal.invoiceNumber': '' } }),
+    AirlinesSubscription.updateMany({ invoiceNumber: num }, { $set: { invoiceNumber: '' } }),
+    AirlinesSubscription.updateMany({ 'nextRenewal.invoiceNumber': num }, { $set: { 'nextRenewal.invoiceNumber': '' } }),
+  ]);
+
+  await Promise.all([
+    Individual.updateMany({ hiddenInvoiceNumbers: num }, { $pull: { hiddenInvoiceNumbers: num } }),
+    Airlines.updateMany({ hiddenInvoiceNumbers: num }, { $pull: { hiddenInvoiceNumbers: num } }),
+  ]);
+}
+
+router.delete('/admin/by-number/:invoiceNumber', auth, adminOnly, async (req, res) => {
+  try {
+    const invoiceNumber = normalizeInvoiceNumber(decodeURIComponent(req.params.invoiceNumber));
+    if (!invoiceNumber)
+      return res.status(400).json({ success: false, message: 'invoiceNumber required.' });
+
+    await hardDeleteInvoiceNumber(invoiceNumber);
+    res.json({ success: true, message: 'Invoice deleted and its number freed for reuse.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── POST /api/invoices/admin/bulk-delete (admin) ──────────────────────────────
+// Hard-deletes many invoices at once. Body: { invoiceNumbers: string[] }.
+router.post('/admin/bulk-delete', auth, adminOnly, async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.invoiceNumbers) ? req.body.invoiceNumbers : [];
+    const numbers = [...new Set(list.map(normalizeInvoiceNumber).filter(Boolean))];
+    if (!numbers.length)
+      return res.status(400).json({ success: false, message: 'invoiceNumbers array required.' });
+
+    for (const num of numbers) {
+      // eslint-disable-next-line no-await-in-loop
+      await hardDeleteInvoiceNumber(num);
+    }
+
+    res.json({ success: true, deleted: numbers.length, message: `${numbers.length} invoice(s) deleted.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

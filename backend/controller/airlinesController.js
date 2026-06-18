@@ -7,6 +7,7 @@ const XLSX = require('xlsx');
 const {
   generateInvoiceNumber,
   isInvoiceNumberTaken,
+  isInvoiceNumberTakenByOtherRegistration,
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice }  = require('../services/invoiceService');
@@ -667,6 +668,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
+      'wireRequestDetails',
       'holderGroups',
       // Subscription period is server/admin-controlled — a user who could set
       // these directly would be able to extend their own coverage for free.
@@ -687,6 +689,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
       'invoiceGenerated', 'invoiceNumber', 'invoiceStatus', 'invoiceDraft',
       'wirePaymentRequested', 'wirePaymentRequestedAt',
       'amountPaid', 'wireRequestPurpose', 'wireRequestRenewalPlan', 'wireRequestAdditionalCount',
+      'wireRequestDetails',
       'holderGroups',
       'subscriptionDate', 'expirationDate', 'multiYearCount',
       // User-editable profile fields
@@ -735,7 +738,10 @@ exports.updateAirlinesSubscription = async (req, res) => {
 
       const currentInvoiceNumber = normalizeInvoiceNumber(currentDoc.invoiceNumber);
       if (requestedInvoiceNumber && requestedInvoiceNumber !== currentInvoiceNumber) {
-        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber);
+        // Only a DIFFERENT registration's number is a real collision — this
+        // registration's own Invoice/Payment (often created moments earlier in the
+        // same save) must not block pointing the registration at it.
+        const alreadyUsed = await isInvoiceNumberTakenByOtherRegistration(requestedInvoiceNumber, req.params.id);
         if (alreadyUsed) {
           return res.status(400).json({
             success: false,

@@ -6,6 +6,7 @@ const XLSX = require('xlsx');
 const {
   generateInvoiceNumber,
   isInvoiceNumberTaken,
+  isInvoiceNumberTakenByOtherRegistration,
   normalizeInvoiceNumber,
 } = require('../services/invoiceNumberService');
 const { createOrUpdateInvoice } = require('../services/invoiceService');
@@ -663,7 +664,10 @@ exports.updateIndividual = async (req, res) => {
 
       const currentInvoiceNumber = normalizeInvoiceNumber(currentDoc.invoiceNumber);
       if (requestedInvoiceNumber && requestedInvoiceNumber !== currentInvoiceNumber) {
-        const alreadyUsed = await isInvoiceNumberTaken(requestedInvoiceNumber);
+        // Only a DIFFERENT registration's number is a real collision — this
+        // registration's own Invoice/Payment (often created moments earlier in the
+        // same save) must not block pointing the registration at it.
+        const alreadyUsed = await isInvoiceNumberTakenByOtherRegistration(requestedInvoiceNumber, req.params.id);
         if (alreadyUsed) {
           return res.status(400).json({
             success: false,

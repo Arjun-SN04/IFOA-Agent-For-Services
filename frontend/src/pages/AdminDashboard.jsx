@@ -694,6 +694,22 @@ function triggerInvoiceDownload({ url, filename }) {
 
 // ─── InvoiceDraftFields — shared editable invoice form (edit + create) ────────
 function InvoiceDraftFields({ form, setForm, onGenerateNumber, generatingNumber }) {
+  // Step the sequence number in "Invoice US-<n>-<yy>" up/down (min 1).
+  const bumpInvoiceNumber = (delta) => setForm(f => {
+    const cur = String(f.invoiceNumber || '').trim()
+    if (!cur) return f
+    const std = cur.match(/^(.*?US-)(\d+)(-\d{2})(.*)$/i)
+    if (std) {
+      const next = Math.max(1, Number(std[2]) + delta)
+      return { ...f, invoiceNumber: `${std[1]}${next}${std[3]}${std[4]}` }
+    }
+    const gen = cur.match(/^(\D*?)(\d+)(.*)$/)
+    if (gen) {
+      const next = Math.max(1, Number(gen[2]) + delta)
+      return { ...f, invoiceNumber: `${gen[1]}${next}${gen[3]}` }
+    }
+    return f
+  })
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
@@ -701,12 +717,32 @@ function InvoiceDraftFields({ form, setForm, onGenerateNumber, generatingNumber 
         <div className="sm:col-span-2">
           <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Invoice #</p>
           <div className="flex items-center gap-1.5">
-            <input
-              value={form.invoiceNumber || ''}
-              onChange={e => setForm(f => ({ ...f, invoiceNumber: e.target.value }))}
-              placeholder={onGenerateNumber ? 'Blank = auto on save' : ''}
-              className="flex-1 min-w-0 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
+            <div className="relative flex-1 min-w-0">
+              <input
+                value={form.invoiceNumber || ''}
+                onChange={e => setForm(f => ({ ...f, invoiceNumber: e.target.value }))}
+                placeholder={onGenerateNumber ? 'Blank = auto on save' : ''}
+                className="w-full text-xs border border-slate-200 rounded-lg pl-2 pr-7 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                <button
+                  type="button"
+                  aria-label="Increase invoice number"
+                  onClick={() => bumpInvoiceNumber(1)}
+                  className="h-[13px] w-5 flex items-center justify-center text-slate-400 hover:text-blue-600"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m6 15 6-6 6 6" /></svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Decrease invoice number"
+                  onClick={() => bumpInvoiceNumber(-1)}
+                  className="h-[13px] w-5 flex items-center justify-center text-slate-400 hover:text-blue-600"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>
+                </button>
+              </div>
+            </div>
             {onGenerateNumber && (
               <button
                 type="button"
@@ -2131,6 +2167,9 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
                   invoiceRecord = {
                     ...record,
                     subscriptionPlan: record.wireRequestRenewalPlan || record.subscriptionPlan,
+                    // Bill the renewal at the committed wire amount, not the base plan's
+                    // stale totalAmount/amountPaid (which the modal would otherwise use).
+                    ...(requestedAmount != null ? { totalAmount: requestedAmount, amountPaid: requestedAmount } : {}),
                     // Only force a fresh number when generating anew; editing keeps the existing one.
                     ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: null }),
                     _wireInvoicePurpose: 'renewal',
@@ -2148,6 +2187,11 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
                     holderCountValue: String(additional),
                     pricePerCertificate: ppc,
                     pricePerCert: ppc,
+                    // Bill only the upgrade's committed amount (ppc × additional), not the
+                    // base plan's stale totalAmount/amountPaid that the modal would reuse.
+                    ...(requestedAmount != null
+                      ? { totalAmount: requestedAmount, amountPaid: requestedAmount }
+                      : { totalAmount: ppc * additional, amountPaid: ppc * additional }),
                     ...(wireInvoiceGenerated ? {} : { invoiceNumber: '', invoiceDraft: null }),
                     _wireInvoicePurpose: 'holder-upgrade',
                   }
@@ -2312,11 +2356,15 @@ function WireRequestSection({ record, onRecordUpdated, onGenerateInvoice, onEdit
             <ViewField label="Requested Amount" value={fmtMoney(record.wireRequestDetails.amount)} />
           )}
           <ViewField label="Invoice Status" value={record.invoiceStatus} />
-          {record.invoiceNumber && !(
-            // For renewal/upgrade wire in initial "Wire Requested" state, record.invoiceNumber
-            // is the CURRENT plan's invoice — hide it until admin generates the new invoice.
-            (isRenewalRequest || isHolderUpgradeRequest) && record.invoiceStatus === 'Wire Requested'
-          ) && <ViewField label="Invoice #" value={record.invoiceNumber} />}
+          {(() => {
+            // Wire renewal/upgrade/convert invoices live in their own doc with their
+            // own number (stashed on wireRequestDetails when generated). Never show the
+            // base plan's record.invoiceNumber for these — show the generated wire
+            // number once it exists, otherwise nothing (still "Wire Requested").
+            const isWirePurpose = isRenewalRequest || isHolderUpgradeRequest || isConversionRequest
+            const num = isWirePurpose ? record.wireRequestDetails?.invoiceNumber : record.invoiceNumber
+            return num ? <ViewField label="Invoice #" value={num} /> : null
+          })()}
           {(() => {
             // Wire request amount owed = exactly what the airline committed to at
             // checkout (wireRequestDetails.amount). Prefer it as the single source of
@@ -4860,7 +4908,10 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   // initialStep === 'select' means this is a brand-new generate flow (no existing invoice yet).
   // Don't show "Invoice Generated" badge or "Edit Invoice" header until admin actually saves.
   const isNewInvoice = initialStep === 'select'
-  const hasInvoice = !isNewInvoice && hasExistingInvoice(record)
+  // Once the admin saves (number assigned), treat the invoice as existing for the
+  // rest of this modal's life so the "Generate Invoice" CTA never reappears.
+  const [invoiceSaved, setInvoiceSaved] = useState(false)
+  const hasInvoice = invoiceSaved || (!isNewInvoice && hasExistingInvoice(record))
 
   const [paymentMethodSel, setPaymentMethodSel] = useState(
     initialStep === 'edit' ? defaultPaymentMethod : (isAirline ? 'wire' : 'card')
@@ -5020,6 +5071,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
     try {
       await onSaveInvoice(record._id, type, payload)
       setSavedSnapshot(serializeInvoice(inv))
+      setInvoiceSaved(true)
     } catch (err) {
       setSaveError(err?.response?.data?.message || 'Could not save invoice changes.')
     } finally {
@@ -6444,6 +6496,13 @@ export default function AdminDashboard() {
         ? {
             invoiceStatus: payload.invoiceStatus,
             invoiceGenerated: payload.invoiceGenerated,
+            // The wire invoice lives in its own doc with its own number — stash that
+            // number on wireRequestDetails so the wire-request panel shows the
+            // generated number (US-4-..), not the base plan's invoiceNumber.
+            wireRequestDetails: {
+              ...(invoiceModal?.record?.wireRequestDetails || {}),
+              invoiceNumber: payload.invoiceNumber,
+            },
           }
         : {
             invoiceStatus: payload.invoiceStatus,
@@ -6453,7 +6512,16 @@ export default function AdminDashboard() {
           }
 
       const mergeRecord = (x, saved) => wirePurpose
-        ? { ...x, ...saved }
+        ? {
+            ...x, ...saved,
+            // Ensure the generated wire invoice number is reflected immediately,
+            // even if the backend response doesn't echo wireRequestDetails.
+            wireRequestDetails: {
+              ...(x.wireRequestDetails || {}),
+              ...(saved.wireRequestDetails || {}),
+              invoiceNumber: payload.invoiceNumber,
+            },
+          }
         : {
             ...x, ...saved,
             invoiceDraft: payload.invoiceDraft,
@@ -6505,10 +6573,14 @@ export default function AdminDashboard() {
     // reusing the registration's existing invoiceNumber (which is already taken by a prior
     // invoice and would collide on save). Uses peek — no counter burned until saved.
     if (forceFresh) {
+      // Wire renewal/upgrade/convert flows seed their own purpose-specific draft
+      // (line items, credit, etc.) before opening — preserve it. Only a plain new
+      // invoice should drop the registration's stale persisted draft.
+      const keepSeededDraft = Boolean(record._wireInvoicePurpose)
       try {
         const genRes = await generateInvoiceNumber()
         const newNum = genRes.data?.invoiceNumber
-        if (newNum) resolved = { ...resolved, invoiceNumber: newNum, invoiceDraft: null }
+        if (newNum) resolved = { ...resolved, invoiceNumber: newNum, ...(keepSeededDraft ? {} : { invoiceDraft: null }) }
       } catch { /* fall through — keep existing */ }
       return resolved
     }

@@ -68,53 +68,129 @@ async function isInvoiceNumberTaken(invoiceNumber, opts = {}) {
 }
 
 /**
- * Atomically increment the counter and return a unique invoice number.
- * We still verify DB-wide uniqueness before returning for extra safety.
+ * Collect every invoice SEQUENCE number (the {n} in "Invoice US-{n}-{YY}")
+ * currently used ANYWHERE in the DB for a given two-digit year.
+ *
+ * Scans all collections that can hold an invoice number so a sequence is only
+ * considered "free" when no record uses it. Deleting an invoice (which clears
+ * its number from every source) therefore makes that sequence reusable.
+ */
+async function collectUsedSequences(yy) {
+  const regex = new RegExp(`^Invoice US-(\\d+)-${yy}$`);
+  const used = new Set();
+  const add = (value) => {
+    const m = regex.exec(normalizeInvoiceNumber(value));
+    if (m) used.add(Number(m[1]));
+  };
+
+  const [payments, invoices, renewals, individuals, airlines, airSubs] = await Promise.all([
+    Payment.find({}).select('invoiceNumber').lean(),
+    Invoice.find({}).select('invoiceNumber').lean(),
+    Renewal.find({}).select('invoiceNumber').lean(),
+    Individual.find({}).select('invoiceNumber nextRenewal.invoiceNumber').lean(),
+    Airlines.find({}).select('invoiceNumber nextRenewal.invoiceNumber').lean(),
+    AirlinesSubscription.find({}).select('invoiceNumber nextRenewal.invoiceNumber').lean(),
+  ]);
+
+  payments.forEach((d) => add(d.invoiceNumber));
+  invoices.forEach((d) => add(d.invoiceNumber));
+  renewals.forEach((d) => add(d.invoiceNumber));
+  [...individuals, ...airlines, ...airSubs].forEach((d) => {
+    add(d.invoiceNumber);
+    add(d.nextRenewal?.invoiceNumber);
+  });
+
+  return used;
+}
+
+/** Smallest positive integer not present in the used-set (>= startFrom). */
+function lowestMissingSequence(used, startFrom = 1) {
+  let n = startFrom;
+  while (used.has(n)) n += 1;
+  return n;
+}
+
+/**
+ * Generate a unique invoice number, REUSING the lowest free sequence.
+ *
+ * Starts the search at 1 and walks up, so any gap left by a deleted invoice is
+ * filled before advancing past the highest number ever issued. Only when every
+ * sequence 1..max is in use does it move to max+1.
+ *
+ * The per-year counter is kept as a monotonic high-water mark (never decreased)
+ * so other consumers that read it still see a sane upper bound.
  */
 async function generateInvoiceNumber(yearOverride) {
   const useYear = yearOverride || new Date().getFullYear();
   const yy = String(useYear).slice(-2);
 
   for (let attempt = 0; attempt < 50; attempt += 1) {
-    const counter = await InvoiceCounter.findOneAndUpdate(
-      { year: useYear },
-      { $inc: { sequence: 1 } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+    // eslint-disable-next-line no-await-in-loop
+    const used = await collectUsedSequences(yy);
+    const seq = lowestMissingSequence(used);
+    const candidate = `Invoice US-${seq}-${yy}`;
 
-    const candidate = `Invoice US-${counter.sequence}-${yy}`;
-    const taken = await isInvoiceNumberTaken(candidate);
-    if (!taken) return candidate;
+    // Re-verify against a fresh read to guard against a race between the scan and now.
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await isInvoiceNumberTaken(candidate))) {
+      // eslint-disable-next-line no-await-in-loop
+      await InvoiceCounter.updateOne(
+        { year: useYear },
+        { $max: { sequence: seq } },
+        { upsert: true, setDefaultsOnInsert: true },
+      );
+      return candidate;
+    }
   }
 
   throw new Error('Unable to generate a unique invoice number after multiple attempts.');
 }
 
 /**
- * Peek the next invoice number WITHOUT incrementing the persisted counter.
+ * Peek the next invoice number WITHOUT committing it.
  *
- * Used by the admin invoice modal on open so merely viewing (and then cancelling)
- * never burns a sequence number — that left permanent gaps in the invoice numbering.
- * The number is reserved for real only when the invoice is saved, at which point
- * the save path validates uniqueness (isInvoiceNumberTaken) and the payment flow's
- * generateInvoiceNumber() advances/skips as needed.
+ * Returns the same lowest-free sequence generateInvoiceNumber() would assign, but
+ * does not touch the counter — so merely opening (and cancelling) the admin invoice
+ * modal never burns a number. The number is reserved for real only when the invoice
+ * is saved, at which point the save path validates uniqueness.
  */
 async function peekNextInvoiceNumber(yearOverride) {
   const useYear = yearOverride || new Date().getFullYear();
   const yy = String(useYear).slice(-2);
 
-  const counter = await InvoiceCounter.findOne({ year: useYear }).select('sequence').lean();
-  let next = (counter?.sequence || 0) + 1;
-
-  // Skip any candidate already used anywhere in the DB (manual admin invoices may
-  // have consumed numbers without advancing the counter).
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const candidate = `Invoice US-${next}-${yy}`;
-    // eslint-disable-next-line no-await-in-loop
-    if (!(await isInvoiceNumberTaken(candidate))) return candidate;
-    next += 1;
-  }
-  throw new Error('Unable to peek a free invoice number after multiple attempts.');
+  const used = await collectUsedSequences(yy);
+  const seq = lowestMissingSequence(used);
+  return `Invoice US-${seq}-${yy}`;
 }
 
-module.exports = { generateInvoiceNumber, peekNextInvoiceNumber, isInvoiceNumberTaken, normalizeInvoiceNumber };
+/**
+ * True only if `invoiceNumber` is used by some record belonging to a DIFFERENT
+ * registration. A registration's own Invoice/Payment/Renewal/registration fields
+ * are NOT a collision — this lets an admin (re)point a registration at its own
+ * invoice number without a false "already exists" (which happened when an invoice
+ * was created first, then the registration's mirror was written in the same save).
+ */
+async function isInvoiceNumberTakenByOtherRegistration(invoiceNumber, registrationId) {
+  const norm = normalizeInvoiceNumber(invoiceNumber);
+  if (!norm) return false;
+  const regId = String(registrationId || '');
+
+  const [pay, inv, ren, ind, air, asub] = await Promise.all([
+    Payment.findOne({ invoiceNumber: norm, registrationId: { $ne: regId } }).select('_id').lean(),
+    Invoice.findOne({ invoiceNumber: norm, registrationId: { $ne: regId } }).select('_id').lean(),
+    Renewal.findOne({ invoiceNumber: norm, registrationId: { $ne: regId } }).select('_id').lean(),
+    Individual.findOne({ _id: { $ne: regId }, $or: [{ invoiceNumber: norm }, { 'nextRenewal.invoiceNumber': norm }] }).select('_id').lean(),
+    Airlines.findOne({ _id: { $ne: regId }, $or: [{ invoiceNumber: norm }, { 'nextRenewal.invoiceNumber': norm }] }).select('_id').lean(),
+    AirlinesSubscription.findOne({ _id: { $ne: regId }, $or: [{ invoiceNumber: norm }, { 'nextRenewal.invoiceNumber': norm }] }).select('_id').lean(),
+  ]);
+
+  return !!(pay || inv || ren || ind || air || asub);
+}
+
+module.exports = {
+  generateInvoiceNumber,
+  peekNextInvoiceNumber,
+  isInvoiceNumberTaken,
+  isInvoiceNumberTakenByOtherRegistration,
+  normalizeInvoiceNumber,
+};

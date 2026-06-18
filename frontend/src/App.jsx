@@ -17,6 +17,7 @@ import SignupPage from './pages/SignupPage'
 // with ES module namespace objects on Vite 8 dev server
 import AdminDashboard   from './pages/AdminDashboard'
 import AdminProfilePage from './pages/dashboard/AdminProfilePage'
+import AdminInvoicesPage from './pages/dashboard/AdminInvoicesPage'
 
 // Lazy-loaded pages — only downloaded when first visited
 const RegisterPage        = lazy(() => import('./pages/RegisterPage'))
@@ -191,6 +192,7 @@ function App() {
                 <Route path="/admin/airlines" element={<AdminDashboard />} />
                 <Route path="/admin/add-airline" element={<AdminDashboard />} />
                 <Route path="/admin/add-individual" element={<AdminDashboard />} />
+                <Route path="/admin/invoices" element={<AdminInvoicesPage />} />
                 <Route path="/admin/profile" element={<AdminProfilePage />} />
                 <Route path="/admin/faq" element={<FaqPage />} />
               </Route>

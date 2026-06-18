@@ -8,6 +8,7 @@ const adminNav = [
   { to: '/admin',             label: 'Overview',    exact: true },
   { to: '/admin/individuals', label: 'Individuals', exact: true  },
   { to: '/admin/airlines',    label: 'Airlines',    exact: true  },
+  { to: '/admin/invoices',    label: 'Invoices',    exact: true  },
   { to: '/admin/profile',     label: 'Profile',     exact: true  },
 ]
 

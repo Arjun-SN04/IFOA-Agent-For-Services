@@ -4473,28 +4473,30 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
   const handleInvoiceClick = async () => {
     const activeInvoice = String(s.invoiceNumber || '').trim()
     const queuedInvoice = String(s.nextRenewal?.invoiceNumber || '').trim()
-    const normalizeNum = (n) => String(n || '').replace(/^Invoice\s+/i, '').trim().toUpperCase()
 
-    const resp = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.data || {}).catch(() => ({ data: cachedInvoiceDocs || [] }))
+    // The server is the single source of truth for which invoices exist. If the
+    // request succeeds we show EXACTLY what it returns — including an empty list
+    // after an admin delete or an invoice reset (no synthetic rebuild).
+    let resp = null
+    try {
+      resp = await axios.get(`${BASE_URL}/invoices/by-registration/${s._id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then(r => r.data || {})
+    } catch (_) {
+      resp = null
+    }
 
-    const docs = resp?.data || []
-    const hiddenSet = new Set((resp?.hiddenInvoiceNumbers || []).map(normalizeNum))
-
-    setCachedInvoiceDocs(docs)
-
-    if (docs.length > 0) {
+    if (resp) {
+      const docs = resp.data || []
+      setCachedInvoiceDocs(docs)
       onViewAllInvoices?.(docs, s)
       return
     }
 
-    // Admin deleted this registration's invoice — don't rebuild it from the
-    // registration's own invoiceNumber/invoiceDraft fallback below. Open the
-    // invoices modal with an empty list so it shows the "no invoices" state.
-    const curNum = normalizeNum(s.invoiceNumber || s.invoiceDraft?.invoiceNumber)
-    if (curNum && hiddenSet.has(curNum)) {
-      onViewAllInvoices?.([], s)
+    // ── Network error only: fall back to cached docs, then local synthesis ──
+    const docs = cachedInvoiceDocs || []
+    if (docs.length > 0) {
+      onViewAllInvoices?.(docs, s)
       return
     }
 

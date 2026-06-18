@@ -146,6 +146,14 @@ export const createAdminInvoiceDoc = (registrationId, registrationModel, draft, 
 // Admin deletes an invoice — removed for both admin and the airline/individual
 export const deleteInvoice = (registrationId, invoiceNumber) =>
   API.delete(`/invoices/by-registration/${registrationId}/${encodeURIComponent(invoiceNumber)}`)
+// Admin Invoices tab: list every invoice generated so far (de-duplicated by number)
+export const getAllInvoices = () => API.get('/invoices/admin/all')
+// Admin Invoices tab: hard-delete an invoice everywhere and free its number for reuse
+export const hardDeleteInvoice = (invoiceNumber) =>
+  API.delete(`/invoices/admin/by-number/${encodeURIComponent(invoiceNumber)}`)
+// Admin Invoices tab: hard-delete many invoices in one call
+export const bulkHardDeleteInvoices = (invoiceNumbers) =>
+  API.post('/invoices/admin/bulk-delete', { invoiceNumbers })
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)
