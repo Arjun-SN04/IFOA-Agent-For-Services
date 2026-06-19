@@ -12,6 +12,7 @@
 const SupportConversation = require('../models/SupportConversation');
 const SupportMessage      = require('../models/SupportMessage');
 const User                = require('../models/User');
+const Airlines            = require('../models/Airlines');
 
 // ── Rooms ───────────────────────────────────────────────────────────────────
 const ADMIN_ROOM = 'support:admins';
@@ -39,6 +40,7 @@ function summarize(conv) {
     role:            conv.role,
     name:            conv.name,
     email:           conv.email,
+    logoUrl:         conv.logoUrl || '',
     lastMessageBody: conv.lastMessageBody,
     lastMessageAt:   conv.lastMessageAt,
     lastSenderRole:  conv.lastSenderRole,
@@ -59,11 +61,17 @@ async function getOrCreateConversation(userId) {
   if (!userDoc || userDoc.role === 'admin') {
     throw Object.assign(new Error('Only airline/individual users have a support conversation.'), { status: 400 });
   }
+  let logoUrl = '';
+  if (userDoc.role === 'airline') {
+    const airline = await Airlines.findOne({ email: userDoc.email }).select('logoUrl').lean();
+    logoUrl = airline?.logoUrl || '';
+  }
   conv = await SupportConversation.create({
-    user:  userId,
-    role:  userDoc.role,
-    name:  deriveName(userDoc),
-    email: userDoc.email || '',
+    user:    userId,
+    role:    userDoc.role,
+    name:    deriveName(userDoc),
+    email:   userDoc.email || '',
+    logoUrl,
   });
   return conv;
 }
@@ -74,9 +82,31 @@ async function getOrCreateConversation(userId) {
 async function listConversations({ role } = {}) {
   const query = {};
   if (role === 'airline' || role === 'individual') query.role = role;
-  return SupportConversation.find(query)
+  const convs = await SupportConversation.find(query)
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .lean();
+
+  // Back-fill logoUrl for airline convs that predate this field
+  const missing = convs.filter(c => c.role === 'airline' && !c.logoUrl && c.email);
+  if (missing.length > 0) {
+    const emails = [...new Set(missing.map(c => c.email))];
+    const airlines = await Airlines.find({ email: { $in: emails } }).select('email logoUrl').lean();
+    const logoByEmail = {};
+    for (const a of airlines) if (a.logoUrl) logoByEmail[a.email] = a.logoUrl;
+    const updates = missing.filter(c => logoByEmail[c.email]);
+    // Fire-and-forget saves so the response isn't delayed
+    if (updates.length > 0) {
+      SupportConversation.bulkWrite(updates.map(c => ({
+        updateOne: { filter: { _id: c._id }, update: { $set: { logoUrl: logoByEmail[c.email] } } },
+      }))).catch(() => {});
+      // Patch the in-memory results so admin sees it immediately
+      for (const c of convs) {
+        if (c.role === 'airline' && logoByEmail[c.email]) c.logoUrl = logoByEmail[c.email];
+      }
+    }
+  }
+
+  return convs;
 }
 
 /**

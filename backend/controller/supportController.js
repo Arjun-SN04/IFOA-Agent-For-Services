@@ -18,6 +18,7 @@
  *   POST /api/support/conversations/:id/read
  */
 const SupportConversation = require('../models/SupportConversation');
+const SupportMessage      = require('../models/SupportMessage');
 const support = require('../services/supportService');
 
 const io = (req) => req.app.get('io');
@@ -117,6 +118,103 @@ exports.replyToConversation = async (req, res) => {
     res.status(201).json({ success: true, data: message });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: edit a message ─────────────────────────────────────────────────────
+exports.editMessage = async (req, res) => {
+  try {
+    const { id, msgId } = req.params;
+    const body = String(req.body.body || '').trim();
+    if (!body) return res.status(400).json({ success: false, message: 'Body required.' });
+
+    const msg = await SupportMessage.findOne({ _id: msgId, conversation: id, senderRole: 'admin' });
+    if (!msg) return res.status(404).json({ success: false, message: 'Message not found.' });
+
+    msg.body     = body;
+    msg.edited   = true;
+    msg.editedAt = new Date();
+    await msg.save();
+
+    const ioInst = io(req);
+    if (ioInst) {
+      const conv = await SupportConversation.findById(id).select('user').lean();
+      if (conv) {
+        const payload = { conversationId: id, message: msg.toObject() };
+        ioInst.to(support.userRoom(conv.user)).emit('support:message-edited', payload);
+        ioInst.to(support.ADMIN_ROOM).emit('support:message-edited', payload);
+      }
+    }
+
+    res.json({ success: true, data: msg });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: delete a single message ───────────────────────────────────────────
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { id, msgId } = req.params;
+    const msg = await SupportMessage.findOne({ _id: msgId, conversation: id });
+    if (!msg) return res.status(404).json({ success: false, message: 'Message not found.' });
+
+    await msg.deleteOne();
+
+    // If this was the last message, update the conversation preview
+    const conv = await SupportConversation.findById(id);
+    if (!conv) return res.json({ success: true });
+
+    const lastMsg = await SupportMessage.findOne({ conversation: id }).sort({ createdAt: -1 });
+    conv.lastMessageBody = lastMsg ? lastMsg.body.slice(0, 200) : '';
+    conv.lastMessageAt   = lastMsg ? lastMsg.createdAt : null;
+    conv.lastSenderRole  = lastMsg ? lastMsg.senderRole : null;
+    await conv.save();
+
+    const ioInst = io(req);
+    if (ioInst) {
+      const payload = { conversationId: id, messageId: msgId };
+      ioInst.to(support.userRoom(conv.user)).emit('support:message-deleted', payload);
+      ioInst.to(support.ADMIN_ROOM).emit('support:message-deleted', payload);
+      const summary = support.summarize(conv);
+      ioInst.to(support.userRoom(conv.user)).emit('support:conversation', summary);
+      ioInst.to(support.ADMIN_ROOM).emit('support:conversation', summary);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: delete all messages in a conversation ──────────────────────────────
+exports.deleteConversationMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conv = await SupportConversation.findById(id);
+    if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    await SupportMessage.deleteMany({ conversation: id });
+
+    conv.lastMessageBody  = '';
+    conv.lastMessageAt    = null;
+    conv.lastSenderRole   = null;
+    conv.adminUnread      = 0;
+    conv.userUnread       = 0;
+    await conv.save();
+
+    const ioInst = io(req);
+    if (ioInst) {
+      ioInst.to(support.userRoom(conv.user)).emit('support:messages-cleared', { conversationId: id });
+      ioInst.to(support.ADMIN_ROOM).emit('support:messages-cleared', { conversationId: id });
+      const summary = support.summarize(conv);
+      ioInst.to(support.userRoom(conv.user)).emit('support:conversation', summary);
+      ioInst.to(support.ADMIN_ROOM).emit('support:conversation', summary);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 

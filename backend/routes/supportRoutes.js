@@ -25,7 +25,10 @@ router.post('/me/read',     ctrl.markMyRead);
 // ── Admin ─────────────────────────────────────────────────────────────────────
 router.get('/conversations',              adminOnly, ctrl.listConversations);
 router.get('/conversations/:id',          adminOnly, ctrl.getConversation);
-router.post('/conversations/:id/messages', adminOnly, ctrl.replyToConversation);
-router.post('/conversations/:id/read',     adminOnly, ctrl.markConversationRead);
+router.post('/conversations/:id/messages',              adminOnly, ctrl.replyToConversation);
+router.patch('/conversations/:id/messages/:msgId',     adminOnly, ctrl.editMessage);
+router.delete('/conversations/:id/messages/:msgId',    adminOnly, ctrl.deleteMessage);
+router.delete('/conversations/:id/messages',           adminOnly, ctrl.deleteConversationMessages);
+router.post('/conversations/:id/read',                 adminOnly, ctrl.markConversationRead);
 
 module.exports = router;

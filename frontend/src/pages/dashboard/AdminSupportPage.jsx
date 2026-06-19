@@ -6,12 +6,16 @@
  * selected conversation thread with a reply composer. Real-time via Socket.IO.
  */
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getSocket } from '../../services/socket'
 import {
   getSupportConversations,
   getSupportConversation,
   sendSupportReply,
   markSupportConvRead,
+  editSupportMessage,
+  deleteSupportMessage,
+  deleteSupportMessages,
 } from '../../services/api'
 
 const fmtTime = (d) => {
@@ -24,10 +28,44 @@ const fmtTime = (d) => {
     : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+const fmtDateSep = (d) => {
+  const dt = new Date(d)
+  if (Number.isNaN(dt.getTime())) return ''
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today - 86400000)
+  const msgDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate())
+  if (msgDay.getTime() === today.getTime()) return 'Today'
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday'
+  return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+const dayKey = (d) => {
+  const dt = new Date(d)
+  return Number.isNaN(dt.getTime()) ? 'unknown' : `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`
+}
+
 const initials = (name) =>
   (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
 
+function Avatar({ name, logoUrl, size = 'md' }) {
+  const sz = size === 'sm' ? 'w-9 h-9 text-xs' : 'w-10 h-10 text-xs'
+  if (logoUrl) {
+    return (
+      <div className={`${sz} rounded-full flex-shrink-0 bg-white border border-slate-200 overflow-hidden`}>
+        <img src={logoUrl} alt={name} className="w-full h-full object-contain p-0.5" />
+      </div>
+    )
+  }
+  return (
+    <div className={`${sz} rounded-full flex-shrink-0 flex items-center justify-center text-white font-black bg-slate-900`}>
+      {initials(name)}
+    </div>
+  )
+}
+
 export default function AdminSupportPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState('individual') // 'individual' | 'airline'
   const [conversations, setConversations] = useState([])
   const [search, setSearch] = useState('')
@@ -38,6 +76,9 @@ export default function AdminSupportPage() {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [userTyping, setUserTyping] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
   const typingTimer = useRef(null)
@@ -59,6 +100,13 @@ export default function AdminSupportPage() {
     })
   }, [])
 
+  // ── Notification permission ───────────────────────────────────────────────────
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // ── Load list ────────────────────────────────────────────────────────────────
   useEffect(() => {
     let active = true
@@ -69,6 +117,18 @@ export default function AdminSupportPage() {
       .finally(() => { if (active) setLoadingList(false) })
     return () => { active = false }
   }, [])
+
+  // ── Auto-open conversation from ?conv= URL param (notification click) ────────
+  useEffect(() => {
+    const convId = searchParams.get('conv')
+    if (!convId || loadingList || conversations.length === 0) return
+    const found = conversations.find(c => String(c._id) === convId)
+    if (!found) return
+    setTab(found.role)
+    openConversation(String(found._id))
+    setSearchParams({}, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loadingList, conversations])
 
   // ── Socket wiring ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -85,18 +145,43 @@ export default function AdminSupportPage() {
         }
       }
     }
-    const onConversation = (summary) => upsertConversation(summary)
+    const onConversation = (summary) => {
+      upsertConversation(summary)
+      if (summary.lastSenderRole === 'user' && Notification.permission === 'granted') {
+        new Notification(`New message — ${summary.name || 'User'}`, {
+          body: summary.lastMessageBody?.trim().slice(0, 100) || 'New message',
+          icon: '/favicon.ico',
+          tag: `support-${summary._id}`,
+        })
+      }
+    }
     const onTyping = ({ conversationId, from, typing }) => {
       if (from === 'user' && String(conversationId) === String(activeIdRef.current)) setUserTyping(typing)
+    }
+
+    const onMessageEdited = ({ message }) => {
+      setMessages(prev => prev.map(m => m._id === message._id ? { ...m, body: message.body, edited: true, editedAt: message.editedAt } : m))
+    }
+    const onMessageDeleted = ({ messageId }) => {
+      setMessages(prev => prev.filter(m => m._id !== messageId))
+    }
+    const onMessagesCleared = ({ conversationId }) => {
+      if (String(conversationId) === String(activeIdRef.current)) setMessages([])
     }
 
     socket.on('support:message', onMessage)
     socket.on('support:conversation', onConversation)
     socket.on('support:typing', onTyping)
+    socket.on('support:message-edited', onMessageEdited)
+    socket.on('support:message-deleted', onMessageDeleted)
+    socket.on('support:messages-cleared', onMessagesCleared)
     return () => {
       socket.off('support:message', onMessage)
       socket.off('support:conversation', onConversation)
       socket.off('support:typing', onTyping)
+      socket.off('support:message-edited', onMessageEdited)
+      socket.off('support:message-deleted', onMessageDeleted)
+      socket.off('support:messages-cleared', onMessagesCleared)
     }
   }, [upsertConversation])
 
@@ -164,6 +249,40 @@ export default function AdminSupportPage() {
     }
   }
 
+  const deleteMsg = async (msgId) => {
+    if (!activeId) return
+    setMessages(prev => prev.filter(m => m._id !== msgId))
+    try {
+      await deleteSupportMessage(activeId, msgId)
+    } catch {
+      // If failed, reload messages
+      getSupportConversation(activeId).then(res => setMessages(res.data?.data?.messages || [])).catch(() => {})
+    }
+  }
+
+  const saveEdit = async (msgId) => {
+    const body = editText.trim()
+    if (!body || !activeId) return
+    setEditingId(null)
+    setEditText('')
+    try {
+      const res = await editSupportMessage(activeId, msgId, body)
+      const updated = res.data.data
+      setMessages(prev => prev.map(m => m._id === msgId ? { ...m, body: updated.body, edited: true, editedAt: updated.editedAt } : m))
+    } catch { /* revert silently */ }
+  }
+
+  const deleteAllMessages = async () => {
+    setConfirmDelete(false)
+    if (!activeId) return
+    try {
+      await deleteSupportMessages(activeId)
+      setMessages([])
+      setConversations(prev => prev.map(c => String(c._id) === String(activeId)
+        ? { ...c, lastMessageBody: '', adminUnread: 0, userUnread: 0 } : c))
+    } catch { /* ignore */ }
+  }
+
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
@@ -201,12 +320,12 @@ export default function AdminSupportPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-116px)] sm:h-[calc(100vh-156px)] overflow-hidden">
-      <div className="mb-5 flex-shrink-0">
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Support</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Live chat with airlines and individuals.</p>
+      <div className="mb-3 sm:mb-5 flex-shrink-0">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Support</h1>
+        <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Live chat with airlines and individuals.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr] gap-3 sm:gap-4 flex-1 min-h-0">
         {/* ── List column ── */}
         <div className={`flex flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden ${activeId ? 'hidden lg:flex' : 'flex'}`}>
           <div className="p-3 border-b border-slate-100 space-y-3">
@@ -236,9 +355,7 @@ export default function AdminSupportPage() {
                   onClick={() => openConversation(c._id)}
                   className={`w-full text-left px-3 py-3 flex items-center gap-3 border-b border-slate-50 transition ${active ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                 >
-                  <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-black bg-slate-900">
-                    {initials(c.name)}
-                  </div>
+                  <Avatar name={c.name} logoUrl={c.logoUrl} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-bold text-slate-900 truncate">{c.name || 'Unknown'}</p>
@@ -263,7 +380,7 @@ export default function AdminSupportPage() {
         </div>
 
         {/* ── Thread column ── */}
-        <div className={`flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden ${activeId ? 'flex' : 'hidden lg:flex'}`}>
+        <div className={`relative flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden ${activeId ? 'flex' : 'hidden lg:flex'}`}>
           {!activeConv ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
               <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-3">
@@ -277,32 +394,121 @@ export default function AdminSupportPage() {
           ) : (
             <>
               {/* Thread header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
-                <button onClick={() => setActiveId(null)} className="lg:hidden w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center">
+              <div className="flex items-center gap-3 px-3 sm:px-4 py-3 border-b border-slate-100">
+                <button onClick={() => setActiveId(null)} className="lg:hidden w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-black bg-slate-900">
-                  {initials(activeConv.name)}
-                </div>
-                <div className="min-w-0">
+                <Avatar name={activeConv.name} logoUrl={activeConv.logoUrl} size="sm" />
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-slate-900 truncate">{activeConv.name}</p>
                   <p className="text-[11px] text-slate-400 truncate">{activeConv.email} · {activeConv.role === 'airline' ? 'Airline' : 'Individual'}</p>
                 </div>
+                {/* Delete chat button */}
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition"
+                  title="Delete all messages"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
+
+              {/* Confirm delete modal */}
+              {confirmDelete && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 rounded-2xl">
+                  <div className="bg-white rounded-2xl shadow-xl p-6 mx-4 max-w-sm w-full">
+                    <p className="text-sm font-bold text-slate-900 mb-1">Delete all messages?</p>
+                    <p className="text-xs text-slate-500 mb-5">This permanently removes the entire chat history. Cannot be undone.</p>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                      <button onClick={deleteAllMessages} className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Delete</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Messages */}
               <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50" style={{ scrollbarWidth: 'thin' }}>
                 {loadingThread && (
                   <div className="flex justify-center py-6"><div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" /></div>
                 )}
-                {!loadingThread && messages.map(m => {
+                {!loadingThread && messages.map((m, i) => {
                   const mine = m.senderRole === 'admin'
+                  const isEditing = editingId === m._id
+                  const showSep = i === 0 || dayKey(m.createdAt) !== dayKey(messages[i - 1].createdAt)
                   return (
-                    <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[70%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${mine ? 'bg-slate-900 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm'}`}>
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                        <p className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>{fmtTime(m.createdAt)}</p>
+                    <div key={m._id}>
+                    {showSep && (
+                      <div className="flex items-center gap-3 my-2">
+                        <div className="flex-1 h-px bg-slate-200" />
+                        <span className="text-[11px] font-medium text-slate-400 px-2">{fmtDateSep(m.createdAt)}</span>
+                        <div className="flex-1 h-px bg-slate-200" />
                       </div>
+                    )}
+                    <div className={`flex group items-end gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+                      {/* User message action: delete only */}
+                      {!mine && !isEditing && (
+                        <button
+                          onClick={() => deleteMsg(m._id)}
+                          className="opacity-0 group-hover:opacity-100 transition w-6 h-6 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-500 flex items-center justify-center flex-shrink-0 mb-1"
+                          title="Delete message"
+                        >
+                          <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                      {mine && !isEditing && (
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition mb-1">
+                          <button
+                            onClick={() => { setEditingId(m._id); setEditText(m.body) }}
+                            className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0"
+                            title="Edit message"
+                          >
+                            <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414a2 2 0 01.586-1.414z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteMsg(m._id)}
+                            className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-red-50 flex items-center justify-center flex-shrink-0"
+                            title="Delete message"
+                          >
+                            <svg className="w-3 h-3 text-slate-400 hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                      <div className={`max-w-[72%] sm:max-w-[65%] rounded-2xl px-3.5 py-2 text-sm leading-snug ${mine ? 'bg-slate-900 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm'}`}>
+                        {isEditing ? (
+                          <div className="space-y-2 min-w-[180px]">
+                            <textarea
+                              value={editText}
+                              onChange={e => setEditText(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(m._id) } if (e.key === 'Escape') { setEditingId(null) } }}
+                              rows={2}
+                              autoFocus
+                              className="w-full resize-none rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 px-2 py-1 text-sm outline-none"
+                            />
+                            <div className="flex gap-1.5 justify-end">
+                              <button onClick={() => setEditingId(null)} className="px-2 py-0.5 text-[11px] font-semibold rounded text-white/60 hover:text-white transition">Cancel</button>
+                              <button onClick={() => saveEdit(m._id)} className="px-2 py-0.5 text-[11px] font-semibold rounded bg-white/20 hover:bg-white/30 text-white transition">Save</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="whitespace-pre-wrap break-words">{m.body?.trim().replace(/\n{3,}/g, '\n\n')}</p>
+                            <p className={`text-[10px] mt-1 flex items-center gap-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>
+                              {fmtTime(m.createdAt)}
+                              {m.edited && <span className="italic">(edited)</span>}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
                     </div>
                   )
                 })}
@@ -320,7 +526,7 @@ export default function AdminSupportPage() {
               </div>
 
               {/* Composer */}
-              <div className="border-t border-slate-100 p-3 bg-white">
+              <div className="border-t border-slate-100 p-2.5 sm:p-3 bg-white">
                 <div className="flex items-end gap-2">
                   <textarea
                     value={text}
@@ -328,7 +534,7 @@ export default function AdminSupportPage() {
                     onKeyDown={onKeyDown}
                     rows={1}
                     placeholder="Type your reply…"
-                    className="flex-1 resize-none max-h-32 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100 transition"
+                    className="flex-1 resize-none max-h-28 sm:max-h-32 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-100 transition"
                   />
                   <button
                     onClick={send}

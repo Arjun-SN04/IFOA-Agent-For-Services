@@ -14,7 +14,9 @@ const SupportMessageSchema = new mongoose.Schema({
   senderId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   senderName: { type: String, default: '' },
 
-  body: { type: String, required: true, trim: true, maxlength: 4000 },
+  body:     { type: String, required: true, trim: true, maxlength: 4000 },
+  edited:   { type: Boolean, default: false },
+  editedAt: { type: Date,    default: null },
 }, { timestamps: true });
 
 // Fast history fetch ordered oldest→newest for a conversation.

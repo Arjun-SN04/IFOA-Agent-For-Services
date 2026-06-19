@@ -15,6 +15,23 @@ const fmtTime = (d) => {
   return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
+const fmtDateSep = (d) => {
+  const dt = new Date(d)
+  if (Number.isNaN(dt.getTime())) return ''
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today - 86400000)
+  const msgDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate())
+  if (msgDay.getTime() === today.getTime()) return 'Today'
+  if (msgDay.getTime() === yesterday.getTime()) return 'Yesterday'
+  return dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+const dayKey = (d) => {
+  const dt = new Date(d)
+  return Number.isNaN(dt.getTime()) ? 'unknown' : `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`
+}
+
 const SUGGESTIONS = [
   {
     label: 'Renew my subscription',
@@ -114,6 +131,19 @@ export default function UserSupportPage() {
     })
   }, [])
 
+  // Lock page scroll while chat is open (shell mb-14 would otherwise allow 56px page scroll)
+  useEffect(() => {
+    document.documentElement.style.overflow = 'hidden'
+    return () => { document.documentElement.style.overflow = '' }
+  }, [])
+
+  // ── Notification permission ───────────────────────────────────────────────────
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // ── Load history + mark read ──────────────────────────────────────────────────
   useEffect(() => {
     let active = true
@@ -142,15 +172,35 @@ export default function UserSupportPage() {
         setAgentTyping(false)
         markMySupportRead().catch(() => { })
         socket.emit('support:read', {})
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('IFOA Support', {
+            body: message.body?.trim().slice(0, 100) || 'New message from support',
+            icon: '/favicon.ico',
+            tag: 'support-admin-msg',
+          })
+        }
       }
     }
     const onTyping = ({ from, typing }) => { if (from === 'admin') setAgentTyping(typing) }
+    const onMessageEdited = ({ message }) => {
+      setMessages(prev => prev.map(m => m._id === message._id ? { ...m, body: message.body, edited: true, editedAt: message.editedAt } : m))
+    }
+    const onMessageDeleted = ({ messageId }) => {
+      setMessages(prev => prev.filter(m => m._id !== messageId))
+    }
+    const onMessagesCleared = () => setMessages([])
 
     socket.on('support:message', onMessage)
     socket.on('support:typing', onTyping)
+    socket.on('support:message-edited', onMessageEdited)
+    socket.on('support:message-deleted', onMessageDeleted)
+    socket.on('support:messages-cleared', onMessagesCleared)
     return () => {
       socket.off('support:message', onMessage)
       socket.off('support:typing', onTyping)
+      socket.off('support:message-edited', onMessageEdited)
+      socket.off('support:message-deleted', onMessageDeleted)
+      socket.off('support:messages-cleared', onMessagesCleared)
     }
   }, [])
 
@@ -202,18 +252,12 @@ export default function UserSupportPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-116px)] sm:h-[calc(100vh-196px)] overflow-hidden w-full">
-      {/* Page title */}
-      <div className="mb-4 flex-shrink-0">
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Connect to Agent</h1>
-        <p className="text-sm text-slate-500 mt-1">Chat live with the IFOA support team.</p>
-      </div>
-
-      {/* Two-column layout */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4">
+    <div className="flex flex-col h-[calc(100vh-116px)] sm:h-[calc(100vh-140px)] overflow-hidden w-full">
+      {/* Two-column layout — fills full available height */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 lg:max-w-none max-w-2xl mx-auto w-full lg:mx-0">
 
         {/* ── Suggestions panel ── */}
-        <div className="hidden lg:flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="hidden lg:flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-0">
           {/* Panel header */}
           <div className="px-5 py-4 border-b border-slate-100 flex-shrink-0 bg-slate-900 rounded-t-2xl">
             <p className="text-xs font-bold text-white uppercase tracking-widest">Quick Questions</p>
@@ -225,7 +269,7 @@ export default function UserSupportPage() {
               return (
                 <div key={s.label} className="relative group/tip">
                   <button
-                    onClick={() => { setText(s.text); setHoveredText(null) }}
+                    onClick={() => { setText(text === s.text ? '' : s.text); setHoveredText(null) }}
                     onMouseEnter={() => setHoveredText(s.text)}
                     onMouseLeave={() => setHoveredText(null)}
                     className={`w-full text-left px-3.5 py-3 rounded-xl border transition-all group ${
@@ -264,16 +308,19 @@ export default function UserSupportPage() {
         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-0">
 
           {/* Header */}
-          <div className="flex items-center justify-center gap-3.5 px-5 py-4 bg-slate-900 border-b border-slate-800 flex-shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 p-1.5">
-              <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-white leading-tight">IFOA Support</p>
-              <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                <p className="text-[11px] text-slate-400 leading-tight">Online · typically replies shortly</p>
+          <div className="flex-shrink-0 flex items-center gap-3.5 px-4 sm:px-5 py-3.5 border-b border-white/5"
+            style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+            {/* Avatar + online dot */}
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white shadow-md flex items-center justify-center p-1.5">
+                <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
               </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0f172a]" />
+            </div>
+            {/* Text */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white leading-tight">IFOA Support</p>
+              <p className="text-[11px] text-slate-400 leading-tight mt-0.5">Typically replies within minutes</p>
             </div>
           </div>
 
@@ -282,7 +329,7 @@ export default function UserSupportPage() {
             {SUGGESTIONS.map((s) => (
               <button
                 key={s.label}
-                onClick={() => setText(s.text)}
+                onClick={() => setText(text === s.text ? '' : s.text)}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition whitespace-nowrap ${
                   text === s.text
                     ? 'border-slate-900 bg-slate-900 text-white'
@@ -321,20 +368,30 @@ export default function UserSupportPage() {
               </div>
             )}
 
-            {messages.map((m) => {
+            {messages.map((m, i) => {
               const mine = m.senderRole === 'user'
+              const showSep = i === 0 || dayKey(m.createdAt) !== dayKey(messages[i - 1].createdAt)
               return (
-                <div key={m._id} className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}`}>
-                  {!mine && (
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center flex-shrink-0 mb-0.5 p-1.5">
-                      <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
+                <div key={m._id}>
+                  {showSep && (
+                    <div className="flex items-center gap-3 my-3">
+                      <div className="flex-1 h-px bg-slate-200" />
+                      <span className="text-[11px] font-medium text-slate-400 px-2">{fmtDateSep(m.createdAt)}</span>
+                      <div className="flex-1 h-px bg-slate-200" />
                     </div>
                   )}
-                  <div className={`max-w-[76%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                    mine ? 'bg-slate-900 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200 shadow-sm rounded-bl-sm'
-                  }`}>
-                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                    <p className="text-[10px] mt-1.5 text-slate-400">{fmtTime(m.createdAt)}</p>
+                  <div className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}`}>
+                    {!mine && (
+                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0 mb-0.5 p-1">
+                        <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <div className={`max-w-[76%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                      mine ? 'bg-slate-900 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200 shadow-sm rounded-bl-sm'
+                    }`}>
+                      <p className="whitespace-pre-wrap break-words">{m.body?.trim().replace(/\n{3,}/g, '\n\n')}</p>
+                      <p className="text-[10px] mt-1.5 text-slate-400">{fmtTime(m.createdAt)}</p>
+                    </div>
                   </div>
                 </div>
               )
@@ -342,7 +399,7 @@ export default function UserSupportPage() {
 
             {agentTyping && (
               <div className="flex items-end gap-2.5 justify-start">
-                <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center flex-shrink-0 p-1.5">
+                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center flex-shrink-0 p-1">
                   <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
                 </div>
                 <div className="bg-white border border-slate-200 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3">
@@ -357,7 +414,7 @@ export default function UserSupportPage() {
           </div>
 
           {/* Composer */}
-          <div className="border-t border-slate-100 bg-white px-4 sm:px-5 py-4 flex-shrink-0">
+          <div className="border-t border-slate-100 bg-white px-4 sm:px-5 py-3 flex-shrink-0">
             <div className="flex items-end gap-3 w-full">
               <textarea
                 value={hoveredText !== null ? hoveredText : text}

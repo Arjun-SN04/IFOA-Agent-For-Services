@@ -3,6 +3,7 @@ const Airlines = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
 const Individual = require('../models/Individual');
 const HolderEvent = require('../models/HolderEvent');
+const SupportConversation = require('../models/SupportConversation');
 
 function daysUntil(dateVal) {
   if (!dateVal) return null;
@@ -229,9 +230,27 @@ async function getAdminNotifications(limit) {
     };
   });
 
+  // 8. Unread support chat messages
+  const unreadConvs = await SupportConversation.find({ adminUnread: { $gt: 0 } })
+    .sort({ lastMessageAt: -1 })
+    .limit(10)
+    .select('name email adminUnread lastMessageBody lastMessageAt role _id');
+
+  const supportNotifs = unreadConvs.map((conv) => ({
+    id: `support-msg-${conv._id}-${new Date(conv.lastMessageAt || 0).getTime()}`,
+    type: 'support-message',
+    title: `New Message — ${conv.name || conv.email || 'User'}`,
+    message: conv.lastMessageBody?.trim().slice(0, 100) || 'New support message.',
+    createdAt: toIso(conv.lastMessageAt || new Date()),
+    severity: 'high',
+    link: '/admin/support',
+    entityId: String(conv._id),
+  }));
+
   // Merge: wire requests always first, then by recency
   const all = [
     ...wireNotifs,
+    ...supportNotifs,
     ...holderEventNotifs,
     ...newAirlineNotifs,
     ...newIndividualNotifs,
@@ -370,6 +389,21 @@ async function getAirlineNotifications(user, limit) {
     }
   }
 
+  // Unread support message from admin
+  const supportConv = await SupportConversation.findOne({ user: user._id })
+    .select('userUnread lastMessageBody lastMessageAt');
+  if (supportConv && supportConv.userUnread > 0) {
+    out.unshift({
+      id: `support-unread-${user._id}-${new Date(supportConv.lastMessageAt || 0).getTime()}`,
+      type: 'support-message',
+      title: 'New Message from IFOA Support',
+      message: supportConv.lastMessageBody?.trim().slice(0, 100) || 'You have a new message from the support team.',
+      createdAt: toIso(supportConv.lastMessageAt || new Date()),
+      severity: 'high',
+      link: '/dashboard/support',
+    });
+  }
+
   return sortByCreatedDesc(out).slice(0, limit);
 }
 
@@ -443,6 +477,21 @@ async function getIndividualNotifications(user, limit) {
       });
     }
   });
+
+  // Unread support message from admin
+  const supportConv = await SupportConversation.findOne({ user: user._id })
+    .select('userUnread lastMessageBody lastMessageAt');
+  if (supportConv && supportConv.userUnread > 0) {
+    out.unshift({
+      id: `support-unread-${user._id}-${new Date(supportConv.lastMessageAt || 0).getTime()}`,
+      type: 'support-message',
+      title: 'New Message from IFOA Support',
+      message: supportConv.lastMessageBody?.trim().slice(0, 100) || 'You have a new message from the support team.',
+      createdAt: toIso(supportConv.lastMessageAt || new Date()),
+      severity: 'high',
+      link: '/dashboard/support',
+    });
+  }
 
   return sortByCreatedDesc(out).slice(0, limit);
 }

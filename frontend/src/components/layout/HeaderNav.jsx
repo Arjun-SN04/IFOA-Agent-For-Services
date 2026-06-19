@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getNotifications } from '../../services/api'
-import { disconnectSocket } from '../../services/socket'
+import { disconnectSocket, getSocket } from '../../services/socket'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
 const adminNav = [
@@ -19,7 +19,7 @@ const userNav = [
   { to: '/dashboard/profile',      label: 'Profile'                  },
   { to: '/dashboard/subscription', label: 'Subscription'             },
   { to: '/dashboard/settings',     label: 'Settings'                 },
-  { to: '/dashboard/support',      label: 'Connect to Agent', exact: true },
+  { to: '/dashboard/support',      label: 'Contact Agent', exact: true },
 ]
 
 function NavLink({ item }) {
@@ -124,12 +124,24 @@ export default function HeaderNav() {
     }
 
     loadNotifications(true)
-    // Poll every 20s for near-real-time updates (wire requests, new registrations)
-    timer = setInterval(() => loadNotifications(false), 20000)
+    // Poll every 10s as fallback
+    timer = setInterval(() => loadNotifications(false), 10000)
+
+    // Instant refresh on any support message via socket
+    const sock = getSocket()
+    const onSupportEvent = () => loadNotifications(false)
+    if (sock) {
+      sock.on('support:conversation', onSupportEvent)
+      sock.on('support:message', onSupportEvent)
+    }
 
     return () => {
       active = false
       if (timer) clearInterval(timer)
+      if (sock) {
+        sock.off('support:conversation', onSupportEvent)
+        sock.off('support:message', onSupportEvent)
+      }
     }
   }, [user])
 
@@ -163,10 +175,10 @@ export default function HeaderNav() {
     localStorage.setItem(readKey, JSON.stringify(next))
     setNotifOpen(false)
     if (item.link) {
-      // For wire-request notifications, append the entityId so AdminDashboard
-      // can auto-select and highlight that specific airline row.
       if (item.type === 'wire-request' && item.entityId) {
         navigate(`${item.link}?highlight=${item.entityId}`)
+      } else if (item.type === 'support-message' && item.entityId && user?.role === 'admin') {
+        navigate(`${item.link}?conv=${item.entityId}`)
       } else {
         navigate(item.link)
       }
@@ -182,6 +194,7 @@ export default function HeaderNav() {
     if (n.type === 'new-registration')    return { bg: 'bg-blue-100',    svgPath: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 000 4h6a2 2 0 000-4M9 5a2 2 0 012-2h2a2 2 0 012 2', color: 'text-blue-600',     dot: 'bg-blue-500' }
     if (n.type === 'payment-confirmed')   return { bg: 'bg-emerald-100', svgPath: 'M5 13l4 4L19 7', color: 'text-emerald-600',                                                                                                          dot: 'bg-emerald-500' }
     if (n.type === 'invoice-ready')       return { bg: 'bg-indigo-100',  svgPath: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', color: 'text-indigo-600',  dot: 'bg-indigo-500' }
+    if (n.type === 'support-message')     return { bg: 'bg-slate-900',   svgPath: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z', color: 'text-white',       dot: 'bg-slate-700' }
     if (n.severity === 'high')            return { bg: 'bg-red-100',     svgPath: 'M12 8v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z', color: 'text-red-600',     dot: 'bg-red-500' }
     if (n.severity === 'warn')            return { bg: 'bg-amber-100',   svgPath: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z', color: 'text-amber-600',   dot: 'bg-amber-500' }
     if (n.severity === 'success')         return { bg: 'bg-emerald-100', svgPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-emerald-600', dot: 'bg-emerald-500' }

@@ -14,8 +14,9 @@ const SupportConversationSchema = new mongoose.Schema({
   role:  { type: String, enum: ['airline', 'individual'], required: true, index: true },
 
   // Denormalised display fields so the admin list never needs a join.
-  name:  { type: String, default: '' },
-  email: { type: String, default: '' },
+  name:    { type: String, default: '' },
+  email:   { type: String, default: '' },
+  logoUrl: { type: String, default: '' },
 
   // Last-message preview for the admin list + ordering.
   lastMessageBody:   { type: String, default: '' },
