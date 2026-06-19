@@ -18,6 +18,7 @@ import SignupPage from './pages/SignupPage'
 import AdminDashboard   from './pages/AdminDashboard'
 import AdminProfilePage from './pages/dashboard/AdminProfilePage'
 import AdminInvoicesPage from './pages/dashboard/AdminInvoicesPage'
+import AdminSupportPage from './pages/dashboard/AdminSupportPage'
 
 // Lazy-loaded pages — only downloaded when first visited
 const RegisterPage        = lazy(() => import('./pages/RegisterPage'))
@@ -27,6 +28,7 @@ const UserDashboard       = lazy(() => import('./pages/dashboard/UserDashboard')
 const ProfilePage         = lazy(() => import('./pages/dashboard/ProfilePage'))
 const SubscriptionPage    = lazy(() => import('./pages/dashboard/SubscriptionPage'))
 const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'))
+const UserSupportPage     = lazy(() => import('./pages/dashboard/UserSupportPage'))
 const FaqPage             = lazy(() => import('./pages/dashboard/FaqPage'))
 
 // Tiny blank-slate while a lazy chunk loads — no spinner flash
@@ -193,6 +195,7 @@ function App() {
                 <Route path="/admin/add-airline" element={<AdminDashboard />} />
                 <Route path="/admin/add-individual" element={<AdminDashboard />} />
                 <Route path="/admin/invoices" element={<AdminInvoicesPage />} />
+                <Route path="/admin/support" element={<AdminSupportPage />} />
                 <Route path="/admin/profile" element={<AdminProfilePage />} />
                 <Route path="/admin/faq" element={<FaqPage />} />
               </Route>
@@ -204,6 +207,7 @@ function App() {
                 <Route path="/dashboard" element={<UserDashboard />} />
                 <Route path="/dashboard/profile" element={<ProfilePage />} />
                 <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
+                <Route path="/dashboard/support" element={<UserSupportPage />} />
                 <Route path="/dashboard/settings" element={<SettingsPage />} />
                 <Route path="/dashboard/faq" element={<FaqPage />} />
               </Route>

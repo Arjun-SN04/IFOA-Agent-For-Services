@@ -170,3 +170,14 @@ export const updateAirlineName = (data) => API.put('/auth/update-airline-name', 
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 export const getNotifications = (params) => API.get('/notifications', { params })
+
+// ── Support live-chat (human ↔ admin) ─────────────────────────────────────────
+// User (airline/individual)
+export const getMySupportChat   = ()       => API.get('/support/me')
+export const sendMySupportMsg   = (body)   => API.post('/support/me/messages', { body })
+export const markMySupportRead  = ()       => API.post('/support/me/read')
+// Admin
+export const getSupportConversations = (role) => API.get('/support/conversations', { params: role ? { role } : {} })
+export const getSupportConversation  = (id)   => API.get(`/support/conversations/${id}`)
+export const sendSupportReply        = (id, body) => API.post(`/support/conversations/${id}/messages`, { body })
+export const markSupportConvRead     = (id)   => API.post(`/support/conversations/${id}/read`)

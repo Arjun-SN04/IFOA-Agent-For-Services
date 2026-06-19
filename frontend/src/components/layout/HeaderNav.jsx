@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getNotifications } from '../../services/api'
+import { disconnectSocket } from '../../services/socket'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
 
 const adminNav = [
@@ -9,6 +10,7 @@ const adminNav = [
   { to: '/admin/individuals', label: 'Individuals', exact: true  },
   { to: '/admin/airlines',    label: 'Airlines',    exact: true  },
   { to: '/admin/invoices',    label: 'Invoices',    exact: true  },
+  { to: '/admin/support',     label: 'Support',     exact: true  },
   { to: '/admin/profile',     label: 'Profile',     exact: true  },
 ]
 
@@ -16,7 +18,8 @@ const userNav = [
   { to: '/dashboard',              label: 'Dashboard',   exact: true },
   { to: '/dashboard/profile',      label: 'Profile'                  },
   { to: '/dashboard/subscription', label: 'Subscription'             },
-{ to: '/dashboard/settings',     label: 'Settings'                 },
+  { to: '/dashboard/settings',     label: 'Settings'                 },
+  { to: '/dashboard/support',      label: 'Connect to Agent', exact: true },
 ]
 
 function NavLink({ item }) {
@@ -201,6 +204,7 @@ export default function HeaderNav() {
   const handleLogout = () => {
     setDropdownOpen(false)
     setMobileOpen(false)
+    disconnectSocket()
     logout()
     navigate('/')
   }
@@ -239,7 +243,6 @@ export default function HeaderNav() {
               </svg>
               Home
             </Link>
-
 
             {/* Notifications */}
             <div className="relative" ref={notifRef}>
