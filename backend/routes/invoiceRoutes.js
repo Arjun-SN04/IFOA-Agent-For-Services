@@ -569,7 +569,43 @@ router.get('/admin/all', auth, adminOnly, async (req, res) => {
       });
     }
 
-    const data = [...map.values()].sort(
+    // The active base invoice carries the registration's CURRENT payment state.
+    // Invoice.status is frozen at payment time, so an admin who flips a registration's
+    // Payment Status to "pending" would otherwise still see "Paid" here. Override the
+    // active base invoice's status from the live registration — mirrors the invoice
+    // card's basePending logic in frontend/src/utils/invoiceStatus.js.
+    const rows = [...map.values()];
+    const idsByModel = { Airlines: new Set(), AirlinesSubscription: new Set(), Individual: new Set() };
+    for (const row of rows) {
+      if (row.registrationId && idsByModel[row.registrationModel]) {
+        idsByModel[row.registrationModel].add(String(row.registrationId));
+      }
+    }
+    const regSelect = '_id invoiceNumber paymentStatus isPaid holderGroups';
+    const [airRegs, airSubRegs, indRegs] = await Promise.all([
+      idsByModel.Airlines.size ? Airlines.find({ _id: { $in: [...idsByModel.Airlines] } }).select(regSelect).lean() : [],
+      idsByModel.AirlinesSubscription.size ? AirlinesSubscription.find({ _id: { $in: [...idsByModel.AirlinesSubscription] } }).select(regSelect).lean() : [],
+      idsByModel.Individual.size ? Individual.find({ _id: { $in: [...idsByModel.Individual] } }).select(regSelect).lean() : [],
+    ]);
+    const regMap = new Map();
+    for (const r of [...airRegs, ...airSubRegs, ...indRegs]) regMap.set(String(r._id), r);
+    for (const row of rows) {
+      const reg = regMap.get(String(row.registrationId));
+      if (!reg) continue;
+      // The active base invoice reflects the registration's live payment state.
+      const isActiveBase = reg.invoiceNumber && normalizeInvoiceNumber(reg.invoiceNumber) === row.invoiceNumber;
+      if (isActiveBase) {
+        if (reg.paymentStatus === 'pending') row.status = 'pending';
+        continue;
+      }
+      // A holder-upgrade invoice reflects its OWN group's live payment state.
+      const grp = (reg.holderGroups || []).find(
+        (g) => g.invoiceNumber && normalizeInvoiceNumber(g.invoiceNumber) === row.invoiceNumber,
+      );
+      if (grp && grp.paymentStatus === 'pending') row.status = 'pending';
+    }
+
+    const data = rows.sort(
       (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
     );
 

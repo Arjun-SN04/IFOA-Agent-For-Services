@@ -29,6 +29,7 @@ router.post('/conversations/:id/messages',              adminOnly, ctrl.replyToC
 router.patch('/conversations/:id/messages/:msgId',     adminOnly, ctrl.editMessage);
 router.delete('/conversations/:id/messages/:msgId',    adminOnly, ctrl.deleteMessage);
 router.delete('/conversations/:id/messages',           adminOnly, ctrl.deleteConversationMessages);
+router.delete('/conversations/:id',                   adminOnly, ctrl.deleteConversation);
 router.post('/conversations/:id/read',                 adminOnly, ctrl.markConversationRead);
 
 module.exports = router;

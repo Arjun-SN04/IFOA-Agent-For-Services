@@ -375,7 +375,6 @@ export default function Step1PersonalInfo({ data, update, onNext }) {
                 enableSearch
                 searchPlaceholder="Search country..."
                 preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
-                dropdownStyle={{ bottom: '100%', top: 'auto' }}
               />
             </div>
           </Field>

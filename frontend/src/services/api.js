@@ -184,3 +184,4 @@ export const markSupportConvRead     = (id)            => API.post(`/support/con
 export const editSupportMessage      = (id, msgId, body) => API.patch(`/support/conversations/${id}/messages/${msgId}`, { body })
 export const deleteSupportMessage    = (id, msgId)     => API.delete(`/support/conversations/${id}/messages/${msgId}`)
 export const deleteSupportMessages   = (id)            => API.delete(`/support/conversations/${id}/messages`)
+export const deleteSupportConversation = (id)          => API.delete(`/support/conversations/${id}`)

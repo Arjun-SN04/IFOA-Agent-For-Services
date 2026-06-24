@@ -98,8 +98,12 @@ export default function UserDashboard() {
   const getSubStatus = () => {
     if (subLoading) return { label: 'Loading…', accent: 'sky', sub: 'Checking subscription' }
     if (!sub) return { label: 'No Plan', accent: 'slate', sub: 'Register to activate' }
-    const paid   = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
-    const failed = sub.paymentStatus === 'failed' || sub.status === 'Inactive'
+    // Admin can put an account On Hold (status = Inactive); this overrides the paid/active
+    // state so the client clearly sees access is suspended.
+    const onHold = sub.status === 'Inactive'
+    const paid   = !onHold && (sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active')
+    const failed = sub.paymentStatus === 'failed'
+    if (onHold) return { label: 'On Hold', accent: 'amber', sub: sub.subscriptionPlan }
     if (paid)   return { label: 'Active',   accent: 'emerald', sub: sub.subscriptionPlan }
     if (failed) return { label: 'Inactive', accent: 'slate',   sub: sub.subscriptionPlan }
     return { label: 'Pending', accent: 'amber', sub: sub.subscriptionPlan }
@@ -232,7 +236,8 @@ export default function UserDashboard() {
 
         {/* ── Subscription summary ── */}
         {!subLoading && sub && (() => {
-          const isPaid = sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active'
+          const onHold = sub.status === 'Inactive'
+          const isPaid = !onHold && (sub.isPaid === true || sub.paymentStatus === 'paid' || sub.status === 'Active')
           const isUnlimited = sub.subscriptionPlan === 'Unlimited Plan'
           const daysToExpiry = sub.expirationDate
             ? Math.ceil((new Date(sub.expirationDate) - new Date()) / (1000 * 60 * 60 * 24))
@@ -265,6 +270,27 @@ export default function UserDashboard() {
                   </svg>
                   Renew Now
                 </Link>
+              </div>
+            )
+          }
+
+          if (onHold) {
+            return (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-bold text-slate-900">Your account is on hold</p>
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">On Hold</span>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Plan: <strong className="text-slate-700">{sub.subscriptionPlan}</strong>. Your subscription is temporarily suspended. Please contact support to restore access.
+                  </p>
+                </div>
               </div>
             )
           }

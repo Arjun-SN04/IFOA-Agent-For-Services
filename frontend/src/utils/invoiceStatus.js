@@ -77,11 +77,17 @@ export function getInvoiceStatus(doc, reg, opts = {}) {
 
   // Base subscription invoice = the registration's live invoice number.
   const baseActive = !!(activeNum && doc.invoiceNumber === activeNum && subActive)
+  // Admin marked the base plan's payment Pending → it's the live invoice but unpaid.
+  // Show Pending (not the green Active) regardless of the isPaid/status flag, so the
+  // card reflects the admin's Payment Status choice. Holder-upgrade docs use grpPending.
+  const basePending = !isHolderUpgrade && !!(activeNum && doc.invoiceNumber === activeNum) &&
+    reg?.paymentStatus === 'pending'
   // A holder-upgrade rides the subscription period unless its own group is expired/pending.
   const upgradeActive = isHolderUpgrade && subActive && !grpExpired && !grpPending
 
-  // ── Priority: Queued > Active > Expired > Pending > Superseded ──────────────
+  // ── Priority: Queued > Base-Pending > Active > Expired > Pending > Superseded ─
   if (isQueued) return BADGES.queued
+  if (basePending) return BADGES.pending
   if (baseActive || grpActive || upgradeActive) return BADGES.active
   if (grpExpired) return BADGES.expired
   if (grpPending) return BADGES.pending

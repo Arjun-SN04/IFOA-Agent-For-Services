@@ -38,6 +38,7 @@ export default function AdminInvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')   // all | paid | pending
   const [confirm, setConfirm] = useState(null)   // { mode:'single'|'bulk', ... } pending delete
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
@@ -61,10 +62,14 @@ export default function AdminInvoicesPage() {
   useEffect(() => { load() }, [load])
 
   const filtered = useMemo(() => {
+    // Status filter first (Paid / Pending), then the text search on what remains.
+    const base = statusFilter === 'all'
+      ? rows
+      : rows.filter(r => String(r.status || '').toLowerCase() === statusFilter)
     const q = search.trim().toLowerCase()
-    if (!q) return rows
+    if (!q) return base
     const numeric = /^\d+$/.test(q)
-    return rows.filter(r => {
+    return base.filter(r => {
       const num = String(r.invoiceNumber || '').toLowerCase()
       if (numeric) {
         // Numeric query → match the invoice SEQUENCE (the N in "Invoice US-N-YY"),
@@ -78,7 +83,7 @@ export default function AdminInvoicesPage() {
       return [r.invoiceNumber, r.recipientName, r.recipientCompany, r.registrationModel, r.purpose, r.status]
         .filter(Boolean).some(v => String(v).toLowerCase().includes(q))
     })
-  }, [rows, search])
+  }, [rows, search, statusFilter])
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -187,6 +192,18 @@ export default function AdminInvoicesPage() {
             <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" /></svg>
             Refresh
           </button>
+
+          <div className="flex items-center gap-1.5">
+            {['all', 'paid', 'pending'].map(s => {
+              const n = s === 'all' ? rows.length : rows.filter(r => String(r.status || '').toLowerCase() === s).length
+              return (
+                <button key={s} onClick={() => setStatusFilter(s)}
+                  className={`rounded-xl px-3 py-2.5 text-xs font-bold capitalize transition h-[40px] ${statusFilter === s ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                  {s === 'all' ? 'All' : s} <span className={statusFilter === s ? 'text-white/60' : 'text-slate-400'}>({n})</span>
+                </button>
+              )
+            })}
+          </div>
 
           {selected.size > 0 ? (
             <div className="flex items-center gap-2 ml-auto">

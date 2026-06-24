@@ -596,7 +596,6 @@ export function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                       enableSearch
                       searchPlaceholder="Search country..."
                       preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
-                      dropdownStyle={{ bottom: '100%', top: 'auto' }}
                     />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -683,7 +682,6 @@ export function EditSubscriptionFormModal({ sub, role, onClose, onSaved }) {
                       enableSearch
                       searchPlaceholder="Search country..."
                       preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
-                      dropdownStyle={{ bottom: '100%', top: 'auto' }}
                     />
                   </div>
                 </div>
@@ -4293,6 +4291,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
   const pending = !isPaid
   const active = isPaid
   const inactive = !isPaid && (s.paymentStatus === 'failed' || s.status === 'Inactive')
+  // Admin "On Hold" = account suspended (status Inactive). Surfaced in the banner even
+  // when the plan was previously paid/active, so the client knows access is suspended.
+  const onHold = s.status === 'Inactive'
 
   const isUnlimited = s.subscriptionPlan === 'Unlimited Plan'
   const daysToExpiry = s.expirationDate
@@ -4543,7 +4544,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
     }
   }
 
-  const bannerCls = active || isExpired
+  const bannerCls = onHold
+    ? 'bg-gradient-to-r from-amber-600 to-amber-700'
+    : active || isExpired
     ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
     : inactive
       ? 'bg-gradient-to-r from-slate-600 to-slate-700'
@@ -4645,7 +4648,9 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
         <div>
           <div className="flex items-center gap-2 mb-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-white/50">
-              {active && !isExpired
+              {onHold
+                ? 'On Hold'
+                : active && !isExpired
                 ? 'Active Subscription'
                 : inactive
                   ? 'Inactive Subscription'

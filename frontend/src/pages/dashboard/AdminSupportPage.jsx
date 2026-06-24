@@ -15,7 +15,7 @@ import {
   markSupportConvRead,
   editSupportMessage,
   deleteSupportMessage,
-  deleteSupportMessages,
+  deleteSupportConversation,
 } from '../../services/api'
 
 const fmtTime = (d) => {
@@ -78,7 +78,7 @@ export default function AdminSupportPage() {
   const [userTyping, setUserTyping] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmDeleteConv, setConfirmDeleteConv] = useState(false)
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
   const typingTimer = useRef(null)
@@ -168,6 +168,13 @@ export default function AdminSupportPage() {
     const onMessagesCleared = ({ conversationId }) => {
       if (String(conversationId) === String(activeIdRef.current)) setMessages([])
     }
+    const onConversationDeleted = ({ conversationId }) => {
+      setConversations(prev => prev.filter(c => String(c._id) !== String(conversationId)))
+      if (String(conversationId) === String(activeIdRef.current)) {
+        setActiveId(null)
+        setMessages([])
+      }
+    }
 
     socket.on('support:message', onMessage)
     socket.on('support:conversation', onConversation)
@@ -175,6 +182,7 @@ export default function AdminSupportPage() {
     socket.on('support:message-edited', onMessageEdited)
     socket.on('support:message-deleted', onMessageDeleted)
     socket.on('support:messages-cleared', onMessagesCleared)
+    socket.on('support:conversation-deleted', onConversationDeleted)
     return () => {
       socket.off('support:message', onMessage)
       socket.off('support:conversation', onConversation)
@@ -182,6 +190,7 @@ export default function AdminSupportPage() {
       socket.off('support:message-edited', onMessageEdited)
       socket.off('support:message-deleted', onMessageDeleted)
       socket.off('support:messages-cleared', onMessagesCleared)
+      socket.off('support:conversation-deleted', onConversationDeleted)
     }
   }, [upsertConversation])
 
@@ -272,15 +281,18 @@ export default function AdminSupportPage() {
     } catch { /* revert silently */ }
   }
 
-  const deleteAllMessages = async () => {
-    setConfirmDelete(false)
+  const deleteConv = async () => {
+    setConfirmDeleteConv(false)
     if (!activeId) return
+    const id = activeId
+    setActiveId(null)
+    setMessages([])
+    setConversations(prev => prev.filter(c => String(c._id) !== String(id)))
     try {
-      await deleteSupportMessages(activeId)
-      setMessages([])
-      setConversations(prev => prev.map(c => String(c._id) === String(activeId)
-        ? { ...c, lastMessageBody: '', adminUnread: 0, userUnread: 0 } : c))
-    } catch { /* ignore */ }
+      await deleteSupportConversation(id)
+    } catch {
+      getSupportConversations().then(res => setConversations(res.data?.data || [])).catch(() => {})
+    }
   }
 
   const onKeyDown = (e) => {
@@ -403,11 +415,11 @@ export default function AdminSupportPage() {
                   <p className="text-sm font-bold text-slate-900 truncate">{activeConv.name}</p>
                   <p className="text-[11px] text-slate-400 truncate">{activeConv.email} · {activeConv.role === 'airline' ? 'Airline' : 'Individual'}</p>
                 </div>
-                {/* Delete chat button */}
+                {/* Delete entire conversation */}
                 <button
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={() => setConfirmDeleteConv(true)}
                   className="flex-shrink-0 w-8 h-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition"
-                  title="Delete all messages"
+                  title="Delete conversation"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -415,15 +427,15 @@ export default function AdminSupportPage() {
                 </button>
               </div>
 
-              {/* Confirm delete modal */}
-              {confirmDelete && (
+              {/* Confirm delete conversation modal */}
+              {confirmDeleteConv && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 rounded-2xl">
                   <div className="bg-white rounded-2xl shadow-xl p-6 mx-4 max-w-sm w-full">
-                    <p className="text-sm font-bold text-slate-900 mb-1">Delete all messages?</p>
-                    <p className="text-xs text-slate-500 mb-5">This permanently removes the entire chat history. Cannot be undone.</p>
+                    <p className="text-sm font-bold text-slate-900 mb-1">Delete conversation?</p>
+                    <p className="text-xs text-slate-500 mb-5">Permanently removes this conversation and all messages for both admin and the user. Cannot be undone.</p>
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
-                      <button onClick={deleteAllMessages} className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Delete</button>
+                      <button onClick={() => setConfirmDeleteConv(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                      <button onClick={deleteConv} className="px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition">Delete</button>
                     </div>
                   </div>
                 </div>

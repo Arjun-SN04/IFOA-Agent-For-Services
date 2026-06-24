@@ -218,6 +218,28 @@ exports.deleteConversationMessages = async (req, res) => {
   }
 };
 
+// ── Admin: delete entire conversation ────────────────────────────────────────
+exports.deleteConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conv = await SupportConversation.findById(id);
+    if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    await SupportMessage.deleteMany({ conversation: id });
+    await conv.deleteOne();
+
+    const ioInst = io(req);
+    if (ioInst) {
+      ioInst.to(support.userRoom(conv.user)).emit('support:conversation-deleted', { conversationId: id });
+      ioInst.to(support.ADMIN_ROOM).emit('support:conversation-deleted', { conversationId: id });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── Admin: mark read ──────────────────────────────────────────────────────────
 exports.markConversationRead = async (req, res) => {
   try {

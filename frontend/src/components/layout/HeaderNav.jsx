@@ -175,10 +175,10 @@ export default function HeaderNav() {
     localStorage.setItem(readKey, JSON.stringify(next))
     setNotifOpen(false)
     if (item.link) {
-      if (item.type === 'wire-request' && item.entityId) {
-        navigate(`${item.link}?highlight=${item.entityId}`)
-      } else if (item.type === 'support-message' && item.entityId && user?.role === 'admin') {
+      if (item.type === 'support-message' && item.entityId && user?.role === 'admin') {
         navigate(`${item.link}?conv=${item.entityId}`)
+      } else if (item.entityId && item.link.startsWith('/admin/') && item.link !== '/admin/support') {
+        navigate(`${item.link}?highlight=${item.entityId}`)
       } else {
         navigate(item.link)
       }

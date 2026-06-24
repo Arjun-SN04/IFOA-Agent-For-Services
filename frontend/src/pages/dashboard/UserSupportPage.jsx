@@ -189,18 +189,21 @@ export default function UserSupportPage() {
       setMessages(prev => prev.filter(m => m._id !== messageId))
     }
     const onMessagesCleared = () => setMessages([])
+    const onConversationDeleted = () => setMessages([])
 
     socket.on('support:message', onMessage)
     socket.on('support:typing', onTyping)
     socket.on('support:message-edited', onMessageEdited)
     socket.on('support:message-deleted', onMessageDeleted)
     socket.on('support:messages-cleared', onMessagesCleared)
+    socket.on('support:conversation-deleted', onConversationDeleted)
     return () => {
       socket.off('support:message', onMessage)
       socket.off('support:typing', onTyping)
       socket.off('support:message-edited', onMessageEdited)
       socket.off('support:message-deleted', onMessageDeleted)
       socket.off('support:messages-cleared', onMessagesCleared)
+      socket.off('support:conversation-deleted', onConversationDeleted)
     }
   }, [])
 
@@ -325,7 +328,8 @@ export default function UserSupportPage() {
           </div>
 
           {/* Mobile suggestions — horizontal scroll chips */}
-          <div className="lg:hidden flex gap-2 px-4 py-2.5 border-b border-slate-100 overflow-x-auto flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
+          <div className="lg:hidden flex-shrink-0 border-b border-slate-100 overflow-hidden">
+          <div className="flex gap-2 px-4 py-2.5 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none' }}>
             {SUGGESTIONS.map((s) => (
               <button
                 key={s.label}
@@ -340,6 +344,7 @@ export default function UserSupportPage() {
                 <span>{s.label}</span>
               </button>
             ))}
+          </div>
           </div>
 
           {/* Messages */}

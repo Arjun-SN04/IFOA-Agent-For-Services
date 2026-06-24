@@ -867,11 +867,14 @@ exports.updateAirlinesSubscription = async (req, res) => {
     }
 
     // Detect unpaid → paid transition so we know whether to send the confirmation email.
+    // Keyed on paymentStatus (the ACTUAL payment), NOT isPaid (plan-active). Plan Status
+    // and Invoice Status are decoupled, so an admin can keep a plan Active while its
+    // invoice is still Pending — that must never trigger a "payment received" email.
     let wasAlreadyPaidAir = false;
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid')) {
-      const prevAir = await Airlines.findById(req.params.id).select('isPaid paymentStatus')
-        || await AirlinesSubscription.findById(req.params.id).select('isPaid paymentStatus');
-      wasAlreadyPaidAir = !!(prevAir?.isPaid || prevAir?.paymentStatus === 'paid');
+    if (isAdmin && payload.paymentStatus === 'paid') {
+      const prevAir = await Airlines.findById(req.params.id).select('paymentStatus')
+        || await AirlinesSubscription.findById(req.params.id).select('paymentStatus');
+      wasAlreadyPaidAir = prevAir?.paymentStatus === 'paid';
     }
 
     let doc = await Airlines.findByIdAndUpdate(
@@ -927,7 +930,7 @@ exports.updateAirlinesSubscription = async (req, res) => {
     }
 
     // Send confirmation email when admin activates a subscription for the first time.
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaidAir) {
+    if (isAdmin && payload.paymentStatus === 'paid' && !wasAlreadyPaidAir) {
       sendAirlinePaymentConfirmation(doc).catch((e) =>
         console.warn('[updateAirlines] Confirmation email failed:', e.message)
       );
