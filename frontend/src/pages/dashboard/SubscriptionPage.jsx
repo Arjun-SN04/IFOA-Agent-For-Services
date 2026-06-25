@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useDataCache } from '../../context/DataCacheContext'
 import DashboardLayout from '../../components/layout/DashboardLayout'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import axios from 'axios'
 import PaymentModal from '../../components/payment/PaymentModal'
@@ -1321,7 +1321,7 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, onConvertG
       onClick={onManageGroup ? () => onManageGroup(g) : undefined}
       onKeyDown={onManageGroup ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onManageGroup(g) } } : undefined}
       title={onManageGroup ? 'View holders & manage this plan' : undefined}
-      className={`rounded-xl border bg-white px-3.5 py-3 transition ${onManageGroup ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm' : ''} ${highlight && gCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : gExpired ? 'border-red-200' : 'border-slate-200'}`}
+      className={`rounded-xl border bg-white px-3.5 py-3 transition ${onManageGroup ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm' : ''} ${g.isActive === false ? 'border-slate-300 bg-slate-50 opacity-75' : highlight && gCanRenew ? 'border-blue-400 ring-2 ring-blue-400/40 bg-blue-50/40 shadow-sm' : gExpired ? 'border-red-200' : 'border-slate-200'}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -1329,9 +1329,10 @@ function AttachedPlanRow({ s, g, active, onManageGroup, onRenewGroup, onConvertG
             <span className="text-[13px] font-bold text-slate-900">
               {isUnlimited ? 'Lifetime' : 'Upgrade'}
             </span>
+            {g.isActive === false && <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-200 border border-slate-300 text-[9px] font-bold text-slate-500 uppercase tracking-wide">Inactive</span>}
             {g.cancelled && <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 border border-red-200 text-[9px] font-bold text-red-700 uppercase tracking-wide">Cancellation requested</span>}
             {gQueued && <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Renewed</span>}
-            {!gQueued && exp && <span className={`text-[9px] font-bold uppercase tracking-wide ${exp.kind === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>{exp.label}</span>}
+            {g.isActive !== false && !gQueued && exp && <span className={`text-[9px] font-bold uppercase tracking-wide ${exp.kind === 'expired' ? 'text-red-500' : 'text-amber-500'}`}>{exp.label}</span>}
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
             <span className="font-semibold text-slate-700">{filled}/{g.count}</span> holders
@@ -1410,6 +1411,9 @@ function BasePlanRow({ s, active, baseCommitted, onAddHolders, onRenew, onConver
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-bold text-slate-900">Base Plan</span>
+            {s.status === 'Inactive' && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-200 border border-slate-300 text-[9px] font-bold text-slate-600 uppercase tracking-wide">On Hold</span>
+            )}
             {s.planCancelled && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-100 border border-red-200 text-[9px] font-bold text-red-700 uppercase tracking-wide">Cancellation requested</span>
             )}
@@ -1539,9 +1543,18 @@ function WirePendingRow({ s }) {
 // Consolidated "current active subscription" — preview header summarises the active
 // plan (and how many plans total); expanding reveals every plan (base + attached)
 // as uniform detail cards.
-function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
+function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits, forceExpandKey }) {
   const [expanded, setExpanded] = useState(false)
   const [highlightRenew, setHighlightRenew] = useState(false)
+  const [highlightBlock, setHighlightBlock] = useState(false)
+
+  useEffect(() => {
+    if (!forceExpandKey) return
+    setExpanded(true)
+    setHighlightBlock(true)
+    const t = setTimeout(() => setHighlightBlock(false), 1500)
+    return () => clearTimeout(t)
+  }, [forceExpandKey])
 
   const groups = s.holderGroups || []
   // Wire request scope: an INITIAL request is for the base/existing subscription itself
@@ -1596,7 +1609,7 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
   )
 
   return (
-    <motion.div layout className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" transition={{ layout: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}>
+    <motion.div layout className={`rounded-2xl border bg-white shadow-sm overflow-hidden transition-shadow duration-500 ${highlightBlock ? 'border-blue-400 ring-2 ring-blue-400/40 shadow-blue-100' : 'border-slate-200'}`} transition={{ layout: { duration: 0.25, ease: [0.4, 0, 0.2, 1] } }}>
       {/* ── Preview header — always visible, click to expand/collapse ── */}
       <div
         role="button"
@@ -1719,8 +1732,16 @@ function ActiveSubscriptionBlock({ s, active, onAddHolders, onManageGroup, onRen
 // Individual-side "Current Subscription" block — mirrors the airline
 // ActiveSubscriptionBlock but for a single person (no holders/groups). Shows the
 // active plan clearly and, when a renewal is queued, the upcoming plan below it.
-function IndividualSubscriptionBlock({ s, active, onUpgrade, onShowCredits, onRenew, onEditCert }) {
+function IndividualSubscriptionBlock({ s, active, onUpgrade, onShowCredits, onRenew, onEditCert, forceExpandKey }) {
   const [expanded, setExpanded] = useState(false)
+  const [highlightBlock, setHighlightBlock] = useState(false)
+  useEffect(() => {
+    if (!forceExpandKey) return
+    setExpanded(true)
+    setHighlightBlock(true)
+    const t = setTimeout(() => setHighlightBlock(false), 1500)
+    return () => clearTimeout(t)
+  }, [forceExpandKey])
   const money2 = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const unlimited = s.subscriptionPlan === 'Unlimited Plan'
   const exp = getExpiryStatus(s.expirationDate, { unlimited })
@@ -1745,7 +1766,7 @@ function IndividualSubscriptionBlock({ s, active, onUpgrade, onShowCredits, onRe
       : exp ? <span className="text-[9px] font-black uppercase tracking-wide text-amber-300">{exp.label}</span> : null
 
   return (
-    <motion.div layout className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden" transition={{ layout: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}>
+    <motion.div layout className={`rounded-2xl border bg-white shadow-sm overflow-hidden transition-shadow duration-500 ${highlightBlock ? 'border-blue-400 ring-2 ring-blue-400/40 shadow-blue-100' : 'border-slate-200'}`} transition={{ layout: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}>
       <div
         role="button"
         tabIndex={0}
@@ -3698,6 +3719,19 @@ export default function SubscriptionPage() {
   const [creditsTarget, setCreditsTarget] = useState(null) // show per-plan credits
   const [certTarget, setCertTarget] = useState(null) // focused certificate edit
 
+  // ?highlight=<subscriptionId> — set when arriving from a notification "View →".
+  // The matching SubscriptionCard scrolls into view and pulses a ring once.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightId = searchParams.get('highlight') || null
+  useEffect(() => {
+    if (!highlightId || loading) return
+    // Strip the param after a beat so a manual refresh doesn't re-trigger the pulse.
+    const t = setTimeout(() => {
+      setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('highlight'); return p }, { replace: true })
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [highlightId, loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const regId = user?.registrationId || sub?._id
   const regModel = user?.registrationModel ||
     (user?.role === 'airline' ? 'Airlines' : 'Individual')
@@ -3914,6 +3948,7 @@ export default function SubscriptionPage() {
                 total={subs.length}
                 user={user}
                 token={token}
+                highlighted={!!highlightId && String(s._id) === String(highlightId)}
                 onPay={() => {
                   if (payingId === s._id) return
                   const isAirSub = user?.role === 'airline'
@@ -4284,7 +4319,7 @@ function AllInvoicesModal({ docs, reg, token, onClose, onViewSingle }) {
 
 /*  SubscriptionCard                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
-function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onEditCert, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
+function SubscriptionCard({ s, idx, total, user, token, highlighted = false, onPay, onAddHolders, onManageGroup, onUpgrade, onViewInvoice, onViewAllInvoices, onEditForm, onEditCert, onRenew, onRenewGroup, onCancelPlan, onConvertUnlimited, onConvertGroupUnlimited, onShowCredits }) {
   const navigate = useNavigate()
   const isAirline = user?.role === 'airline'
   const isPaid = s.isPaid === true || s.paymentStatus === 'paid'
@@ -4337,6 +4372,18 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
   const [showHoldersDrawer, setShowHoldersDrawer] = useState(false)
   const [holderSearch, setHolderSearch] = useState('')
   const holdersSectionRef = useRef(null)
+  const subscriptionBlockRef = useRef(null)
+  const cardRootRef = useRef(null)
+  const [forceExpandKey, setForceExpandKey] = useState(0)
+  // Pulse + scroll when arriving from a notification "View →" for this listing.
+  const [pulse, setPulse] = useState(false)
+  useEffect(() => {
+    if (!highlighted) return
+    setPulse(true)
+    const st = setTimeout(() => cardRootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
+    const pt = setTimeout(() => setPulse(false), 2400)
+    return () => { clearTimeout(st); clearTimeout(pt) }
+  }, [highlighted])
   const [coords, setCoords] = useState(null)
 
   const updateCoords = () => {
@@ -4545,7 +4592,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
   }
 
   const bannerCls = onHold
-    ? 'bg-gradient-to-r from-amber-600 to-amber-700'
+    ? 'bg-gradient-to-r from-slate-700 to-slate-800'
     : active || isExpired
     ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900'
     : inactive
@@ -4555,7 +4602,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
         : 'bg-gradient-to-br from-slate-500 to-slate-600'
 
   return (
-    <div className="space-y-5 relative">
+    <div ref={cardRootRef} className={`space-y-5 relative scroll-mt-24 rounded-2xl transition-all duration-500 ${pulse ? 'ring-2 ring-blue-400/60 ring-offset-4 ring-offset-slate-50' : ''}`}>
       {total > 1 && (
         <div className="flex items-center gap-2">
           <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-[10px] font-black flex items-center justify-center">
@@ -4683,6 +4730,22 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
         <div className="px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 sm:justify-between">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Plan Details</p>
           <div className="flex flex-wrap items-center gap-1.5">
+            {active && (
+              <button
+                onClick={() => {
+                  setForceExpandKey(k => k + 1)
+                  setTimeout(() => {
+                    subscriptionBlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }, 200)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Manage Plan
+              </button>
+            )}
             <button
               onClick={onEditForm}
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
@@ -4753,7 +4816,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               {(() => {
                 const groupCount = Array.isArray(s.holderGroups) ? s.holderGroups.length : 0
                 return (
-                  <div className="py-5 border-b border-slate-100">
+                  <div ref={subscriptionBlockRef} className="py-5 border-b border-slate-100">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <span className="h-4 w-1 rounded-full bg-slate-900" />
@@ -4772,6 +4835,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                       onConvertUnlimited={s.wirePaymentRequested ? null : onConvertUnlimited}
                       onConvertGroupUnlimited={s.wirePaymentRequested ? null : onConvertGroupUnlimited}
                       onShowCredits={onShowCredits}
+                      forceExpandKey={forceExpandKey}
                     />
                   </div>
                 )
@@ -4872,7 +4936,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
               <Row label="Secondary FAA Certificate #" value={s.secondaryFaaCertificateNumber || '—'} />
               <Row label="Secondary IACRA FTN #" value={s.secondaryIacraTrackingNumber || '—'} />
               <Row label="Submitted" value={fmt(s.submittedAt || s.createdAt)} />
-              <div className="py-5">
+              <div ref={subscriptionBlockRef} className="py-5 scroll-mt-24">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="h-4 w-1 rounded-full bg-slate-900" />
                   <p className="text-sm font-extrabold text-slate-900">Current Subscription</p>
@@ -4884,6 +4948,7 @@ function SubscriptionCard({ s, idx, total, user, token, onPay, onAddHolders, onM
                   onShowCredits={onShowCredits}
                   onRenew={s.wirePaymentRequested ? undefined : onRenew}
                   onEditCert={onEditCert}
+                  forceExpandKey={forceExpandKey}
                 />
               </div>
             </>

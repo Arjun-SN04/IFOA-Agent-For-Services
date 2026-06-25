@@ -2995,7 +2995,7 @@ function AdminHolderCountModal({ record, onClose, onSaved }) {
 }
 
 // ─── Airline View Modal ────────────────────────────────────────────────────────
-function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated, onGenerateInvoice, onEditInvoice, onDeleteRegistration }) {
+function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdated, onGenerateInvoice, onEditInvoice, onDeleteRegistration, onRequestConvert }) {
   const [showInvoices, setShowInvoices] = useState(false)
   const [showHolderCount, setShowHolderCount] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState(null)
@@ -3198,6 +3198,13 @@ function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdat
                                 Renew
                               </button>
                             )}
+                            {!baseUnlimited && !baseQueued && onRequestConvert && (
+                              <button onClick={(e) => { e.stopPropagation(); onRequestConvert(record._id, { holderGroupId: null }) }}
+                                title="Upgrade base plan to Unlimited — unused time credited on the invoice"
+                                className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white hover:bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition">
+                                Upgrade
+                              </button>
+                            )}
                             {baseQueued && (
                               <button onClick={(e) => { e.stopPropagation(); handleActivateBaseRenewal() }} disabled={activatingBase}
                                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 disabled:opacity-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 transition">
@@ -3256,6 +3263,13 @@ function AirlineViewModal({ record, onClose, onEdit, onManagePlan, onRecordUpdat
                               <button onClick={(e) => { e.stopPropagation(); setRenewTarget({ group: g }) }}
                                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 transition">
                                 Renew
+                              </button>
+                            )}
+                            {g.plan !== 'Unlimited Plan' && !g.nextRenewal?.paidAt && !pending && onRequestConvert && (
+                              <button onClick={(e) => { e.stopPropagation(); onRequestConvert(record._id, { holderGroupId: String(g._id) }) }}
+                                title="Upgrade this add-on plan to Unlimited — unused time credited on the invoice"
+                                className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white hover:bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition">
+                                Upgrade
                               </button>
                             )}
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g) }} disabled={deletingGroupId === String(g._id)}
@@ -3751,6 +3765,65 @@ function AdminGroupHoldersModal({ record, group, onClose, onSaved, onRenew }) {
                 {busy ? 'Saving…' : 'Save changes'}
               </button>
             </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
+// ─── Upgrade-to-Unlimited confirm modal (replaces window.confirm) ───────────────
+// Shows the priced breakdown — target total, unused-time credit, net to bill —
+// before the admin continues to the invoice editor.
+function UpgradeConfirmModal({ quote, targetLabel, onCancel, onConfirm }) {
+  const unlimitedTotal = Number(quote?.unlimitedTotal || 0)
+  const credit = Number(quote?.credit || 0)
+  const charge = Number(quote?.charge || 0)
+  const money = (n) => `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="fixed inset-0 z-[121] flex items-center justify-center p-4">
+        <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.18 }}
+          className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Upgrade Plan</p>
+                <h3 className="text-base font-extrabold text-slate-900 leading-tight">Upgrade to {targetLabel}</h3>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-2.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-600">{targetLabel}</span>
+              <span className="font-semibold text-slate-900 tabular-nums">{money(unlimitedTotal)}</span>
+            </div>
+            {credit > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Credit — unused {quote?.oldPlanLabel || 'current plan'}</span>
+                <span className="font-semibold text-emerald-600 tabular-nums">-{money(credit)}</span>
+              </div>
+            )}
+            <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Net to bill</span>
+              <span className="text-xl font-black text-slate-900 tabular-nums">{money(charge)}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 pt-1">You can edit the invoice on the next screen before generating it.</p>
+          </div>
+
+          <div className="border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-2">
+            <button onClick={onCancel} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+            <button onClick={onConfirm}
+              className="rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2 text-sm font-bold text-white transition">Continue to invoice</button>
           </div>
         </motion.div>
       </div>
@@ -4469,7 +4542,7 @@ function AirlineEditModal({ record, onClose, onSave, onRequestConvert, saving })
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2.5">Subscription</p>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                    <Field label="Subscription Plan"><select className={selectCls} value={form.subscriptionPlan || ''} onChange={e => set('subscriptionPlan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Unlimited Plan">Unlimited</option></select></Field>
                     <Field label="Subscription Date"><input className={inputCls} type="date" value={form.subscriptionDate ? String(form.subscriptionDate).slice(0, 10) : ''} onChange={e => set('subscriptionDate', e.target.value)} /></Field>
                     <Field label="Expiration Date"><input className={inputCls} type="date" value={form.expirationDate ? String(form.expirationDate).slice(0, 10) : ''} onChange={e => set('expirationDate', e.target.value)} /></Field>
                     <Field label="Base Holder Count">
@@ -4542,7 +4615,7 @@ function AirlineEditModal({ record, onClose, onSave, onRequestConvert, saving })
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2.5">Plan Details</p>
                         <div className="grid sm:grid-cols-2 gap-4">
-                          <Field label="Plan"><select className={selectCls} value={g.plan || ''} onChange={e => setGroup(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                          <Field label="Plan"><select className={selectCls} value={g.plan || ''} onChange={e => setGroup(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Unlimited Plan">Unlimited</option></select></Field>
                           <Field label="Holder Count"><input className={inputCls} type="number" min="1" value={g.count ?? ''} onChange={e => setGroup(gi, 'count', parseFloat(e.target.value) || 0)} /></Field>
                           <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={g.pricePerCert ?? ''} onChange={e => setGroup(gi, 'pricePerCert', parseFloat(e.target.value) || 0)} /></Field>
                           <Field label="Amount (USD)">
@@ -4563,32 +4636,8 @@ function AirlineEditModal({ record, onClose, onSave, onRequestConvert, saving })
                           <Field label="Plan Status"><select className={selectCls} value={String(g.isActive !== false)} onChange={e => setGroup(gi, 'isActive', e.target.value === 'true')}><option value="false">Inactive</option><option value="true">Active</option></select></Field>
                           <Field label="Invoice Status"><select className={selectCls} value={g.paymentStatus || 'paid'} onChange={e => setGroup(gi, 'paymentStatus', e.target.value)}><option value="paid">Paid</option><option value="pending">Pending</option></select></Field>
                           <Field label="Invoice #">
-                            <div className="relative">
-                              <input className={`${inputCls} pr-8`} value={g.invoiceNumber || ''} onChange={e => setGroup(gi, 'invoiceNumber', e.target.value)} />
-                              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex flex-col">
-                                <button type="button" aria-label="Increase invoice number"
-                                  onClick={() => setGroup(gi, 'invoiceNumber', (() => {
-                                    const cur = String(g.invoiceNumber || '').trim()
-                                    const m = cur.match(/^(.*?US-)(\d+)(-\d{2})(.*)$/i)
-                                    if (m) return `${m[1]}${Math.max(1, Number(m[2]) + 1)}${m[3]}${m[4]}`
-                                    const n = cur.match(/^(\D*?)(\d+)(.*)$/)
-                                    return n ? `${n[1]}${Math.max(1, Number(n[2]) + 1)}${n[3]}` : cur
-                                  })())}
-                                  className="h-[14px] w-5 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors">
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m6 15 6-6 6 6" /></svg>
-                                </button>
-                                <button type="button" aria-label="Decrease invoice number"
-                                  onClick={() => setGroup(gi, 'invoiceNumber', (() => {
-                                    const cur = String(g.invoiceNumber || '').trim()
-                                    const m = cur.match(/^(.*?US-)(\d+)(-\d{2})(.*)$/i)
-                                    if (m) return `${m[1]}${Math.max(1, Number(m[2]) - 1)}${m[3]}${m[4]}`
-                                    const n = cur.match(/^(\D*?)(\d+)(.*)$/)
-                                    return n ? `${n[1]}${Math.max(1, Number(n[2]) - 1)}${n[3]}` : cur
-                                  })())}
-                                  className="h-[14px] w-5 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors">
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>
-                                </button>
-                              </div>
+                            <div className={`${inputCls} bg-slate-50 text-slate-500 cursor-default select-all`}>
+                              {g.invoiceNumber || <span className="text-slate-300 italic">—</span>}
                             </div>
                           </Field>
                         </div>
@@ -4597,7 +4646,7 @@ function AirlineEditModal({ record, onClose, onSave, onRequestConvert, saving })
                         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
                           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Queued Renewal — what the user paid for</p>
                           <div className="grid sm:grid-cols-2 gap-4">
-                            <Field label="Queued Plan"><select className={selectCls} value={g.nextRenewal.plan || ''} onChange={e => setGroupRenewal(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Multiple Years Subscription Plan">Multiple Years</option><option value="Unlimited Plan">Unlimited</option></select></Field>
+                            <Field label="Queued Plan"><select className={selectCls} value={g.nextRenewal.plan || ''} onChange={e => setGroupRenewal(gi, 'plan', e.target.value)}><option value="1 Year Subscription Plan">1 Year</option><option value="Unlimited Plan">Unlimited</option></select></Field>
                             <Field label="Holder Count"><input className={inputCls} type="number" min="1" value={g.nextRenewal.count ?? ''} onChange={e => setGroupRenewal(gi, 'count', parseFloat(e.target.value) || 0)} /></Field>
                             <Field label="Price/Cert (USD)"><input className={inputCls} type="number" step="0.01" min="0" value={g.nextRenewal.pricePerCert ?? ''} onChange={e => setGroupRenewal(gi, 'pricePerCert', parseFloat(e.target.value) || 0)} /></Field>
                             <Field label="Amount Paid (USD)">
@@ -4987,7 +5036,7 @@ function triggerDownload({ url, filename }) {
 // initialStep: 'select' (default) | 'edit'  — which step to open at
 // autoPreview: if true, generates and opens the PDF preview immediately on mount
 // previewOnly: if true, only shows preview modal (for existing invoices)
-function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep = 'select', autoPreview = false, previewOnly = false }) {
+function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep = 'select', autoPreview = false, previewOnly = false, convertMode = false }) {
   const isAirline = type === 'airline'
   const today = new Date()
   const payable = new Date(today); payable.setDate(payable.getDate() + 30)
@@ -5042,7 +5091,10 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
   // Once the admin saves (number assigned), treat the invoice as existing for the
   // rest of this modal's life so the "Generate Invoice" CTA never reappears.
   const [invoiceSaved, setInvoiceSaved] = useState(false)
-  const hasInvoice = invoiceSaved || (!isNewInvoice && hasExistingInvoice(record))
+  // Upgrade (convert-to-Unlimited) flow: the modal is seeded with a draft + invoice
+  // number, but the invoice is NOT generated and the plan is NOT upgraded until the
+  // admin clicks "Generate Invoice". Treat it as a fresh generation, not an edit.
+  const hasInvoice = invoiceSaved || (!isNewInvoice && !convertMode && hasExistingInvoice(record))
 
   const [paymentMethodSel, setPaymentMethodSel] = useState(
     initialStep === 'edit' ? defaultPaymentMethod : (isAirline ? 'wire' : 'card')
@@ -5203,6 +5255,7 @@ function AdminInvoiceModal({ record, type, onClose, onSaveInvoice, initialStep =
       await onSaveInvoice(record._id, type, payload)
       setSavedSnapshot(serializeInvoice(inv))
       setInvoiceSaved(true)
+      onClose()
     } catch (err) {
       setSaveError(err?.response?.data?.message || 'Could not save invoice changes.')
     } finally {
@@ -6128,6 +6181,9 @@ function AirlinesTable({ data, onView, onDelete, onInvoice, onInvoicePreview, de
   )
 }
 
+const COUNTRY_NAMES = { AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AD:'Andorra',AO:'Angola',AG:'Antigua and Barbuda',AR:'Argentina',AM:'Armenia',AU:'Australia',AT:'Austria',AZ:'Azerbaijan',BS:'Bahamas',BH:'Bahrain',BD:'Bangladesh',BB:'Barbados',BY:'Belarus',BE:'Belgium',BZ:'Belize',BJ:'Benin',BT:'Bhutan',BO:'Bolivia',BA:'Bosnia and Herzegovina',BW:'Botswana',BR:'Brazil',BN:'Brunei',BG:'Bulgaria',BF:'Burkina Faso',BI:'Burundi',CV:'Cabo Verde',KH:'Cambodia',CM:'Cameroon',CA:'Canada',CF:'Central African Republic',TD:'Chad',CL:'Chile',CN:'China',CO:'Colombia',KM:'Comoros',CG:'Congo',CR:'Costa Rica',HR:'Croatia',CU:'Cuba',CY:'Cyprus',CZ:'Czech Republic',DK:'Denmark',DJ:'Djibouti',DM:'Dominica',DO:'Dominican Republic',EC:'Ecuador',EG:'Egypt',SV:'El Salvador',GQ:'Equatorial Guinea',ER:'Eritrea',EE:'Estonia',SZ:'Eswatini',ET:'Ethiopia',FJ:'Fiji',FI:'Finland',FR:'France',GA:'Gabon',GM:'Gambia',GE:'Georgia',DE:'Germany',GH:'Ghana',GR:'Greece',GD:'Grenada',GT:'Guatemala',GN:'Guinea',GW:'Guinea-Bissau',GY:'Guyana',HT:'Haiti',HN:'Honduras',HU:'Hungary',IS:'Iceland',IN:'India',ID:'Indonesia',IR:'Iran',IQ:'Iraq',IE:'Ireland',IL:'Israel',IT:'Italy',JM:'Jamaica',JP:'Japan',JO:'Jordan',KZ:'Kazakhstan',KE:'Kenya',KI:'Kiribati',KW:'Kuwait',KG:'Kyrgyzstan',LA:'Laos',LV:'Latvia',LB:'Lebanon',LS:'Lesotho',LR:'Liberia',LY:'Libya',LI:'Liechtenstein',LT:'Lithuania',LU:'Luxembourg',MG:'Madagascar',MW:'Malawi',MY:'Malaysia',MV:'Maldives',ML:'Mali',MT:'Malta',MH:'Marshall Islands',MR:'Mauritania',MU:'Mauritius',MX:'Mexico',FM:'Micronesia',MD:'Moldova',MC:'Monaco',MN:'Mongolia',ME:'Montenegro',MA:'Morocco',MZ:'Mozambique',MM:'Myanmar',NA:'Namibia',NR:'Nauru',NP:'Nepal',NL:'Netherlands',NZ:'New Zealand',NI:'Nicaragua',NE:'Niger',NG:'Nigeria',NO:'Norway',OM:'Oman',PK:'Pakistan',PW:'Palau',PA:'Panama',PG:'Papua New Guinea',PY:'Paraguay',PE:'Peru',PH:'Philippines',PL:'Poland',PT:'Portugal',QA:'Qatar',RO:'Romania',RU:'Russia',RW:'Rwanda',KN:'Saint Kitts and Nevis',LC:'Saint Lucia',VC:'Saint Vincent and the Grenadines',WS:'Samoa',SM:'San Marino',ST:'Sao Tome and Principe',SA:'Saudi Arabia',SN:'Senegal',RS:'Serbia',SC:'Seychelles',SL:'Sierra Leone',SG:'Singapore',SK:'Slovakia',SI:'Slovenia',SB:'Solomon Islands',SO:'Somalia',ZA:'South Africa',SS:'South Sudan',ES:'Spain',LK:'Sri Lanka',SD:'Sudan',SR:'Suriname',SE:'Sweden',CH:'Switzerland',SY:'Syria',TW:'Taiwan',TJ:'Tajikistan',TZ:'Tanzania',TH:'Thailand',TL:'Timor-Leste',TG:'Togo',TO:'Tonga',TT:'Trinidad and Tobago',TN:'Tunisia',TR:'Turkey',TM:'Turkmenistan',TV:'Tuvalu',UG:'Uganda',UA:'Ukraine',AE:'United Arab Emirates',GB:'United Kingdom',US:'United States',UY:'Uruguay',UZ:'Uzbekistan',VU:'Vanuatu',VE:'Venezuela',VN:'Vietnam',YE:'Yemen',ZM:'Zambia',ZW:'Zimbabwe' }
+const countryName = (code) => COUNTRY_NAMES[String(code).toUpperCase()] || code
+
 function OverviewPanel({ individuals, airlines }) {
   const indTotal = individuals.reduce((s, r) => s + (Number(r.price) || 0), 0)
   const airTotal = airlines.reduce((s, r) => s + getAirlineTotal(r), 0)
@@ -6166,21 +6222,21 @@ function OverviewPanel({ individuals, airlines }) {
           value={allHolders}
           sub="Airline total"
           accent="amber"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="7" width="20" height="14" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M16 7V5a2 2 0 0 0-4 0v2M12 12v4M10 14h4" /></svg>}
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="3" y="4" width="18" height="16" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h6M15 16l-1 3 2-1 2 1-1-3" /><circle cx="16" cy="14" r="2" /></svg>}
         />
         <StatCard
           label="Indiv. Revenue"
           value={'$' + indTotal.toLocaleString('en-US')}
           sub="Individual fees"
           accent="emerald"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M8 10h8M8 14h8" /></svg>}
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M15 8H10.5a2.5 2.5 0 0 0 0 5h3a2.5 2.5 0 0 1 0 5H9" /></svg>}
         />
         <StatCard
           label="Airline Revenue"
           value={'$' + airTotal.toLocaleString('en-US')}
           sub="Airline fees"
           accent="emerald"
-          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" /></svg>}
+          icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 12h.01M18 12h.01" /></svg>}
         />
         <StatCard
           label="Paid"
@@ -6215,7 +6271,7 @@ function OverviewPanel({ individuals, airlines }) {
           <div className="space-y-2">
             {topCountries.length === 0 ? <p className="text-sm text-slate-500">No data yet.</p> : topCountries.map(([country, count]) => (
               <div key={country} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
-                <span className="text-sm text-slate-700 font-medium">{country}</span>
+                <span className="text-sm text-slate-700 font-medium">{countryName(country)}</span>
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.round((count / allRegs.length) * 100)}%` }} />
@@ -6278,6 +6334,9 @@ export default function AdminDashboard() {
   const [highlightedAirlineId, setHighlightedAirlineId] = useState(null)
   const [highlightedIndividualId, setHighlightedIndividualId] = useState(null)
   const [invoiceModal, setInvoiceModal] = useState(null)
+  // Upgrade-to-Unlimited confirmation: { id, opts, q } — shows the priced breakdown
+  // before opening the invoice editor. Replaces the native window.confirm.
+  const [convertConfirm, setConvertConfirm] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkGenerating, setBulkGenerating] = useState(false)
@@ -6494,27 +6553,30 @@ export default function AdminDashboard() {
   // Price it, confirm the net amount, then open the invoice editor (seeded with the
   // Unlimited + credit line items) in conversion mode. The actual apply happens when
   // the admin saves the invoice (see the convert branch in handleSaveInvoice).
+  const planShortLbl = (p, y) => p === 'Unlimited Plan' ? 'Unlimited'
+    : p === 'Multiple Years Subscription Plan' ? `${y || 2} Years` : '1 Year'
+
   const handleRequestConvert = async (id, { holderGroupId = null, targetPlan = 'Unlimited Plan', targetYears = null, type = 'airline', skipConfirm = false } = {}) => {
     const model = type === 'airline' ? 'Airlines' : 'Individual'
-    const planShortLbl = (p, y) => p === 'Unlimited Plan' ? 'Unlimited'
-      : p === 'Multiple Years Subscription Plan' ? `${y || 2} Years` : '1 Year'
     try {
       const qres = await adminConversionQuote(id, model, holderGroupId, targetPlan, targetYears)
       const q = qres.data?.quote
       if (!q) { showToast('Could not price the upgrade.', 'error'); return }
-      const tLabel = planShortLbl(q.targetPlan || targetPlan, q.targetYears || targetYears)
+      const opts = { holderGroupId, targetPlan, targetYears, type }
       // skipConfirm: the dedicated upgrade modal already shows the net breakdown, so go
-      // straight to the invoice editor. Otherwise (Edit-modal upgrade) confirm first.
-      if (!skipConfirm) {
-        const ok = window.confirm(
-          `Upgrade to ${tLabel}\n\n` +
-          `${tLabel}: $${Number(q.unlimitedTotal).toFixed(2)}\n` +
-          `Credit (unused ${q.oldPlanLabel}): -$${Number(q.credit).toFixed(2)}\n` +
-          `Net to bill: $${Number(q.charge).toFixed(2)}\n\n` +
-          `Continue to the invoice editor?`
-        )
-        if (!ok) return
-      }
+      // straight to the invoice editor. Otherwise show the breakdown confirm modal first.
+      if (skipConfirm) { await proceedConvert(id, opts, q); return }
+      setConvertConfirm({ id, opts, q })
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Could not start the upgrade.', 'error')
+    }
+  }
+
+  // Seed the invoice editor with the priced conversion (Unlimited line + credit line)
+  // and open it with the convert metadata that drives adminConvertToUnlimited on save.
+  const proceedConvert = async (id, { holderGroupId = null, targetPlan = 'Unlimited Plan', targetYears = null, type = 'airline' } = {}, q) => {
+    try {
+      const tLabel = planShortLbl(q.targetPlan || targetPlan, q.targetYears || targetYears)
       const rec = (type === 'airline' ? airlines : individuals).find(a => a._id === id) || editRec || { _id: id }
       let invoiceNumber = ''
       try { const g = await generateInvoiceNumber(); invoiceNumber = g.data?.invoiceNumber || '' } catch { /* admin can fill */ }
@@ -6969,6 +7031,7 @@ export default function AdminDashboard() {
           onGenerateInvoice={r => openInvoiceGenerate(r, 'airline')}
           onEditInvoice={r => openInvoiceEdit(r, 'airline')}
           onDeleteRegistration={() => { closeView(); handleDelete(viewRec._id, 'airline') }}
+          onRequestConvert={(id, opts) => { closeView(); handleRequestConvert(id, { ...opts, type: 'airline' }) }}
         />
       )}
       {basePlanRec && (
@@ -7026,8 +7089,22 @@ export default function AdminDashboard() {
           initialStep={invoiceModal.initialStep}
           autoPreview={invoiceModal.autoPreview}
           previewOnly={invoiceModal.previewOnly}
+          convertMode={Boolean(invoiceModal.convert)}
           onClose={closeInvoiceModal}
           onSaveInvoice={handleSaveInvoice}
+        />
+      )}
+
+      {convertConfirm && (
+        <UpgradeConfirmModal
+          quote={convertConfirm.q}
+          targetLabel={planShortLbl(convertConfirm.q.targetPlan || convertConfirm.opts.targetPlan, convertConfirm.q.targetYears || convertConfirm.opts.targetYears)}
+          onCancel={() => setConvertConfirm(null)}
+          onConfirm={() => {
+            const { id, opts, q } = convertConfirm
+            setConvertConfirm(null)
+            proceedConvert(id, opts, q)
+          }}
         />
       )}
 

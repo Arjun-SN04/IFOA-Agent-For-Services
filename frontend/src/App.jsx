@@ -7,6 +7,7 @@ import { DataCacheProvider } from './context/DataCacheContext'
 import ChatBot from './components/ChatBot'
 import HeaderNav from './components/layout/HeaderNav'
 import Navbar from './components/Navbar'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Public pages — eagerly loaded
 import Home from './pages/Home'
@@ -85,6 +86,24 @@ function RequireAuth({ roles }) {
   return <Outlet />
 }
 
+// ── Animated Outlet for smooth page transitions ─────────────────────────────
+function AnimatedOutlet() {
+  const location = useLocation()
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <Outlet />
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 // ── Persistent dashboard shell ──────────────────────────────────────────────
 // HeaderNav stays mounted the entire time the user is inside /dashboard/*
 // Only the <main> content swaps — no header remount, no layout flicker.
@@ -94,7 +113,7 @@ function DashboardShell() {
       <HeaderNav />
       <main className="mx-auto w-full max-w-7xl px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:mb-14 lg:px-10">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
-          <Outlet />
+          <AnimatedOutlet />
         </Suspense>
       </main>
     </div>
@@ -109,7 +128,7 @@ function AdminShell() {
       {/* Changed overflow-x-clip to overflow-x-hidden to allow table scrolling while preventing page-level horizontal jitter */}
       <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-hidden">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
-          <Outlet />
+          <AnimatedOutlet />
         </Suspense>
       </main>
     </div>
@@ -129,20 +148,22 @@ function App() {
     const checkScrollLock = () => {
       const hasModal = Array.from(document.querySelectorAll('.fixed.inset-0')).some(el => {
         const cls = el.className || '';
+        
+        // Match Tailwind standard classes (e.g., z-50) and arbitrary values (e.g., z-[90])
+        const zIndexMatch = cls.match(/z-(?:\[(\d+)\]|(\d+))/);
+        if (zIndexMatch) {
+          const zVal = parseInt(zIndexMatch[1] || zIndexMatch[2], 10);
+          if (zVal >= 50) return true;
+        }
+
+        // Support inline style zIndex
+        const inlineZ = parseInt(el.style.zIndex, 10);
+        if (!isNaN(inlineZ) && inlineZ >= 50) return true;
+
         return (
-          cls.includes('z-50') || 
-          cls.includes('z-[50]') || 
-          cls.includes('z-[60]') || 
-          cls.includes('z-[61]') || 
-          cls.includes('z-[70]') || 
-          cls.includes('z-[71]') || 
-          cls.includes('z-[100]') || 
-          cls.includes('z-[120]') || 
           cls.includes('bg-slate-900') || 
           cls.includes('bg-black') || 
-          cls.includes('backdrop-blur') || 
-          el.style.zIndex === '9999' ||
-          el.style.zIndex === '99999'
+          cls.includes('backdrop-blur')
         );
       });
       

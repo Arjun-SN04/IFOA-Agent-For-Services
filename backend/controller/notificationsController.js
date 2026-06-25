@@ -305,6 +305,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.wirePaymentRequested && s.paymentStatus !== 'paid') {
       out.push({
         id: `airline-wire-${s._id}`,
+        entityId: String(s._id),
         type: 'wire-pending',
         title: 'Wire Request Submitted',
         message: `Your wire-transfer invoice request for ${s.subscriptionPlan || 'this plan'} is pending admin review. You\'ll be contacted with payment instructions.`,
@@ -317,6 +318,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.paymentStatus !== 'paid' && s.status !== 'Active' && !s.wirePaymentRequested) {
       out.push({
         id: `airline-payment-${s._id}`,
+        entityId: String(s._id),
         type: 'payment-pending',
         title: 'Payment Required',
         message: `Complete card payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your certificate.`,
@@ -329,6 +331,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.paymentStatus === 'paid' || s.status === 'Active') {
       out.push({
         id: `airline-active-${s._id}`,
+        entityId: String(s._id),
         type: 'subscription-active',
         title: 'Subscription Active',
         message: `${s.subscriptionPlan || 'Your subscription'} is active. Your U.S. Agent for Service is registered.`,
@@ -342,6 +345,7 @@ async function getAirlineNotifications(user, limit) {
     if (d != null && d >= 0 && d <= 30) {
       out.push({
         id: `airline-expiry-${s._id}`,
+        entityId: String(s._id),
         type: 'expiry-soon',
         title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
         message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew now to stay FAA-compliant.`,
@@ -430,6 +434,7 @@ async function getIndividualNotifications(user, limit) {
     if (s.paymentStatus !== 'paid' && s.status !== 'Active') {
       out.push({
         id: `individual-payment-${s._id}`,
+        entityId: String(s._id),
         type: 'payment-pending',
         title: 'Payment Required',
         message: `Complete payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your FAA compliance certificate.`,
@@ -442,6 +447,7 @@ async function getIndividualNotifications(user, limit) {
     if (s.paymentStatus === 'paid' || s.status === 'Active') {
       out.push({
         id: `individual-active-${s._id}`,
+        entityId: String(s._id),
         type: 'subscription-active',
         title: 'Subscription Active',
         message: `${s.subscriptionPlan || 'Your subscription'} is active. IFOA USA is your registered U.S. Agent for Service.`,
@@ -455,6 +461,7 @@ async function getIndividualNotifications(user, limit) {
     if (d != null && d >= 0 && d <= 30) {
       out.push({
         id: `individual-expiry-${s._id}`,
+        entityId: String(s._id),
         type: 'expiry-soon',
         title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
         message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew to maintain FAA compliance.`,

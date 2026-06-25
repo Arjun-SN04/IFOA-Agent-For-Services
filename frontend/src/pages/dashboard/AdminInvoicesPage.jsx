@@ -168,76 +168,79 @@ export default function AdminInvoicesPage() {
   }
 
   return (
-    <div>
-      <div className="mb-4 text-center">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Admin Control Center</p>
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wide text-slate-900">Invoices</h1>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-116px)] sm:h-[calc(100vh-156px)]">
 
-      {err && (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-          <span>{err}</span>
-          <button onClick={load} className="ml-auto font-semibold underline hover:no-underline">Retry</button>
+      {/* ── Fixed header: title + toolbar ── */}
+      <div className="flex-none">
+        <div className="mb-3 text-center pt-1">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Admin Control Center</p>
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wide text-slate-900">Invoices</h1>
         </div>
-      )}
 
-      <div className="sticky top-[64px] sm:top-[88px] z-30 -mx-4 sm:-mx-5 lg:-mx-8 px-4 sm:px-5 lg:px-8 py-3 bg-slate-50/95 backdrop-blur border-b border-slate-200">
-        <div className="flex flex-wrap items-center gap-3 px-1">
-          <div className="relative flex-grow sm:flex-grow-0">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
-            <input type="text" placeholder="Search invoice number, recipient…" value={search} onChange={e => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-full sm:w-72 bg-white transition shadow-sm" />
+        {err && (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+            <span>{err}</span>
+            <button onClick={load} className="ml-auto font-semibold underline hover:no-underline">Retry</button>
           </div>
-          <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition h-[40px]">
-            <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" /></svg>
-            Refresh
-          </button>
+        )}
 
-          <div className="flex items-center gap-1.5">
-            {['all', 'paid', 'pending'].map(s => {
-              const n = s === 'all' ? rows.length : rows.filter(r => String(r.status || '').toLowerCase() === s).length
-              return (
-                <button key={s} onClick={() => setStatusFilter(s)}
-                  className={`rounded-xl px-3 py-2.5 text-xs font-bold capitalize transition h-[40px] ${statusFilter === s ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                  {s === 'all' ? 'All' : s} <span className={statusFilter === s ? 'text-white/60' : 'text-slate-400'}>({n})</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {selected.size > 0 ? (
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-xs font-semibold text-slate-600">{selected.size} selected</span>
-              <button onClick={() => setConfirm({ mode: 'bulk', numbers: [...selected] })}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 px-3 py-2 text-xs font-bold text-white transition">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
-                Delete selected
-              </button>
-              <button onClick={() => setSelected(new Set())}
-                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-                Clear
-              </button>
+        <div className="-mx-4 sm:-mx-5 lg:-mx-8 px-4 sm:px-5 lg:px-8 py-3 bg-slate-50/95 backdrop-blur border-y border-slate-200">
+          <div className="flex flex-wrap items-center gap-3 px-1">
+            <div className="relative flex-grow sm:flex-grow-0">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" strokeLinejoin="round" d="m20 20-3.5-3.5" /></svg>
+              <input type="text" placeholder="Search invoice number, recipient…" value={search} onChange={e => setSearch(e.target.value)}
+                className="pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 w-full sm:w-72 bg-white transition shadow-sm" />
             </div>
-          ) : (
-            <p className="text-sm text-slate-500 ml-auto">
-              <span className="font-semibold text-slate-800">{filtered.length}</span> invoice{filtered.length !== 1 ? 's' : ''}
-            </p>
-          )}
+            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition h-[40px]">
+              <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3M4 4v5h5M20 20v-5h-5" /></svg>
+              Refresh
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              {['all', 'paid', 'pending'].map(s => {
+                const n = s === 'all' ? rows.length : rows.filter(r => String(r.status || '').toLowerCase() === s).length
+                return (
+                  <button key={s} onClick={() => setStatusFilter(s)}
+                    className={`rounded-xl px-3 py-2.5 text-xs font-bold capitalize transition h-[40px] ${statusFilter === s ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                    {s === 'all' ? 'All' : s} <span className={statusFilter === s ? 'text-white/60' : 'text-slate-400'}>({n})</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {selected.size > 0 ? (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-xs font-semibold text-slate-600">{selected.size} selected</span>
+                <button onClick={() => setConfirm({ mode: 'bulk', numbers: [...selected] })}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 px-3 py-2 text-xs font-bold text-white transition">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /></svg>
+                  Delete selected
+                </button>
+                <button onClick={() => setSelected(new Set())}
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 ml-auto">
+                <span className="font-semibold text-slate-800">{filtered.length}</span> invoice{filtered.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="mb-5" />
-
-      {loading ? (
-        <div className="flex items-center justify-center py-40">
-          <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white py-20 text-center text-slate-500">No invoices found.</div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* ── Scrollable table body ── */}
+      <div className="flex-1 min-h-0 overflow-auto mt-3 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center py-40">
+            <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center text-slate-500">No invoices found.</div>
+        ) : (
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <th className="px-4 py-3 w-10">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}
@@ -306,8 +309,8 @@ export default function AdminInvoicesPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       {confirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">

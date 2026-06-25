@@ -6,6 +6,7 @@
  * chatbot. Real-time via Socket.IO, history + fallback via REST.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getSocket } from '../../services/socket'
 import { getMySupportChat, sendMySupportMsg, markMySupportRead } from '../../services/api'
 import ifoaLogo from '../../assets/IFOA_USA_white.png'
@@ -116,13 +117,19 @@ const SUGGESTIONS = [
 ]
 
 export default function UserSupportPage() {
+  const [searchParams] = useSearchParams()
+  const scrollNew = searchParams.get('scrollNew') === '1'
+
   const [messages, setMessages] = useState([])
+  const [newMessageIds, setNewMessageIds] = useState(new Set())
+  const [highlightFaded, setHighlightFaded] = useState(false)
   const [text, setText] = useState('')
   const [hoveredText, setHoveredText] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [agentTyping, setAgentTyping] = useState(false)
   const scrollRef = useRef(null)
+  const firstNewRef = useRef(null)
   const typingTimer = useRef(null)
 
   const scrollToBottom = useCallback(() => {
@@ -151,15 +158,24 @@ export default function UserSupportPage() {
     getMySupportChat()
       .then(res => {
         if (!active) return
-        setMessages(res.data?.data?.messages || [])
-        scrollToBottom()
+        const msgs = res.data?.data?.messages || []
+        const unread = scrollNew ? (res.data?.data?.conversation?.userUnread || 0) : 0
+        setMessages(msgs)
+        if (unread > 0) {
+          const adminMsgs = msgs.filter(m => m.senderRole !== 'user')
+          const ids = new Set(adminMsgs.slice(-unread).map(m => m._id))
+          setNewMessageIds(ids)
+          setTimeout(() => setHighlightFaded(true), 3500)
+        } else {
+          scrollToBottom()
+        }
       })
       .catch(() => { })
       .finally(() => { if (active) setLoading(false) })
     markMySupportRead().catch(() => { })
     getSocket()?.emit('support:read', {})
     return () => { active = false }
-  }, [scrollToBottom])
+  }, [scrollToBottom, scrollNew])
 
   // ── Socket wiring ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -207,7 +223,15 @@ export default function UserSupportPage() {
     }
   }, [])
 
-  useEffect(() => { scrollToBottom() }, [messages, agentTyping, scrollToBottom])
+  useEffect(() => {
+    if (newMessageIds.size > 0 && firstNewRef.current) {
+      requestAnimationFrame(() => {
+        firstNewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    } else {
+      scrollToBottom()
+    }
+  }, [messages, agentTyping, scrollToBottom, newMessageIds])
 
   const emitTyping = (typing) => getSocket()?.emit('support:typing', { typing })
 
@@ -376,9 +400,20 @@ export default function UserSupportPage() {
             {messages.map((m, i) => {
               const mine = m.senderRole === 'user'
               const showSep = i === 0 || dayKey(m.createdAt) !== dayKey(messages[i - 1].createdAt)
+              const isNew = newMessageIds.has(m._id)
+              const isFirstNew = isNew && !messages.slice(0, i).some(prev => newMessageIds.has(prev._id))
               return (
-                <div key={m._id}>
-                  {showSep && (
+                <div key={m._id} ref={isFirstNew ? firstNewRef : null} className="scroll-mt-4">
+                  {isFirstNew && (
+                    <div className={`flex items-center gap-3 my-3 transition-opacity duration-700 ${highlightFaded ? 'opacity-0' : 'opacity-100'}`}>
+                      <div className="flex-1 h-px bg-blue-200" />
+                      <span className="text-[11px] font-black uppercase tracking-widest text-blue-500 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
+                        New Messages
+                      </span>
+                      <div className="flex-1 h-px bg-blue-200" />
+                    </div>
+                  )}
+                  {!isFirstNew && showSep && (
                     <div className="flex items-center gap-3 my-3">
                       <div className="flex-1 h-px bg-slate-200" />
                       <span className="text-[11px] font-medium text-slate-400 px-2">{fmtDateSep(m.createdAt)}</span>
@@ -391,11 +426,20 @@ export default function UserSupportPage() {
                         <img src={ifoaLogo} alt="IFOA" className="w-full h-full object-contain" />
                       </div>
                     )}
-                    <div className={`max-w-[76%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                      mine ? 'bg-slate-900 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-200 shadow-sm rounded-bl-sm'
+                    <div className={`max-w-[76%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed transition-all duration-700 ${
+                      mine
+                        ? 'bg-slate-900 text-white rounded-br-sm'
+                        : isNew && !highlightFaded
+                          ? 'bg-blue-50 text-slate-800 border border-blue-200 shadow-sm rounded-bl-sm ring-1 ring-blue-300/50'
+                          : 'bg-white text-slate-800 border border-slate-200 shadow-sm rounded-bl-sm'
                     }`}>
                       <p className="whitespace-pre-wrap break-words">{m.body?.trim().replace(/\n{3,}/g, '\n\n')}</p>
-                      <p className="text-[10px] mt-1.5 text-slate-400">{fmtTime(m.createdAt)}</p>
+                      <div className="flex items-center justify-between mt-1.5 gap-2">
+                        <p className="text-[10px] text-slate-400">{fmtTime(m.createdAt)}</p>
+                        {isNew && !highlightFaded && (
+                          <span className="text-[9px] font-black uppercase tracking-widest text-blue-500">new</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
