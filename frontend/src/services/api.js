@@ -154,6 +154,9 @@ export const hardDeleteInvoice = (invoiceNumber) =>
 // Admin Invoices tab: hard-delete many invoices in one call
 export const bulkHardDeleteInvoices = (invoiceNumbers) =>
   API.post('/invoices/admin/bulk-delete', { invoiceNumbers })
+// Admin Invoices tab: flip ONLY the invoice's paid ↔ pending status (plan untouched)
+export const updateInvoiceStatus = (invoiceNumber, status) =>
+  API.patch(`/invoices/admin/${encodeURIComponent(invoiceNumber)}/status`, { status })
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)

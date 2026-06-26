@@ -929,6 +929,25 @@ exports.updateAirlinesSubscription = async (req, res) => {
       }
     }
 
+    // ── Link the modal's "Invoice Status" to the canonical Invoice doc ──────────
+    // The edit modal's Invoice Status dropdown sets paymentStatus. The Invoices page
+    // reads Invoice.status, so keep that doc in sync for the registration's ACTIVE
+    // BASE invoice. Does NOT affect the plan (isPaid/status handled separately).
+    if (isAdmin && (payload.paymentStatus === 'paid' || payload.paymentStatus === 'pending' || payload.paymentStatus === 'failed')) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const baseNum = normalizeInvoiceNumber(doc.invoiceNumber);
+        if (baseNum) {
+          const newStatus = payload.paymentStatus === 'paid' ? 'paid' : 'issued';
+          const set = { status: newStatus };
+          if (newStatus === 'paid') set.paidAt = new Date();
+          await Invoice.updateOne({ registrationId: req.params.id, invoiceNumber: baseNum }, { $set: set });
+        }
+      } catch (statusSyncErr) {
+        console.warn('[updateAirlines] Invoice status sync failed:', statusSyncErr.message);
+      }
+    }
+
     // Send confirmation email when admin activates a subscription for the first time.
     if (isAdmin && payload.paymentStatus === 'paid' && !wasAlreadyPaidAir) {
       sendAirlinePaymentConfirmation(doc).catch((e) =>
@@ -2287,7 +2306,7 @@ exports.activateWirePayment = async (req, res) => {
           });
           await Invoice.updateMany(
             { registrationId: doc._id, purpose: 'convert-unlimited', wirePending: true },
-            { $set: { wirePending: false } },
+            { $set: { wirePending: false, status: 'paid', paidAt: new Date() } },
           );
         } catch (e) {
           console.warn('[activateWirePayment] Conversion invoice failed:', e.message);
@@ -2382,7 +2401,7 @@ exports.activateWirePayment = async (req, res) => {
         // Approval confirmed — reveal the wire invoice to the airline.
         await Invoice.updateMany(
           { registrationId: doc._id, purpose: invPurpose, wirePending: true },
-          { $set: { wirePending: false } },
+          { $set: { wirePending: false, status: 'paid', paidAt: new Date() } },
         );
       } catch (e) {
         console.warn('[activateWirePayment] Detail-based invoice failed:', e.message);

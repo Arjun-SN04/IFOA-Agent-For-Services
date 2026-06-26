@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { getAllInvoices, hardDeleteInvoice, bulkHardDeleteInvoices, saveInvoiceDraftToDoc } from '../../services/api'
+import { getAllInvoices, hardDeleteInvoice, bulkHardDeleteInvoices, saveInvoiceDraftToDoc, updateInvoiceStatus } from '../../services/api'
 import { generateIFOAInvoicePDF, triggerInvoiceDownload } from '../../utils/ifoaInvoicePdf'
 
 const fmtMoney = (n) =>
@@ -18,6 +18,14 @@ const toDateInput = (d) => {
 }
 
 const SOURCE_LABEL = { invoice: 'Invoice', payment: 'Payment', renewal: 'Renewal' }
+
+const _seqKey = (num) => {
+  const m = /US-(\d+)-(\d+)/i.exec(String(num || ''))
+  return m ? { yy: parseInt(m[2], 10), seq: parseInt(m[1], 10) } : null
+}
+
+// Only two user-facing states: Paid or Pending. 'issued'/'draft'/anything-else → pending.
+const statusLabel = (s) => s === 'paid' ? 'paid' : s === 'void' ? 'void' : 'pending'
 
 // Build the PDF-ready invoice object from a list row (prefers its saved draft).
 const buildInvObject = (row) => (
@@ -45,6 +53,18 @@ export default function AdminInvoicesPage() {
   const [selected, setSelected] = useState(() => new Set())
   const [preview, setPreview] = useState(null)   // { url, filename }
   const [editing, setEditing] = useState(null)    // row being edited
+  const [statusMenu, setStatusMenu] = useState(null)  // invoiceNumber of open status dropdown
+  const [sortKey, setSortKey] = useState('invoiceNumber')
+  const [sortDir, setSortDir] = useState('desc')
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setErr('')
@@ -61,11 +81,22 @@ export default function AdminInvoicesPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Close status dropdown on outside click (ignore clicks inside the menu/badge)
+  useEffect(() => {
+    if (!statusMenu) return
+    const close = (e) => {
+      if (e.target.closest?.('[data-status-ui]')) return
+      setStatusMenu(null)
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [statusMenu])
+
   const filtered = useMemo(() => {
     // Status filter first (Paid / Pending), then the text search on what remains.
     const base = statusFilter === 'all'
       ? rows
-      : rows.filter(r => String(r.status || '').toLowerCase() === statusFilter)
+      : rows.filter(r => statusLabel(String(r.status || '').toLowerCase()) === statusFilter)
     const q = search.trim().toLowerCase()
     if (!q) return base
     const numeric = /^\d+$/.test(q)
@@ -85,9 +116,65 @@ export default function AdminInvoicesPage() {
     })
   }, [rows, search, statusFilter])
 
+  const displayed = useMemo(() => {
+    const arr = [...filtered]
+    const dir = sortDir === 'asc' ? 1 : -1
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case 'invoiceNumber': {
+          const ka = _seqKey(a.invoiceNumber), kb = _seqKey(b.invoiceNumber)
+          if (ka && kb) {
+            if (ka.yy !== kb.yy) return dir * (ka.yy - kb.yy)
+            return dir * (ka.seq - kb.seq)
+          }
+          if (ka && !kb) return -1 * dir
+          if (!ka && kb) return 1 * dir
+          return dir * (new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+        }
+        case 'recipient': {
+          const ra = String(a.recipientCompany || a.recipientName || '').toLowerCase()
+          const rb = String(b.recipientCompany || b.recipientName || '').toLowerCase()
+          return dir * ra.localeCompare(rb)
+        }
+        case 'amount':
+          return dir * ((Number(a.totalAmount) || 0) - (Number(b.totalAmount) || 0))
+        case 'date':
+          return dir * (new Date(a.issueDate || a.createdAt || 0) - new Date(b.issueDate || b.createdAt || 0))
+        case 'status': {
+          const sa = statusLabel(a.status), sb = statusLabel(b.status)
+          return dir * sa.localeCompare(sb)
+        }
+        default:
+          return 0
+      }
+    })
+    return arr
+  }, [filtered, sortKey, sortDir])
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  // Change ONLY the invoice's status (paid ↔ pending). Plan status is untouched.
+  const handleStatusChange = async (row, newStatus) => {
+    setStatusMenu(null)
+    if (!row.invoiceId) {
+      showToast('This invoice has no editable record — status cannot be changed.', 'error')
+      return
+    }
+    if (statusLabel(row.status) === newStatus) return
+    try {
+      await updateInvoiceStatus(row.invoiceNumber, newStatus)
+      setRows(prev => prev.map(r =>
+        r.invoiceNumber === row.invoiceNumber
+          ? { ...r, status: newStatus === 'paid' ? 'paid' : 'issued' }
+          : r
+      ))
+      showToast(`Invoice ${row.invoiceNumber} marked as ${newStatus}.`)
+    } catch (e) {
+      showToast(e?.response?.data?.message || 'Status update failed.', 'error')
+    }
   }
 
   const allVisibleSelected = filtered.length > 0 && filtered.every(r => selected.has(r.invoiceNumber))
@@ -198,7 +285,7 @@ export default function AdminInvoicesPage() {
 
             <div className="flex items-center gap-1.5">
               {['all', 'paid', 'pending'].map(s => {
-                const n = s === 'all' ? rows.length : rows.filter(r => String(r.status || '').toLowerCase() === s).length
+                const n = s === 'all' ? rows.length : rows.filter(r => statusLabel(String(r.status || '').toLowerCase()) === s).length
                 return (
                   <button key={s} onClick={() => setStatusFilter(s)}
                     className={`rounded-xl px-3 py-2.5 text-xs font-bold capitalize transition h-[40px] ${statusFilter === s ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
@@ -246,18 +333,33 @@ export default function AdminInvoicesPage() {
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                 </th>
-                <th className="px-4 py-3">Invoice #</th>
-                <th className="px-4 py-3">Recipient</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Purpose</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Status</th>
+                {[
+                  { key: 'invoiceNumber', label: 'Invoice #', align: 'left' },
+                  { key: 'recipient',     label: 'Recipient',  align: 'left' },
+                  { key: null,            label: 'Type',       align: 'left' },
+                  { key: null,            label: 'Purpose',    align: 'left' },
+                  { key: 'amount',        label: 'Amount',     align: 'right' },
+                  { key: 'date',          label: 'Date',       align: 'left' },
+                  { key: 'status',        label: 'Status',     align: 'left' },
+                ].map(({ key, label, align }) => (
+                  <th key={label} className={`px-4 py-3${align === 'right' ? ' text-right' : ''}`}>
+                    {key ? (
+                      <button onClick={() => handleSort(key)}
+                        className="inline-flex items-center gap-1 hover:text-slate-800 transition select-none">
+                        {label}
+                        <span className="flex flex-col leading-none">
+                          <svg className={`w-2 h-2 ${sortKey === key && sortDir === 'asc' ? 'text-blue-600' : 'text-slate-300'}`} viewBox="0 0 6 4" fill="currentColor"><path d="M3 0 6 4H0z"/></svg>
+                          <svg className={`w-2 h-2 ${sortKey === key && sortDir === 'desc' ? 'text-blue-600' : 'text-slate-300'}`} viewBox="0 0 6 4" fill="currentColor"><path d="M3 4 0 0h6z"/></svg>
+                        </span>
+                      </button>
+                    ) : label}
+                  </th>
+                ))}
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {displayed.map((r) => (
                 <tr key={r.invoiceNumber} className={`border-b border-slate-100 last:border-0 transition ${selected.has(r.invoiceNumber) ? 'bg-blue-50/60' : 'hover:bg-slate-50/60'}`}>
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={selected.has(r.invoiceNumber)} onChange={() => toggleOne(r.invoiceNumber)}
@@ -276,10 +378,39 @@ export default function AdminInvoicesPage() {
                   <td className="px-4 py-3 text-right font-semibold text-slate-800 whitespace-nowrap">{fmtMoney(r.totalAmount)}</td>
                   <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmtDate(r.issueDate || r.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${
-                      r.status === 'paid' ? 'bg-emerald-100 text-emerald-700'
-                      : r.status === 'void' ? 'bg-slate-200 text-slate-600'
-                      : 'bg-blue-100 text-blue-700'}`}>{r.status || '—'}</span>
+                    {r.invoiceId ? (
+                      <div className="relative inline-block" data-status-ui>
+                        <button
+                          onClick={() => setStatusMenu(prev => prev === r.invoiceNumber ? null : r.invoiceNumber)}
+                          title="Click to change invoice status"
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold capitalize transition hover:opacity-80 ${
+                            statusLabel(r.status) === 'paid'   ? 'bg-emerald-100 text-emerald-700'
+                            : statusLabel(r.status) === 'void'  ? 'bg-slate-200 text-slate-600'
+                            : 'bg-amber-100 text-amber-700'}`}>
+                          {statusLabel(r.status)}
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>
+                        </button>
+                        {statusMenu === r.invoiceNumber && (
+                          <div className="absolute left-0 top-full mt-1 z-50 w-40 rounded-xl border border-slate-200 bg-white shadow-lg py-1 text-xs font-semibold">
+                            <button onClick={() => handleStatusChange(r, 'paid')}
+                              className={`w-full text-left px-3 py-2 hover:bg-slate-50 transition flex items-center gap-2 ${statusLabel(r.status) === 'paid' ? 'text-emerald-600' : 'text-slate-700'}`}>
+                              Mark as Paid
+                              {statusLabel(r.status) === 'paid' && <svg className="w-3 h-3 ml-auto text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" /></svg>}
+                            </button>
+                            <button onClick={() => handleStatusChange(r, 'pending')}
+                              className={`w-full text-left px-3 py-2 hover:bg-slate-50 transition flex items-center gap-2 ${statusLabel(r.status) === 'pending' ? 'text-amber-600' : 'text-slate-700'}`}>
+                              Mark as Pending
+                              {statusLabel(r.status) === 'pending' && <svg className="w-3 h-3 ml-auto text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" /></svg>}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${
+                        statusLabel(r.status) === 'paid' ? 'bg-emerald-100 text-emerald-700'
+                        : statusLabel(r.status) === 'void' ? 'bg-slate-200 text-slate-600'
+                        : 'bg-amber-100 text-amber-700'}`}>{statusLabel(r.status)}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

@@ -777,6 +777,24 @@ exports.updateIndividual = async (req, res) => {
       }
     }
 
+    // Keep the canonical Invoice doc's status field aligned with the registration's
+    // paymentStatus (invoice status) for the active base invoice — so the PDF/status
+    // field matches. Plan state (isPaid) is untouched.
+    if (isAdmin && (payload.paymentStatus === 'paid' || payload.paymentStatus === 'pending' || payload.paymentStatus === 'failed')) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const baseNum = normalizeInvoiceNumber(individual.invoiceNumber);
+        if (baseNum) {
+          const newStatus = payload.paymentStatus === 'paid' ? 'paid' : 'issued';
+          const set = { status: newStatus };
+          if (newStatus === 'paid') set.paidAt = new Date();
+          await Invoice.updateOne({ registrationId: req.params.id, invoiceNumber: baseNum }, { $set: set });
+        }
+      } catch (statusSyncErr) {
+        console.warn('[updateIndividual] Invoice status sync failed:', statusSyncErr.message);
+      }
+    }
+
     // Send confirmation email when admin activates a subscription for the first time.
     if (isAdmin && payload.paymentStatus === 'paid' && !wasAlreadyPaid) {
       sendIndividualPaymentConfirmation(individual).catch((e) =>
