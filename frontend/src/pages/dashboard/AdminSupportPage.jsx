@@ -16,7 +16,12 @@ import {
   editSupportMessage,
   deleteSupportMessage,
   deleteSupportConversation,
+  sendSupportEmail,
+  sendSupportBulkEmail,
 } from '../../services/api'
+
+const DEFAULT_EMAIL_SUBJECT = 'New message from IFOA USA Support'
+const DEFAULT_EMAIL_BODY    = 'You have a new message from the IFOA USA support team. Please log in to your dashboard to view it.'
 
 const fmtTime = (d) => {
   const dt = new Date(d)
@@ -66,7 +71,7 @@ function Avatar({ name, logoUrl, size = 'md' }) {
 
 export default function AdminSupportPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState('individual') // 'individual' | 'airline'
+  const [tab, setTab] = useState('all') // 'all' | 'individual' | 'airline'
   const [conversations, setConversations] = useState([])
   const [search, setSearch] = useState('')
   const [activeId, setActiveId] = useState(null)
@@ -79,6 +84,15 @@ export default function AdminSupportPage() {
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
   const [confirmDeleteConv, setConfirmDeleteConv] = useState(false)
+  // Custom email composer
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailSubject, setEmailSubject] = useState(DEFAULT_EMAIL_SUBJECT)
+  const [emailBody, setEmailBody] = useState(DEFAULT_EMAIL_BODY)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailStatus, setEmailStatus] = useState(null) // { ok: bool, msg: string }
+  const [emailMode, setEmailMode] = useState('single') // 'single' | 'bulk'
+  // List-selection for bulk email (set of conversation ids)
+  const [selected, setSelected] = useState(() => new Set())
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
   const typingTimer = useRef(null)
@@ -299,10 +313,76 @@ export default function AdminSupportPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
+  // Open the composer for the active conversation with the default template.
+  const openEmail = () => {
+    setEmailMode('single')
+    setEmailSubject(DEFAULT_EMAIL_SUBJECT)
+    setEmailBody(DEFAULT_EMAIL_BODY)
+    setEmailStatus(null)
+    setEmailOpen(true)
+  }
+
+  // Open the composer for the users checked in the list.
+  const openBulkEmail = () => {
+    if (selected.size === 0) return
+    setEmailMode('bulk')
+    setEmailSubject(DEFAULT_EMAIL_SUBJECT)
+    setEmailBody(DEFAULT_EMAIL_BODY)
+    setEmailStatus(null)
+    setEmailOpen(true)
+  }
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const clearSelected = () => setSelected(new Set())
+
+  const sendEmail = async () => {
+    const body = emailBody.trim()
+    if (!body || emailSending) return
+    const subject = emailSubject.trim() || DEFAULT_EMAIL_SUBJECT
+    setEmailSending(true)
+    setEmailStatus(null)
+    try {
+      if (emailMode === 'bulk') {
+        const ids = [...selected]
+        if (!ids.length) { setEmailSending(false); return }
+        const res = await sendSupportBulkEmail({ conversationIds: ids, subject, body })
+        const { sent = [], failed = [] } = res.data?.data || {}
+        setEmailStatus({
+          ok: failed.length === 0,
+          msg: failed.length === 0
+            ? `Email sent to ${sent.length} user${sent.length !== 1 ? 's' : ''}.`
+            : `Sent ${sent.length}, failed ${failed.length}.`,
+        })
+        if (failed.length === 0) {
+          clearSelected()
+          setTimeout(() => setEmailOpen(false), 1200)
+        }
+      } else {
+        if (!activeId) { setEmailSending(false); return }
+        await sendSupportEmail(activeId, { subject, body })
+        setEmailStatus({ ok: true, msg: `Email sent to ${activeConv?.email || 'user'}.` })
+        setTimeout(() => setEmailOpen(false), 1200)
+      }
+    } catch (err) {
+      setEmailStatus({ ok: false, msg: err?.response?.data?.message || 'Failed to send email.' })
+    } finally {
+      setEmailSending(false)
+    }
+  }
+
   const counts = useMemo(() => {
-    const c = { individual: 0, airline: 0 }
+    const c = { all: 0, individual: 0, airline: 0 }
     for (const conv of conversations) {
-      if (conv.adminUnread > 0) c[conv.role] = (c[conv.role] || 0) + 1
+      if (conv.adminUnread > 0) {
+        c.all += 1
+        c[conv.role] = (c[conv.role] || 0) + 1
+      }
     }
     return c
   }, [conversations])
@@ -310,11 +390,16 @@ export default function AdminSupportPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return conversations
-      .filter(c => c.role === tab)
+      .filter(c => tab === 'all' || c.role === tab)
       .filter(c => !q || `${c.name} ${c.email}`.toLowerCase().includes(q))
   }, [conversations, tab, search])
 
   const activeConv = conversations.find(c => String(c._id) === String(activeId))
+
+  const selectedEmails = useMemo(
+    () => conversations.filter(c => selected.has(c._id)).map(c => c.email).filter(Boolean),
+    [conversations, selected]
+  )
 
   const TabBtn = ({ id, label }) => (
     <button
@@ -342,6 +427,7 @@ export default function AdminSupportPage() {
         <div className={`flex flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden ${activeId ? 'hidden lg:flex' : 'flex'}`}>
           <div className="p-3 border-b border-slate-100 space-y-3">
             <div className="flex gap-1.5 bg-slate-50 rounded-xl p-1">
+              <TabBtn id="all" label="All" />
               <TabBtn id="individual" label="Individuals" />
               <TabBtn id="airline" label="Airlines" />
             </div>
@@ -352,6 +438,23 @@ export default function AdminSupportPage() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition"
             />
           </div>
+          {selected.size > 0 && (
+            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-900 text-white">
+              <span className="text-xs font-bold">{selected.size} selected</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={openBulkEmail}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white text-slate-900 hover:bg-slate-100 transition"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Send mail
+                </button>
+                <button onClick={clearSelected} className="px-2 py-1.5 text-xs font-semibold text-white/70 hover:text-white transition">Clear</button>
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
             {loadingList && (
               <div className="flex justify-center py-10"><div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" /></div>
@@ -361,16 +464,39 @@ export default function AdminSupportPage() {
             )}
             {filtered.map(c => {
               const active = String(c._id) === String(activeId)
+              const checked = selected.has(c._id)
               return (
-                <button
+                <div
                   key={c._id}
+                  className={`flex items-center border-b border-slate-50 transition ${active ? 'bg-slate-100' : checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}
+                >
+                  <label
+                    className="pl-3 pr-1 self-stretch flex items-center cursor-pointer"
+                    title="Select for email"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSelect(c._id)}
+                      className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400 cursor-pointer"
+                    />
+                  </label>
+                <button
                   onClick={() => openConversation(c._id)}
-                  className={`w-full text-left px-3 py-3 flex items-center gap-3 border-b border-slate-50 transition ${active ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
+                  className="flex-1 min-w-0 text-left pl-2 pr-3 py-3 flex items-center gap-3"
                 >
                   <Avatar name={c.name} logoUrl={c.logoUrl} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-slate-900 truncate">{c.name || 'Unknown'}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{c.name || 'Unknown'}</p>
+                        {tab === 'all' && (
+                          <span className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${c.role === 'airline' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            {c.role === 'airline' ? 'Airline' : 'Individual'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-slate-400 flex-shrink-0">{fmtTime(c.lastMessageAt)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -386,6 +512,7 @@ export default function AdminSupportPage() {
                     </div>
                   </div>
                 </button>
+                </div>
               )
             })}
           </div>
@@ -415,6 +542,16 @@ export default function AdminSupportPage() {
                   <p className="text-sm font-bold text-slate-900 truncate">{activeConv.name}</p>
                   <p className="text-[11px] text-slate-400 truncate">{activeConv.email} · {activeConv.role === 'airline' ? 'Airline' : 'Individual'}</p>
                 </div>
+                {/* Send custom email to this user */}
+                <button
+                  onClick={() => openEmail()}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 flex items-center justify-center transition"
+                  title="Send email to user"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </button>
                 {/* Delete entire conversation */}
                 <button
                   onClick={() => setConfirmDeleteConv(true)}
@@ -562,6 +699,55 @@ export default function AdminSupportPage() {
           )}
         </div>
       </div>
+
+      {/* Email composer modal (page-level — works for single + bulk) */}
+      {emailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-6 w-full max-w-md">
+            <div className="flex items-start justify-between mb-3">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-slate-900">Send email</p>
+                {emailMode === 'bulk' ? (
+                  <p className="text-xs text-slate-500 mt-0.5">To: <span className="font-semibold text-slate-700">{selectedEmails.length} recipient{selectedEmails.length !== 1 ? 's' : ''}</span>{selectedEmails.length > 0 && <span className="block text-[11px] text-slate-400 truncate mt-0.5">{selectedEmails.join(', ')}</span>}</p>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">To: <span className="font-semibold text-slate-700">{activeConv?.email || '—'}</span></p>
+                )}
+              </div>
+              <button onClick={() => setEmailOpen(false)} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Subject</label>
+            <input
+              value={emailSubject}
+              onChange={e => setEmailSubject(e.target.value)}
+              placeholder="Subject"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition mb-3"
+            />
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Message</label>
+            <textarea
+              value={emailBody}
+              onChange={e => setEmailBody(e.target.value)}
+              rows={6}
+              placeholder="Write your message…"
+              className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition"
+            />
+            {emailStatus && (
+              <p className={`text-xs mt-2 font-semibold ${emailStatus.ok ? 'text-emerald-600' : 'text-red-500'}`}>{emailStatus.msg}</p>
+            )}
+            <div className="flex gap-2 justify-end mt-4">
+              <button onClick={() => setEmailOpen(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+              <button
+                onClick={sendEmail}
+                disabled={!emailBody.trim() || emailSending}
+                className="px-4 py-2 text-sm font-semibold bg-slate-900 hover:bg-slate-700 text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {emailSending ? 'Sending…' : 'Send email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -31,5 +31,7 @@ router.delete('/conversations/:id/messages/:msgId',    adminOnly, ctrl.deleteMes
 router.delete('/conversations/:id/messages',           adminOnly, ctrl.deleteConversationMessages);
 router.delete('/conversations/:id',                   adminOnly, ctrl.deleteConversation);
 router.post('/conversations/:id/read',                 adminOnly, ctrl.markConversationRead);
+router.post('/conversations/:id/email',                adminOnly, ctrl.emailUser);
+router.post('/email/bulk',                             adminOnly, ctrl.emailUsers);
 
 module.exports = router;

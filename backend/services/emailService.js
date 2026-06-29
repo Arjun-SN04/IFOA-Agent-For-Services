@@ -444,6 +444,23 @@ async function buildOtpHtml(code, purpose) {
   `);
 }
 
+// ── Custom message from admin/agent (support console) ────────────────────────
+async function buildCustomMessageHtml(name, bodyText) {
+  const greeting = name ? `<mj-text>Dear ${escHtml(name)},</mj-text>` : '';
+  // Preserve the admin's line breaks; escape HTML so content stays plain text.
+  const paragraphs = String(bodyText || '')
+    .split(/\n{2,}/)
+    .map(p => `<mj-text>${escHtml(p).replace(/\n/g, '<br />')}</mj-text>`)
+    .join('\n');
+
+  return wrap(`
+    ${greeting}
+    ${paragraphs}
+    <mj-text>If you have any questions, feel free to reply or contact us at <a href="mailto:agent@theifoa.com" style="color:#0000cc;">agent@theifoa.com</a>.</mj-text>
+    <mj-text padding="0">Warm regards,<br /><strong>The IFOA USA Team</strong></mj-text>
+  `);
+}
+
 // ── Core send helper ──────────────────────────────────────────────────────────
 async function sendMail({ to, subject, html }) {
   if (process.env.DISABLE_EMAIL === 'true') {
@@ -562,6 +579,20 @@ async function sendOtpEmail(email, code, purpose) {
   });
 }
 
+// Custom one-off email from the support console to a single user.
+async function sendCustomMessageEmail({ email, name, subject, body }) {
+  const recipients = collectRecipients(email);
+  if (!recipients.length) {
+    throw Object.assign(new Error('No valid recipient email address.'), { status: 400 });
+  }
+  await sendMail({
+    to:      recipients.join(', '),
+    subject: subject || 'New message from IFOA USA Support',
+    html:    await buildCustomMessageHtml(name, body),
+  });
+  return recipients;
+}
+
 module.exports = {
   sendIndividualPaymentConfirmation,
   sendAirlinePaymentConfirmation,
@@ -571,4 +602,5 @@ module.exports = {
   sendExpiryReminder,
   sendWireRequestAdminNotification,
   sendOtpEmail,
+  sendCustomMessageEmail,
 };

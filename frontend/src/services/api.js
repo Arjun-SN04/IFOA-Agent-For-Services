@@ -188,3 +188,5 @@ export const editSupportMessage      = (id, msgId, body) => API.patch(`/support/
 export const deleteSupportMessage    = (id, msgId)     => API.delete(`/support/conversations/${id}/messages/${msgId}`)
 export const deleteSupportMessages   = (id)            => API.delete(`/support/conversations/${id}/messages`)
 export const deleteSupportConversation = (id)          => API.delete(`/support/conversations/${id}`)
+export const sendSupportEmail        = (id, { subject, body }) => API.post(`/support/conversations/${id}/email`, { subject, body })
+export const sendSupportBulkEmail    = ({ conversationIds, subject, body }) => API.post('/support/email/bulk', { conversationIds, subject, body })

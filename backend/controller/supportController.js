@@ -20,6 +20,7 @@
 const SupportConversation = require('../models/SupportConversation');
 const SupportMessage      = require('../models/SupportMessage');
 const support = require('../services/supportService');
+const email   = require('../services/emailService');
 
 const io = (req) => req.app.get('io');
 
@@ -237,6 +238,61 @@ exports.deleteConversation = async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: send a custom email to the conversation's user ─────────────────────
+exports.emailUser = async (req, res) => {
+  try {
+    const conversation = await SupportConversation.findById(req.params.id);
+    if (!conversation)
+      return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    const subject = String(req.body.subject || '').trim();
+    const body    = String(req.body.body || '').trim();
+    if (!body) return res.status(400).json({ success: false, message: 'Email body is required.' });
+    if (!conversation.email)
+      return res.status(400).json({ success: false, message: 'This user has no email address on file.' });
+
+    const recipients = await email.sendCustomMessageEmail({
+      email:   conversation.email,
+      name:    conversation.name,
+      subject,
+      body,
+    });
+
+    res.json({ success: true, data: { to: recipients } });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: send a custom email to many selected conversations ─────────────────
+exports.emailUsers = async (req, res) => {
+  try {
+    const ids     = Array.isArray(req.body.conversationIds) ? req.body.conversationIds : [];
+    const subject = String(req.body.subject || '').trim();
+    const body    = String(req.body.body || '').trim();
+    if (!ids.length) return res.status(400).json({ success: false, message: 'Select at least one user.' });
+    if (!body)       return res.status(400).json({ success: false, message: 'Email body is required.' });
+
+    const convs = await SupportConversation.find({ _id: { $in: ids } }).select('name email').lean();
+
+    const sent = [];
+    const failed = [];
+    for (const conv of convs) {
+      if (!conv.email) { failed.push({ name: conv.name, reason: 'No email on file.' }); continue; }
+      try {
+        await email.sendCustomMessageEmail({ email: conv.email, name: conv.name, subject, body });
+        sent.push(conv.email);
+      } catch (e) {
+        failed.push({ email: conv.email, reason: e.message });
+      }
+    }
+
+    res.json({ success: true, data: { sent, failed } });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 };
 
