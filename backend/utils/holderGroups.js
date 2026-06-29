@@ -13,6 +13,10 @@
 
 function isActiveHolderGroup(g, asOf = new Date()) {
   if (!g) return false;
+  // Admin-controlled kill switch: a group flipped Inactive in the edit modal stops
+  // contributing to coverage/pricing, regardless of expiry. Default (undefined/true)
+  // is active, so legacy groups are unaffected.
+  if (g.isActive === false) return false;
   if (g.plan === 'Unlimited Plan') return true;
   if (!g.expirationDate) return true;
   return new Date(g.expirationDate) > asOf;
@@ -50,6 +54,7 @@ function allHolderGroupSlots(holderGroups) {
  */
 function isCurrentBaseGroup(g, periodStart, asOf = new Date()) {
   if (!g) return false;
+  if (g.isActive === false) return false;   // admin-deactivated add-on plan
   if (g.plan === 'Unlimited Plan') return true;
   if (g.expirationDate && new Date(g.expirationDate) <= asOf) return false;
   if (!periodStart) return true;

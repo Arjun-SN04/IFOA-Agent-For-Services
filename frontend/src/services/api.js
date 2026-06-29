@@ -154,6 +154,9 @@ export const hardDeleteInvoice = (invoiceNumber) =>
 // Admin Invoices tab: hard-delete many invoices in one call
 export const bulkHardDeleteInvoices = (invoiceNumbers) =>
   API.post('/invoices/admin/bulk-delete', { invoiceNumbers })
+// Admin Invoices tab: flip ONLY the invoice's paid ↔ pending status (plan untouched)
+export const updateInvoiceStatus = (invoiceNumber, status) =>
+  API.patch(`/invoices/admin/${encodeURIComponent(invoiceNumber)}/status`, { status })
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const login             = (data) => API.post('/auth/login', data)
@@ -170,3 +173,20 @@ export const updateAirlineName = (data) => API.put('/auth/update-airline-name', 
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 export const getNotifications = (params) => API.get('/notifications', { params })
+
+// ── Support live-chat (human ↔ admin) ─────────────────────────────────────────
+// User (airline/individual)
+export const getMySupportChat   = ()       => API.get('/support/me')
+export const sendMySupportMsg   = (body)   => API.post('/support/me/messages', { body })
+export const markMySupportRead  = ()       => API.post('/support/me/read')
+// Admin
+export const getSupportConversations = (role) => API.get('/support/conversations', { params: role ? { role } : {} })
+export const getSupportConversation  = (id)   => API.get(`/support/conversations/${id}`)
+export const sendSupportReply        = (id, body) => API.post(`/support/conversations/${id}/messages`, { body })
+export const markSupportConvRead     = (id)            => API.post(`/support/conversations/${id}/read`)
+export const editSupportMessage      = (id, msgId, body) => API.patch(`/support/conversations/${id}/messages/${msgId}`, { body })
+export const deleteSupportMessage    = (id, msgId)     => API.delete(`/support/conversations/${id}/messages/${msgId}`)
+export const deleteSupportMessages   = (id)            => API.delete(`/support/conversations/${id}/messages`)
+export const deleteSupportConversation = (id)          => API.delete(`/support/conversations/${id}`)
+export const sendSupportEmail        = (id, { subject, body }) => API.post(`/support/conversations/${id}/email`, { subject, body })
+export const sendSupportBulkEmail    = ({ conversationIds, subject, body }) => API.post('/support/email/bulk', { conversationIds, subject, body })

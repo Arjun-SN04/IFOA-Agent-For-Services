@@ -491,10 +491,6 @@ export default function ChatBot() {
   // On the dashboard there is no hero section — show immediately. Elsewhere, gate on hero.
   if (isAuthPage || (heroVisible && !isDashboard)) return null
 
-  const chatHeight = typeof window !== 'undefined' && window.innerHeight < 640
-    ? 'calc(100vh - 90px)'
-    : 620
-
   // Bottom tabs
   const tabs = [
     {
@@ -568,15 +564,13 @@ export default function ChatBot() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-0 right-0 bg-white rounded-2xl overflow-hidden flex flex-col"
+            className="absolute bottom-0 right-0 bg-white rounded-2xl overflow-hidden flex flex-col max-w-[calc(100vw-32px)] sm:max-w-[calc(100vw-48px)] max-h-[calc(100vh-90px)] sm:max-h-[calc(100vh-120px)]"
             style={{
-              width: typeof window !== 'undefined' && window.innerWidth < 420
-                ? 'calc(100vw - 24px)'
-                : currentWidth,
-              height: chatHeight,
+              width: currentWidth,
+              height: 620,
               boxShadow: '0 24px 80px rgba(0,0,0,0.20), 0 4px 16px rgba(0,0,0,0.10)',
               border: '1px solid #e5e7eb',
-              transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
+              transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1), height 0.25s cubic-bezier(0.4,0,0.2,1)',
             }}
           >
             {/* Header */}

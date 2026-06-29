@@ -475,7 +475,6 @@ export default function AirlinesStep1PlanAndDetails({ data, update, onNext }) {
                     enableSearch
                     searchPlaceholder="Search country..."
                     preferredCountries={['us', 'gb', 'ae', 'au', 'ca', 'in']}
-                    dropdownStyle={{ bottom: '100%', top: 'auto' }}
                   />
                 </div>
               </div>

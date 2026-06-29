@@ -7,6 +7,7 @@ import { DataCacheProvider } from './context/DataCacheContext'
 import ChatBot from './components/ChatBot'
 import HeaderNav from './components/layout/HeaderNav'
 import Navbar from './components/Navbar'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Public pages — eagerly loaded
 import Home from './pages/Home'
@@ -18,6 +19,7 @@ import SignupPage from './pages/SignupPage'
 import AdminDashboard   from './pages/AdminDashboard'
 import AdminProfilePage from './pages/dashboard/AdminProfilePage'
 import AdminInvoicesPage from './pages/dashboard/AdminInvoicesPage'
+import AdminSupportPage from './pages/dashboard/AdminSupportPage'
 
 // Lazy-loaded pages — only downloaded when first visited
 const RegisterPage        = lazy(() => import('./pages/RegisterPage'))
@@ -27,6 +29,7 @@ const UserDashboard       = lazy(() => import('./pages/dashboard/UserDashboard')
 const ProfilePage         = lazy(() => import('./pages/dashboard/ProfilePage'))
 const SubscriptionPage    = lazy(() => import('./pages/dashboard/SubscriptionPage'))
 const SettingsPage        = lazy(() => import('./pages/dashboard/SettingsPage'))
+const UserSupportPage     = lazy(() => import('./pages/dashboard/UserSupportPage'))
 const FaqPage             = lazy(() => import('./pages/dashboard/FaqPage'))
 
 // Tiny blank-slate while a lazy chunk loads — no spinner flash
@@ -83,6 +86,24 @@ function RequireAuth({ roles }) {
   return <Outlet />
 }
 
+// ── Animated Outlet for smooth page transitions ─────────────────────────────
+function AnimatedOutlet() {
+  const location = useLocation()
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <Outlet />
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 // ── Persistent dashboard shell ──────────────────────────────────────────────
 // HeaderNav stays mounted the entire time the user is inside /dashboard/*
 // Only the <main> content swaps — no header remount, no layout flicker.
@@ -92,7 +113,7 @@ function DashboardShell() {
       <HeaderNav />
       <main className="mx-auto w-full max-w-7xl px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:mb-14 lg:px-10">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
-          <Outlet />
+          <AnimatedOutlet />
         </Suspense>
       </main>
     </div>
@@ -107,7 +128,7 @@ function AdminShell() {
       {/* Changed overflow-x-clip to overflow-x-hidden to allow table scrolling while preventing page-level horizontal jitter */}
       <main className="mx-auto w-full max-w-[1600px] px-4 sm:px-5 pt-[76px] sm:pt-[100px] pb-10 sm:pb-14 lg:px-8 overflow-x-hidden">
         <Suspense fallback={<div className="py-20 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-blue-500 animate-spin" /></div>}>
-          <Outlet />
+          <AnimatedOutlet />
         </Suspense>
       </main>
     </div>
@@ -127,20 +148,22 @@ function App() {
     const checkScrollLock = () => {
       const hasModal = Array.from(document.querySelectorAll('.fixed.inset-0')).some(el => {
         const cls = el.className || '';
+        
+        // Match Tailwind standard classes (e.g., z-50) and arbitrary values (e.g., z-[90])
+        const zIndexMatch = cls.match(/z-(?:\[(\d+)\]|(\d+))/);
+        if (zIndexMatch) {
+          const zVal = parseInt(zIndexMatch[1] || zIndexMatch[2], 10);
+          if (zVal >= 50) return true;
+        }
+
+        // Support inline style zIndex
+        const inlineZ = parseInt(el.style.zIndex, 10);
+        if (!isNaN(inlineZ) && inlineZ >= 50) return true;
+
         return (
-          cls.includes('z-50') || 
-          cls.includes('z-[50]') || 
-          cls.includes('z-[60]') || 
-          cls.includes('z-[61]') || 
-          cls.includes('z-[70]') || 
-          cls.includes('z-[71]') || 
-          cls.includes('z-[100]') || 
-          cls.includes('z-[120]') || 
           cls.includes('bg-slate-900') || 
           cls.includes('bg-black') || 
-          cls.includes('backdrop-blur') || 
-          el.style.zIndex === '9999' ||
-          el.style.zIndex === '99999'
+          cls.includes('backdrop-blur')
         );
       });
       
@@ -193,6 +216,7 @@ function App() {
                 <Route path="/admin/add-airline" element={<AdminDashboard />} />
                 <Route path="/admin/add-individual" element={<AdminDashboard />} />
                 <Route path="/admin/invoices" element={<AdminInvoicesPage />} />
+                <Route path="/admin/support" element={<AdminSupportPage />} />
                 <Route path="/admin/profile" element={<AdminProfilePage />} />
                 <Route path="/admin/faq" element={<FaqPage />} />
               </Route>
@@ -204,6 +228,7 @@ function App() {
                 <Route path="/dashboard" element={<UserDashboard />} />
                 <Route path="/dashboard/profile" element={<ProfilePage />} />
                 <Route path="/dashboard/subscription" element={<SubscriptionPage />} />
+                <Route path="/dashboard/support" element={<UserSupportPage />} />
                 <Route path="/dashboard/settings" element={<SettingsPage />} />
                 <Route path="/dashboard/faq" element={<FaqPage />} />
               </Route>

@@ -3,6 +3,7 @@ const Airlines = require('../models/Airlines');
 const AirlinesSubscription = require('../models/AirlinesSubscription');
 const Individual = require('../models/Individual');
 const HolderEvent = require('../models/HolderEvent');
+const SupportConversation = require('../models/SupportConversation');
 
 function daysUntil(dateVal) {
   if (!dateVal) return null;
@@ -229,9 +230,27 @@ async function getAdminNotifications(limit) {
     };
   });
 
+  // 8. Unread support chat messages
+  const unreadConvs = await SupportConversation.find({ adminUnread: { $gt: 0 } })
+    .sort({ lastMessageAt: -1 })
+    .limit(10)
+    .select('name email adminUnread lastMessageBody lastMessageAt role _id');
+
+  const supportNotifs = unreadConvs.map((conv) => ({
+    id: `support-msg-${conv._id}-${new Date(conv.lastMessageAt || 0).getTime()}`,
+    type: 'support-message',
+    title: `New Message — ${conv.name || conv.email || 'User'}`,
+    message: conv.lastMessageBody?.trim().slice(0, 100) || 'New support message.',
+    createdAt: toIso(conv.lastMessageAt || new Date()),
+    severity: 'high',
+    link: '/admin/support',
+    entityId: String(conv._id),
+  }));
+
   // Merge: wire requests always first, then by recency
   const all = [
     ...wireNotifs,
+    ...supportNotifs,
     ...holderEventNotifs,
     ...newAirlineNotifs,
     ...newIndividualNotifs,
@@ -286,6 +305,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.wirePaymentRequested && s.paymentStatus !== 'paid') {
       out.push({
         id: `airline-wire-${s._id}`,
+        entityId: String(s._id),
         type: 'wire-pending',
         title: 'Wire Request Submitted',
         message: `Your wire-transfer invoice request for ${s.subscriptionPlan || 'this plan'} is pending admin review. You\'ll be contacted with payment instructions.`,
@@ -298,6 +318,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.paymentStatus !== 'paid' && s.status !== 'Active' && !s.wirePaymentRequested) {
       out.push({
         id: `airline-payment-${s._id}`,
+        entityId: String(s._id),
         type: 'payment-pending',
         title: 'Payment Required',
         message: `Complete card payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your certificate.`,
@@ -310,6 +331,7 @@ async function getAirlineNotifications(user, limit) {
     if (s.paymentStatus === 'paid' || s.status === 'Active') {
       out.push({
         id: `airline-active-${s._id}`,
+        entityId: String(s._id),
         type: 'subscription-active',
         title: 'Subscription Active',
         message: `${s.subscriptionPlan || 'Your subscription'} is active. Your U.S. Agent for Service is registered.`,
@@ -323,6 +345,7 @@ async function getAirlineNotifications(user, limit) {
     if (d != null && d >= 0 && d <= 30) {
       out.push({
         id: `airline-expiry-${s._id}`,
+        entityId: String(s._id),
         type: 'expiry-soon',
         title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
         message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew now to stay FAA-compliant.`,
@@ -370,6 +393,21 @@ async function getAirlineNotifications(user, limit) {
     }
   }
 
+  // Unread support message from admin
+  const supportConv = await SupportConversation.findOne({ user: user._id })
+    .select('userUnread lastMessageBody lastMessageAt');
+  if (supportConv && supportConv.userUnread > 0) {
+    out.unshift({
+      id: `support-unread-${user._id}-${new Date(supportConv.lastMessageAt || 0).getTime()}`,
+      type: 'support-message',
+      title: 'New Message from IFOA Support',
+      message: supportConv.lastMessageBody?.trim().slice(0, 100) || 'You have a new message from the support team.',
+      createdAt: toIso(supportConv.lastMessageAt || new Date()),
+      severity: 'high',
+      link: '/dashboard/support',
+    });
+  }
+
   return sortByCreatedDesc(out).slice(0, limit);
 }
 
@@ -396,6 +434,7 @@ async function getIndividualNotifications(user, limit) {
     if (s.paymentStatus !== 'paid' && s.status !== 'Active') {
       out.push({
         id: `individual-payment-${s._id}`,
+        entityId: String(s._id),
         type: 'payment-pending',
         title: 'Payment Required',
         message: `Complete payment to activate your ${s.subscriptionPlan || 'subscription'} and receive your FAA compliance certificate.`,
@@ -408,6 +447,7 @@ async function getIndividualNotifications(user, limit) {
     if (s.paymentStatus === 'paid' || s.status === 'Active') {
       out.push({
         id: `individual-active-${s._id}`,
+        entityId: String(s._id),
         type: 'subscription-active',
         title: 'Subscription Active',
         message: `${s.subscriptionPlan || 'Your subscription'} is active. IFOA USA is your registered U.S. Agent for Service.`,
@@ -421,6 +461,7 @@ async function getIndividualNotifications(user, limit) {
     if (d != null && d >= 0 && d <= 30) {
       out.push({
         id: `individual-expiry-${s._id}`,
+        entityId: String(s._id),
         type: 'expiry-soon',
         title: d <= 7 ? 'Urgent — Expiring Soon' : 'Expiration Reminder',
         message: `Your ${s.subscriptionPlan || 'subscription'} expires in ${d} day${d === 1 ? '' : 's'}. Renew to maintain FAA compliance.`,
@@ -443,6 +484,21 @@ async function getIndividualNotifications(user, limit) {
       });
     }
   });
+
+  // Unread support message from admin
+  const supportConv = await SupportConversation.findOne({ user: user._id })
+    .select('userUnread lastMessageBody lastMessageAt');
+  if (supportConv && supportConv.userUnread > 0) {
+    out.unshift({
+      id: `support-unread-${user._id}-${new Date(supportConv.lastMessageAt || 0).getTime()}`,
+      type: 'support-message',
+      title: 'New Message from IFOA Support',
+      message: supportConv.lastMessageBody?.trim().slice(0, 100) || 'You have a new message from the support team.',
+      createdAt: toIso(supportConv.lastMessageAt || new Date()),
+      severity: 'high',
+      link: '/dashboard/support',
+    });
+  }
 
   return sortByCreatedDesc(out).slice(0, limit);
 }

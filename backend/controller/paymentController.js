@@ -2655,6 +2655,14 @@ exports.markHolderGroupPaid = async (req, res) => {
     if (group.paymentStatus === 'paid')
       return res.json({ success: true, data: doc, alreadyPaid: true });
 
+    // Invoice already generated (e.g. admin flipped its Invoice Status back to Pending
+    // after it was created) — DON'T regenerate/duplicate it. Just confirm the payment.
+    if (group.invoiceNumber) {
+      group.paymentStatus = 'paid';
+      await doc.save();
+      return res.json({ success: true, data: doc });
+    }
+
     const { invoiceNumber, paymentId } = await createGroupInvoiceAndPayment(doc, group);
     group.paymentStatus = 'paid';
     group.invoiceNumber = invoiceNumber;

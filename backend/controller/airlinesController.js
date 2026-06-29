@@ -867,11 +867,14 @@ exports.updateAirlinesSubscription = async (req, res) => {
     }
 
     // Detect unpaid → paid transition so we know whether to send the confirmation email.
+    // Keyed on paymentStatus (the ACTUAL payment), NOT isPaid (plan-active). Plan Status
+    // and Invoice Status are decoupled, so an admin can keep a plan Active while its
+    // invoice is still Pending — that must never trigger a "payment received" email.
     let wasAlreadyPaidAir = false;
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid')) {
-      const prevAir = await Airlines.findById(req.params.id).select('isPaid paymentStatus')
-        || await AirlinesSubscription.findById(req.params.id).select('isPaid paymentStatus');
-      wasAlreadyPaidAir = !!(prevAir?.isPaid || prevAir?.paymentStatus === 'paid');
+    if (isAdmin && payload.paymentStatus === 'paid') {
+      const prevAir = await Airlines.findById(req.params.id).select('paymentStatus')
+        || await AirlinesSubscription.findById(req.params.id).select('paymentStatus');
+      wasAlreadyPaidAir = prevAir?.paymentStatus === 'paid';
     }
 
     let doc = await Airlines.findByIdAndUpdate(
@@ -926,8 +929,27 @@ exports.updateAirlinesSubscription = async (req, res) => {
       }
     }
 
+    // ── Link the modal's "Invoice Status" to the canonical Invoice doc ──────────
+    // The edit modal's Invoice Status dropdown sets paymentStatus. The Invoices page
+    // reads Invoice.status, so keep that doc in sync for the registration's ACTIVE
+    // BASE invoice. Does NOT affect the plan (isPaid/status handled separately).
+    if (isAdmin && (payload.paymentStatus === 'paid' || payload.paymentStatus === 'pending' || payload.paymentStatus === 'failed')) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const baseNum = normalizeInvoiceNumber(doc.invoiceNumber);
+        if (baseNum) {
+          const newStatus = payload.paymentStatus === 'paid' ? 'paid' : 'issued';
+          const set = { status: newStatus };
+          if (newStatus === 'paid') set.paidAt = new Date();
+          await Invoice.updateOne({ registrationId: req.params.id, invoiceNumber: baseNum }, { $set: set });
+        }
+      } catch (statusSyncErr) {
+        console.warn('[updateAirlines] Invoice status sync failed:', statusSyncErr.message);
+      }
+    }
+
     // Send confirmation email when admin activates a subscription for the first time.
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaidAir) {
+    if (isAdmin && payload.paymentStatus === 'paid' && !wasAlreadyPaidAir) {
       sendAirlinePaymentConfirmation(doc).catch((e) =>
         console.warn('[updateAirlines] Confirmation email failed:', e.message)
       );
@@ -2284,7 +2306,7 @@ exports.activateWirePayment = async (req, res) => {
           });
           await Invoice.updateMany(
             { registrationId: doc._id, purpose: 'convert-unlimited', wirePending: true },
-            { $set: { wirePending: false } },
+            { $set: { wirePending: false, status: 'paid', paidAt: new Date() } },
           );
         } catch (e) {
           console.warn('[activateWirePayment] Conversion invoice failed:', e.message);
@@ -2379,7 +2401,7 @@ exports.activateWirePayment = async (req, res) => {
         // Approval confirmed — reveal the wire invoice to the airline.
         await Invoice.updateMany(
           { registrationId: doc._id, purpose: invPurpose, wirePending: true },
-          { $set: { wirePending: false } },
+          { $set: { wirePending: false, status: 'paid', paidAt: new Date() } },
         );
       } catch (e) {
         console.warn('[activateWirePayment] Detail-based invoice failed:', e.message);

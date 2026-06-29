@@ -272,23 +272,6 @@ export default function AdminProfilePage() {
             <InfoRow label="Account ID" value={user?.id} />
           </div>
         </div>
-
-        {/* Permissions */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Permissions</p>
-          </div>
-          <div className="px-6 py-4 space-y-2">
-            {['View all registrations', 'Edit individual records', 'Edit airline records', 'Delete records', 'Export data to Excel'].map(perm => (
-              <div key={perm} className="flex items-center gap-3 text-sm text-slate-700">
-                <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                {perm}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </DashboardLayout>
   )

@@ -39,6 +39,9 @@ const HolderGroupSchema = new mongoose.Schema({
   // 'paid' for Stripe upgrades; admin-added groups may be 'pending' until the
   // admin marks them paid (which generates the invoice).
   paymentStatus:    { type: String, enum: ['paid', 'pending'], default: 'paid' },
+  // Admin-controlled active flag for THIS add-on plan — mirrors the base plan's
+  // isPaid switch. Toggled from the edit modal's per-group "Plan Status" control.
+  isActive:         { type: Boolean, default: true },
   addedByAdmin:     { type: Boolean, default: false },
   // Soft-cancel: the airline requested cancellation of THIS add-on plan. It stays in
   // the DB (flagged) until an admin keeps (un-cancels), edits, or hard-deletes it.

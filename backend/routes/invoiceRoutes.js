@@ -32,6 +32,27 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
+// Newest-first ordering. Invoice numbers are monotonic ("Invoice US-<seq>-<yy>"),
+// so a higher (year, seq) = a newer invoice. This is more reliable than createdAt,
+// which can drift because the admin can edit an invoice's issue date. Falls back to
+// createdAt for any entry without a parseable number.
+const _seqKey = (invoiceNumber) => {
+  const m = /US-(\d+)-(\d+)/i.exec(String(invoiceNumber || ''));
+  if (!m) return null;
+  return { yy: parseInt(m[2], 10), seq: parseInt(m[1], 10) };
+};
+const byNewestFirst = (a, b) => {
+  const ka = _seqKey(a.invoiceNumber), kb = _seqKey(b.invoiceNumber);
+  if (ka && kb) {
+    if (kb.yy !== ka.yy) return kb.yy - ka.yy;
+    if (kb.seq !== ka.seq) return kb.seq - ka.seq;
+    return 0;
+  }
+  if (ka && !kb) return -1;   // numbered entries before unnumbered
+  if (!ka && kb) return 1;
+  return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+};
+
 // ── GET /api/invoices/generate-number (admin) ────────────────────────────────
 // Atomically increments the per-year counter and returns a unique number
 // in the format "Invoice US-350-26". Called by the admin invoice modal on open
@@ -202,7 +223,7 @@ router.get('/by-registration/:regId', auth, async (req, res) => {
 
     const all = [...invoices, ...renewalItems, ...paymentItems]
       .filter(item => !hiddenSet.has(normalizeInvoiceNumber(item.invoiceNumber)))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      .sort(byNewestFirst);
 
     // Return hidden numbers too so the client's synthetic fallback (built from
     // the registration's own invoiceNumber) never resurrects a deleted invoice.
@@ -569,11 +590,113 @@ router.get('/admin/all', auth, adminOnly, async (req, res) => {
       });
     }
 
-    const data = [...map.values()].sort(
-      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
-    );
+    // The active base invoice carries the registration's CURRENT payment state.
+    // Invoice.status is frozen at payment time, so an admin who flips a registration's
+    // Payment Status to "pending" would otherwise still see "Paid" here. Override the
+    // active base invoice's status from the live registration — mirrors the invoice
+    // card's basePending logic in frontend/src/utils/invoiceStatus.js.
+    const rows = [...map.values()];
+    const idsByModel = { Airlines: new Set(), AirlinesSubscription: new Set(), Individual: new Set() };
+    for (const row of rows) {
+      if (row.registrationId && idsByModel[row.registrationModel]) {
+        idsByModel[row.registrationModel].add(String(row.registrationId));
+      }
+    }
+    const regSelect = '_id invoiceNumber paymentStatus isPaid holderGroups';
+    const [airRegs, airSubRegs, indRegs] = await Promise.all([
+      idsByModel.Airlines.size ? Airlines.find({ _id: { $in: [...idsByModel.Airlines] } }).select(regSelect).lean() : [],
+      idsByModel.AirlinesSubscription.size ? AirlinesSubscription.find({ _id: { $in: [...idsByModel.AirlinesSubscription] } }).select(regSelect).lean() : [],
+      idsByModel.Individual.size ? Individual.find({ _id: { $in: [...idsByModel.Individual] } }).select(regSelect).lean() : [],
+    ]);
+    const regMap = new Map();
+    for (const r of [...airRegs, ...airSubRegs, ...indRegs]) regMap.set(String(r._id), r);
+    for (const row of rows) {
+      const reg = regMap.get(String(row.registrationId));
+      if (!reg) continue;
+      // Invoice status == the registration's live payment state (reg.paymentStatus).
+      // This is the SINGLE source of truth shared by the edit modal's "Invoice Status"
+      // dropdown and the Invoices page status control, so both surfaces stay linked.
+      // The PLAN's active/inactive state is reg.isPaid — a separate field — so changing
+      // invoice status never affects the plan.
+      const isActiveBase = reg.invoiceNumber && normalizeInvoiceNumber(reg.invoiceNumber) === row.invoiceNumber;
+      if (isActiveBase) {
+        row.status = reg.paymentStatus === 'paid' ? 'paid' : 'pending';
+        continue;
+      }
+      // A holder-upgrade invoice reflects its OWN group's live payment state.
+      const grp = (reg.holderGroups || []).find(
+        (g) => g.invoiceNumber && normalizeInvoiceNumber(g.invoiceNumber) === row.invoiceNumber,
+      );
+      if (grp) row.status = grp.paymentStatus === 'paid' ? 'paid' : 'pending';
+    }
+
+    const data = rows.sort(byNewestFirst);
 
     res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── PATCH /api/invoices/admin/:invoiceNumber/status (admin) ─────────────────
+// Flip an invoice's paid ↔ pending state. Invoice status is the registration's
+// paymentStatus (the SAME field the edit modal's "Invoice Status" dropdown sets),
+// so this stays linked to the modal and the user's invoice card. It updates:
+//   • reg.paymentStatus           (active base invoice)  — NOT reg.isPaid
+//   • holderGroups[i].paymentStatus (holder-upgrade invoice)
+//   • Invoice.status              (canonical doc, for the PDF / status field)
+// The PLAN's active/inactive state (reg.isPaid) is deliberately left untouched, so
+// changing invoice status never flips the plan or shows a "Pay Now" prompt.
+router.patch('/admin/:invoiceNumber/status', auth, adminOnly, async (req, res) => {
+  try {
+    const invoiceNumber = normalizeInvoiceNumber(decodeURIComponent(req.params.invoiceNumber));
+    const { status } = req.body;
+    if (!['paid', 'pending'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'status must be "paid" or "pending".' });
+    }
+
+    // Resolve the registration owning this invoice number.
+    let registrationId, registrationModel;
+    const invoice = await Invoice.findOne({ invoiceNumber });
+    if (invoice) {
+      registrationId = invoice.registrationId;
+      registrationModel = invoice.registrationModel;
+      invoice.status = status === 'paid' ? 'paid' : 'issued';
+      if (status === 'paid' && !invoice.paidAt) invoice.paidAt = new Date();
+      await invoice.save();
+    } else {
+      const payment = await Payment.findOne({ invoiceNumber }).select('registrationId registrationModel');
+      const renewal = payment ? null : await Renewal.findOne({ invoiceNumber }).select('registrationId registrationModel');
+      const ref = payment || renewal;
+      if (!ref) return res.status(404).json({ success: false, message: 'No record found for this invoice number.' });
+      registrationId = ref.registrationId;
+      registrationModel = ref.registrationModel;
+    }
+
+    if (registrationId && registrationModel) {
+      const RegModel = registrationModel === 'Individual'           ? Individual
+                     : registrationModel === 'AirlinesSubscription' ? AirlinesSubscription
+                     : Airlines;
+      const regDoc = await RegModel.findById(registrationId).select('invoiceNumber holderGroups').lean();
+      const isActiveBase = regDoc?.invoiceNumber &&
+        normalizeInvoiceNumber(regDoc.invoiceNumber) === invoiceNumber;
+
+      if (isActiveBase) {
+        // Invoice status ONLY (reg.paymentStatus). Never touch isPaid (the plan state).
+        await RegModel.findByIdAndUpdate(registrationId, { $set: { paymentStatus: status } });
+      } else {
+        const grpIdx = (regDoc?.holderGroups || []).findIndex(
+          (g) => g.invoiceNumber && normalizeInvoiceNumber(g.invoiceNumber) === invoiceNumber,
+        );
+        if (grpIdx >= 0) {
+          await RegModel.findByIdAndUpdate(registrationId, {
+            $set: { [`holderGroups.${grpIdx}.paymentStatus`]: status },
+          });
+        }
+      }
+    }
+
+    res.json({ success: true, status });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

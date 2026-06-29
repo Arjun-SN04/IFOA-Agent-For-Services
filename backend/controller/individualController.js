@@ -724,11 +724,13 @@ exports.updateIndividual = async (req, res) => {
     }
 
     // Detect unpaid → paid transition so we know whether to send the confirmation email.
-    // Only check when admin is explicitly marking as paid (avoid the DB call otherwise).
+    // Keyed on paymentStatus (the ACTUAL payment), NOT isPaid (plan-active). Plan Status
+    // and Invoice Status are decoupled, so an admin can keep a plan Active while its
+    // invoice is still Pending — that must never trigger a "payment received" email.
     let wasAlreadyPaid = false;
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid')) {
-      const prev = await Individual.findById(req.params.id).select('isPaid paymentStatus');
-      wasAlreadyPaid = !!(prev?.isPaid || prev?.paymentStatus === 'paid');
+    if (isAdmin && payload.paymentStatus === 'paid') {
+      const prev = await Individual.findById(req.params.id).select('paymentStatus');
+      wasAlreadyPaid = prev?.paymentStatus === 'paid';
     }
 
     const individual = await Individual.findByIdAndUpdate(
@@ -775,8 +777,26 @@ exports.updateIndividual = async (req, res) => {
       }
     }
 
+    // Keep the canonical Invoice doc's status field aligned with the registration's
+    // paymentStatus (invoice status) for the active base invoice — so the PDF/status
+    // field matches. Plan state (isPaid) is untouched.
+    if (isAdmin && (payload.paymentStatus === 'paid' || payload.paymentStatus === 'pending' || payload.paymentStatus === 'failed')) {
+      try {
+        const Invoice = require('../models/Invoice');
+        const baseNum = normalizeInvoiceNumber(individual.invoiceNumber);
+        if (baseNum) {
+          const newStatus = payload.paymentStatus === 'paid' ? 'paid' : 'issued';
+          const set = { status: newStatus };
+          if (newStatus === 'paid') set.paidAt = new Date();
+          await Invoice.updateOne({ registrationId: req.params.id, invoiceNumber: baseNum }, { $set: set });
+        }
+      } catch (statusSyncErr) {
+        console.warn('[updateIndividual] Invoice status sync failed:', statusSyncErr.message);
+      }
+    }
+
     // Send confirmation email when admin activates a subscription for the first time.
-    if (isAdmin && (payload.isPaid === true || payload.paymentStatus === 'paid') && !wasAlreadyPaid) {
+    if (isAdmin && payload.paymentStatus === 'paid' && !wasAlreadyPaid) {
       sendIndividualPaymentConfirmation(individual).catch((e) =>
         console.warn('[updateIndividual] Confirmation email failed:', e.message)
       );
