@@ -11,6 +11,7 @@ import { getSocket } from '../../services/socket'
 import {
   getSupportConversations,
   getSupportConversation,
+  getSupportConversationByUser,
   sendSupportReply,
   markSupportConvRead,
   editSupportMessage,
@@ -105,12 +106,19 @@ export default function AdminSupportPage() {
     })
   }, [])
 
-  // Upsert a conversation summary into the list, keeping newest-activity first.
+  // Upsert a conversation summary into the list, matched by user (one
+  // conversation per user). Merges into the synthetic "no chat yet" row if
+  // present. Keeps newest-activity first, then alphabetical.
   const upsertConversation = useCallback((summary) => {
     setConversations(prev => {
-      const idx = prev.findIndex(c => String(c._id) === String(summary._id))
+      const idx = prev.findIndex(c => String(c.user) === String(summary.user))
       const next = idx === -1 ? [summary, ...prev] : prev.map((c, i) => (i === idx ? { ...c, ...summary } : c))
-      return next.sort((a, b) => new Date(b.lastMessageAt || b.updatedAt || 0) - new Date(a.lastMessageAt || a.updatedAt || 0))
+      return next.sort((a, b) => {
+        const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+        const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+        if (tb !== ta) return tb - ta
+        return (a.name || '').localeCompare(b.name || '')
+      })
     })
   }, [])
 
@@ -139,7 +147,7 @@ export default function AdminSupportPage() {
     const found = conversations.find(c => String(c._id) === convId)
     if (!found) return
     setTab(found.role)
-    openConversation(String(found._id))
+    openConversation(found)
     setSearchParams({}, { replace: true })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, loadingList, conversations])
@@ -183,7 +191,12 @@ export default function AdminSupportPage() {
       if (String(conversationId) === String(activeIdRef.current)) setMessages([])
     }
     const onConversationDeleted = ({ conversationId }) => {
-      setConversations(prev => prev.filter(c => String(c._id) !== String(conversationId)))
+      // Revert the row to an empty (synthetic) state so the user stays listed.
+      setConversations(prev => prev.map(c => (
+        String(c._id) === String(conversationId)
+          ? { ...c, _id: null, lastMessageBody: '', lastMessageAt: null, lastSenderRole: null, adminUnread: 0, userUnread: 0, hasConversation: false }
+          : c
+      )))
       if (String(conversationId) === String(activeIdRef.current)) {
         setActiveId(null)
         setMessages([])
@@ -209,22 +222,40 @@ export default function AdminSupportPage() {
   }, [upsertConversation])
 
   // ── Open a conversation ───────────────────────────────────────────────────────
-  const openConversation = useCallback((id) => {
-    setActiveId(id)
+  // Accepts a list row. Rows without a conversation yet (`_id === null`) are
+  // lazily created server-side via the by-user endpoint.
+  const openConversation = useCallback((row) => {
+    if (!row) return
     setLoadingThread(true)
     setUserTyping(false)
-    getSupportConversation(id)
-      .then(res => {
-        setMessages(res.data?.data?.messages || [])
-        // Clear unread locally.
-        setConversations(prev => prev.map(c => (String(c._id) === String(id) ? { ...c, adminUnread: 0 } : c)))
-        scrollToBottom()
-      })
-      .catch(() => { })
-      .finally(() => setLoadingThread(false))
-    const socket = getSocket()
-    socket?.emit('support:read', { conversationId: id })
-  }, [scrollToBottom])
+
+    const apply = (convId, messages) => {
+      setActiveId(convId)
+      setMessages(messages || [])
+      setConversations(prev => prev.map(c => (String(c.user) === String(row.user) ? { ...c, adminUnread: 0 } : c)))
+      scrollToBottom()
+      getSocket()?.emit('support:read', { conversationId: convId })
+    }
+
+    if (row._id) {
+      setActiveId(row._id)
+      getSupportConversation(row._id)
+        .then(res => apply(row._id, res.data?.data?.messages))
+        .catch(() => { })
+        .finally(() => setLoadingThread(false))
+    } else {
+      getSupportConversationByUser(row.user)
+        .then(res => {
+          const conv = res.data?.data?.conversation
+          if (conv) {
+            upsertConversation(conv)
+            apply(conv._id, res.data?.data?.messages)
+          }
+        })
+        .catch(() => { })
+        .finally(() => setLoadingThread(false))
+    }
+  }, [scrollToBottom, upsertConversation])
 
   useEffect(() => { scrollToBottom() }, [messages, userTyping, scrollToBottom])
 
@@ -301,7 +332,12 @@ export default function AdminSupportPage() {
     const id = activeId
     setActiveId(null)
     setMessages([])
-    setConversations(prev => prev.filter(c => String(c._id) !== String(id)))
+    // Revert the row to an empty (synthetic) state so the user stays listed.
+    setConversations(prev => prev.map(c => (
+      String(c._id) === String(id)
+        ? { ...c, _id: null, lastMessageBody: '', lastMessageAt: null, lastSenderRole: null, adminUnread: 0, userUnread: 0, hasConversation: false }
+        : c
+    )))
     try {
       await deleteSupportConversation(id)
     } catch {
@@ -351,7 +387,7 @@ export default function AdminSupportPage() {
       if (emailMode === 'bulk') {
         const ids = [...selected]
         if (!ids.length) { setEmailSending(false); return }
-        const res = await sendSupportBulkEmail({ conversationIds: ids, subject, body })
+        const res = await sendSupportBulkEmail({ userIds: ids, subject, body })
         const { sent = [], failed = [] } = res.data?.data || {}
         setEmailStatus({
           ok: failed.length === 0,
@@ -397,7 +433,7 @@ export default function AdminSupportPage() {
   const activeConv = conversations.find(c => String(c._id) === String(activeId))
 
   const selectedEmails = useMemo(
-    () => conversations.filter(c => selected.has(c._id)).map(c => c.email).filter(Boolean),
+    () => conversations.filter(c => selected.has(c.user)).map(c => c.email).filter(Boolean),
     [conversations, selected]
   )
 
@@ -460,14 +496,14 @@ export default function AdminSupportPage() {
               <div className="flex justify-center py-10"><div className="w-6 h-6 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" /></div>
             )}
             {!loadingList && filtered.length === 0 && (
-              <p className="text-center text-sm text-slate-400 py-10">No conversations yet.</p>
+              <p className="text-center text-sm text-slate-400 py-10">No users found.</p>
             )}
             {filtered.map(c => {
-              const active = String(c._id) === String(activeId)
-              const checked = selected.has(c._id)
+              const active = c._id && String(c._id) === String(activeId)
+              const checked = selected.has(c.user)
               return (
                 <div
-                  key={c._id}
+                  key={c.user}
                   className={`flex items-center border-b border-slate-50 transition ${active ? 'bg-slate-100' : checked ? 'bg-blue-50/60' : 'hover:bg-slate-50'}`}
                 >
                   <label
@@ -478,12 +514,12 @@ export default function AdminSupportPage() {
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => toggleSelect(c._id)}
+                      onChange={() => toggleSelect(c.user)}
                       className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400 cursor-pointer"
                     />
                   </label>
                 <button
-                  onClick={() => openConversation(c._id)}
+                  onClick={() => openConversation(c)}
                   className="flex-1 min-w-0 text-left pl-2 pr-3 py-3 flex items-center gap-3"
                 >
                   <Avatar name={c.name} logoUrl={c.logoUrl} />

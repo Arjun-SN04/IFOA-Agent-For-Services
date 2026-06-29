@@ -19,6 +19,7 @@
  */
 const SupportConversation = require('../models/SupportConversation');
 const SupportMessage      = require('../models/SupportMessage');
+const User                = require('../models/User');
 const support = require('../services/supportService');
 const email   = require('../services/emailService');
 
@@ -74,13 +75,27 @@ exports.markMyRead = async (req, res) => {
   }
 };
 
-// ── Admin: list conversations ─────────────────────────────────────────────────
+// ── Admin: list ALL airline/individual users (merged with conversations) ──────
 exports.listConversations = async (req, res) => {
   try {
-    const conversations = await support.listConversations({ role: req.query.role });
+    const conversations = await support.listAllUsersWithConversations({ role: req.query.role });
     res.json({ success: true, data: conversations });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── Admin: open (or lazily create) a user's conversation by user id ───────────
+exports.getConversationByUser = async (req, res) => {
+  try {
+    const conversation = await support.getOrCreateConversation(req.params.userId);
+    const messages = await support.getMessages(conversation._id);
+    if (conversation.adminUnread > 0) {
+      await support.markRead({ conversation, readerRole: 'admin', io: io(req) });
+    }
+    res.json({ success: true, data: { conversation: support.summarize(conversation), messages } });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message });
   }
 };
 
@@ -267,26 +282,28 @@ exports.emailUser = async (req, res) => {
   }
 };
 
-// ── Admin: send a custom email to many selected conversations ─────────────────
+// ── Admin: send a custom email to many selected users (by user id) ────────────
 exports.emailUsers = async (req, res) => {
   try {
-    const ids     = Array.isArray(req.body.conversationIds) ? req.body.conversationIds : [];
+    const userIds = Array.isArray(req.body.userIds) ? req.body.userIds : [];
     const subject = String(req.body.subject || '').trim();
     const body    = String(req.body.body || '').trim();
-    if (!ids.length) return res.status(400).json({ success: false, message: 'Select at least one user.' });
-    if (!body)       return res.status(400).json({ success: false, message: 'Email body is required.' });
+    if (!userIds.length) return res.status(400).json({ success: false, message: 'Select at least one user.' });
+    if (!body)           return res.status(400).json({ success: false, message: 'Email body is required.' });
 
-    const convs = await SupportConversation.find({ _id: { $in: ids } }).select('name email').lean();
+    const users = await User.find({ _id: { $in: userIds }, role: { $in: ['airline', 'individual'] } })
+      .select('email role firstName lastName airlineName').lean();
 
     const sent = [];
     const failed = [];
-    for (const conv of convs) {
-      if (!conv.email) { failed.push({ name: conv.name, reason: 'No email on file.' }); continue; }
+    for (const u of users) {
+      const name = support.deriveName(u);
+      if (!u.email) { failed.push({ name, reason: 'No email on file.' }); continue; }
       try {
-        await email.sendCustomMessageEmail({ email: conv.email, name: conv.name, subject, body });
-        sent.push(conv.email);
+        await email.sendCustomMessageEmail({ email: u.email, name, subject, body });
+        sent.push(u.email);
       } catch (e) {
-        failed.push({ email: conv.email, reason: e.message });
+        failed.push({ email: u.email, reason: e.message });
       }
     }
 

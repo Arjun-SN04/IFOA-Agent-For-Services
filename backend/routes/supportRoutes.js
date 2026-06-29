@@ -24,6 +24,7 @@ router.post('/me/read',     ctrl.markMyRead);
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 router.get('/conversations',              adminOnly, ctrl.listConversations);
+router.get('/conversations/by-user/:userId', adminOnly, ctrl.getConversationByUser);
 router.get('/conversations/:id',          adminOnly, ctrl.getConversation);
 router.post('/conversations/:id/messages',              adminOnly, ctrl.replyToConversation);
 router.patch('/conversations/:id/messages/:msgId',     adminOnly, ctrl.editMessage);

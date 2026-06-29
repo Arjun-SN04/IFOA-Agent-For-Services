@@ -182,6 +182,7 @@ export const markMySupportRead  = ()       => API.post('/support/me/read')
 // Admin
 export const getSupportConversations = (role) => API.get('/support/conversations', { params: role ? { role } : {} })
 export const getSupportConversation  = (id)   => API.get(`/support/conversations/${id}`)
+export const getSupportConversationByUser = (userId) => API.get(`/support/conversations/by-user/${userId}`)
 export const sendSupportReply        = (id, body) => API.post(`/support/conversations/${id}/messages`, { body })
 export const markSupportConvRead     = (id)            => API.post(`/support/conversations/${id}/read`)
 export const editSupportMessage      = (id, msgId, body) => API.patch(`/support/conversations/${id}/messages/${msgId}`, { body })
@@ -189,4 +190,4 @@ export const deleteSupportMessage    = (id, msgId)     => API.delete(`/support/c
 export const deleteSupportMessages   = (id)            => API.delete(`/support/conversations/${id}/messages`)
 export const deleteSupportConversation = (id)          => API.delete(`/support/conversations/${id}`)
 export const sendSupportEmail        = (id, { subject, body }) => API.post(`/support/conversations/${id}/email`, { subject, body })
-export const sendSupportBulkEmail    = ({ conversationIds, subject, body }) => API.post('/support/email/bulk', { conversationIds, subject, body })
+export const sendSupportBulkEmail    = ({ userIds, subject, body }) => API.post('/support/email/bulk', { userIds, subject, body })

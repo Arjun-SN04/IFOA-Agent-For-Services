@@ -110,6 +110,63 @@ async function listConversations({ role } = {}) {
 }
 
 /**
+ * Admin list of EVERY airline/individual user, merged with their conversation
+ * (if one exists). Users who have never chatted appear as a synthetic row with
+ * `_id: null` so the admin can still see + email them. Sorted by most recent
+ * activity, then alphabetically.
+ */
+async function listAllUsersWithConversations({ role } = {}) {
+  const wantRole = role === 'airline' || role === 'individual' ? role : null;
+
+  const userQuery = wantRole ? { role: wantRole } : { role: { $in: ['airline', 'individual'] } };
+  const [users, convs] = await Promise.all([
+    User.find(userQuery).select('email role firstName lastName airlineName logoUrl').lean(),
+    SupportConversation.find(wantRole ? { role: wantRole } : {}).lean(),
+  ]);
+
+  const convByUser = new Map(convs.map(c => [String(c.user), c]));
+
+  // Airline logo backfill from the Airlines collection (covers users missing logoUrl)
+  const airlineEmails = users.filter(u => u.role === 'airline' && !u.logoUrl && u.email).map(u => u.email);
+  const logoByEmail = {};
+  if (airlineEmails.length) {
+    const airlines = await Airlines.find({ email: { $in: [...new Set(airlineEmails)] } }).select('email logoUrl').lean();
+    for (const a of airlines) if (a.logoUrl) logoByEmail[a.email] = a.logoUrl;
+  }
+
+  const rows = users.map(u => {
+    const conv = convByUser.get(String(u._id));
+    const logoUrl = (conv && conv.logoUrl) || u.logoUrl || logoByEmail[u.email] || '';
+    if (conv) {
+      return { ...summarize(conv), logoUrl, hasConversation: true };
+    }
+    return {
+      _id:             null,
+      user:            u._id,
+      role:            u.role,
+      name:            deriveName(u),
+      email:           u.email || '',
+      logoUrl,
+      lastMessageBody: '',
+      lastMessageAt:   null,
+      lastSenderRole:  null,
+      adminUnread:     0,
+      userUnread:      0,
+      hasConversation: false,
+    };
+  });
+
+  rows.sort((a, b) => {
+    const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    if (tb !== ta) return tb - ta;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  return rows;
+}
+
+/**
  * Messages for a conversation, oldest → newest.
  */
 async function getMessages(conversationId, { limit = 500 } = {}) {
@@ -174,8 +231,10 @@ module.exports = {
   ADMIN_ROOM,
   userRoom,
   summarize,
+  deriveName,
   getOrCreateConversation,
   listConversations,
+  listAllUsersWithConversations,
   getMessages,
   createMessage,
   markRead,
