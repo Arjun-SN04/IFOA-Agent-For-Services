@@ -12,6 +12,10 @@ function createTransporter() {
     host:   process.env.SMTP_HOST,
     port,
     secure,
+    family: 4, // force IPv4 — some hosts (e.g. Render) blackhole IPv6 to smtp.gmail.com, hanging the connection
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
